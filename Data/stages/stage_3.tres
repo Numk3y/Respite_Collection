@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Resource" path="res://Data/enemies/bouncer.tres" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/karaoke_rival.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/gossip_auntie.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/paparazzo.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="11"]
+
+[resource]
+script = ExtResource("1")
+id = &"stage_3"
+display_name = "Office Party"
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("4"), ExtResource("5"), ExtResource("4")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("7")])
+reward_money = 160
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(2, 4), "gossip": Vector2i(1, 3)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11")])
+drop_chance = 0.1

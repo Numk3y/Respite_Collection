@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"grumpy_neighbor"
+display_name = "Grumpy Neighbor"
+char_class = 0
+rarity = 0
+hp = 110
+attack = 40
+defense = 40
+evasion = 10
+accuracy = 65
+speed = 40
+description = "Complains about the noise."
+is_starter = false

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"karaoke_rival"
+display_name = "Karaoke Rival"
+char_class = 1
+rarity = 1
+hp = 130
+attack = 70
+defense = 45
+evasion = 15
+accuracy = 75
+speed = 55
+description = "Will not give up the microphone."
+is_starter = false

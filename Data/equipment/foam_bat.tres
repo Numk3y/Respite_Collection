@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"foam_bat"
+display_name = "Foam Bat"
+slot = 0
+description = "Harmless-looking, surprisingly effective."
+attack = 8

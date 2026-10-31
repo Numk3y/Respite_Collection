@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"noisy_toddler"
+display_name = "Noisy Toddler"
+char_class = 1
+rarity = 0
+hp = 70
+attack = 40
+defense = 15
+evasion = 30
+accuracy = 60
+speed = 75
+description = "Fast, loud and hard to catch."
+is_starter = false

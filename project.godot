@@ -1,0 +1,45 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Friend Fleet"
+run/main_scene="res://Scenes/Main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="FriendFleet"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/low_processor_mode=true
+config/icon="res://icon.svg"
+
+[autoload]
+
+Terms="*res://Scripts/autoload/terms.gd"
+DB="*res://Scripts/autoload/db.gd"
+GameState="*res://Scripts/autoload/game_state.gd"
+Gacha="*res://Scripts/autoload/gacha.gd"
+Idle="*res://Scripts/autoload/idle.gd"
+
+[display]
+
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/friend_admin/plugin.cfg")
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

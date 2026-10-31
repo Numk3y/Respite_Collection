@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"gossip_auntie"
+display_name = "Gossip Auntie"
+char_class = 2
+rarity = 1
+hp = 80
+attack = 60
+defense = 30
+evasion = 20
+accuracy = 80
+speed = 60
+description = "Her rumours hit everyone at once."
+is_starter = false

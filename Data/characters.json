@@ -1,0 +1,59 @@
+{
+  "characters": [
+    {
+      "id": "ami",
+      "name": "Ami",
+      "role": "驅逐",
+      "rarity": "SSR",
+      "attack": 92,
+      "defense": 64,
+      "hp": 120,
+      "pool": "朋友圈卡池",
+      "description": "先鋒型角色，開場衝鋒很猛。"
+    },
+    {
+      "id": "kai",
+      "name": "Kai",
+      "role": "巡洋",
+      "rarity": "SR",
+      "attack": 80,
+      "defense": 72,
+      "hp": 140,
+      "pool": "朋友圈卡池",
+      "description": "穩定輸出，適合長線戰鬥。"
+    },
+    {
+      "id": "nana",
+      "name": "Nana",
+      "role": "輔助",
+      "rarity": "R",
+      "attack": 58,
+      "defense": 60,
+      "hp": 110,
+      "pool": "聚會卡池",
+      "description": "補給與恢復很有價值。"
+    },
+    {
+      "id": "yo",
+      "name": "Yo",
+      "role": "重巡",
+      "rarity": "SR",
+      "attack": 86,
+      "defense": 78,
+      "hp": 150,
+      "pool": "聚會卡池",
+      "description": "前排承傷，能拉住戰線。"
+    },
+    {
+      "id": "mika",
+      "name": "Mika",
+      "role": "狙擊",
+      "rarity": "SSR",
+      "attack": 98,
+      "defense": 58,
+      "hp": 116,
+      "pool": "限定卡池",
+      "description": "高爆發，適合打boss。"
+    }
+  ]
+}

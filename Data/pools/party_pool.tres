@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="GachaPool" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/gacha_pool.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/pool_entry.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/characters/nana.tres" id="3"]
+[ext_resource type="Resource" path="res://Data/characters/yo.tres" id="4"]
+
+[sub_resource type="Resource" id="entry_nana"]
+script = ExtResource("2")
+character = ExtResource("3")
+
+[sub_resource type="Resource" id="entry_yo"]
+script = ExtResource("2")
+character = ExtResource("4")
+
+[resource]
+script = ExtResource("1")
+id = &"party_pool"
+display_name = "Party Time"
+cost = 180
+weight_r = 50
+weight_sr = 38
+weight_ssr = 12
+entries = Array[ExtResource("2")]([SubResource("entry_nana"), SubResource("entry_yo")])
