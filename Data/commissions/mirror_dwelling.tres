@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CommissionData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/mirror_sleep.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_dwelling"
+display_name = "Mirror Dwelling"
+description = "Stare into the optimize-mirror, adjust avatar toggles, and mute-listen to background lofi."
+duration_seconds = 225
+status_tag = 1
+required_class = -1
+required_stat = ""
+required_value = 0
+reward_money = 120
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(1, 3)})
+exp_reward = 20
+credit_card_chance = 0
+incident_chance = 0.35
+incidents = Array[ExtResource("2")]([ExtResource("3")])

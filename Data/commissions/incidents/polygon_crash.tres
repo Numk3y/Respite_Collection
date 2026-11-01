@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CommissionIncident" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+text = "Encountered an avatar with 2 million polygons and crashed to desktop. -50 Money, but saved a gorgeous desktop screenshot."
+weight = 10
+money_bonus = -50

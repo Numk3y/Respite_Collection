@@ -14,5 +14,6 @@ defense = 30
 evasion = 20
 accuracy = 90
 speed = 55
+portrait_path = "res://Art/enemies/paparazzo.png"
 description = "One flash, one very bad photo."
 is_starter = false

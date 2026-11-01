@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"jimmysmooth_passive"
+display_name = "Power of Baldness"
+description = "Every time Jimmy hits an enemy, he heals 30% of the damage dealt."
+effect_id = &"power_of_baldness"
+params = {"lifesteal": 0.3}
+
+[resource]
+script = ExtResource("1")
+id = &"jimmysmooth"
+display_name = "Jimmy Smooth"
+char_class = 1
+rarity = 1
+hp = 110
+attack = 75
+defense = 50
+evasion = 20
+accuracy = 70
+speed = 60
+passive_skill = SubResource("passive")
+description = "Smooth head, smooth moves. Every hit polishes him back to health."
+is_starter = false

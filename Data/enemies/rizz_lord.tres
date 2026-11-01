@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rizz_lord"
+display_name = "Rizz Lord"
+char_class = 2
+rarity = 1
+hp = 85
+attack = 50
+defense = 25
+evasion = 20
+accuracy = 80
+speed = 60
+portrait_path = "res://Art/enemies/rizz_lord.png"
+description = "Self-proclaimed. Fires pickup lines at everyone in range; somehow they hurt."

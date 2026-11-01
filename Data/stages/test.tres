@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Resource" path="res://Data/enemies/training_dummy.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"test"
+display_name = "Test"
+description = "A practice map for testing. One tough training dummy that barely fights back, so Ultimates and cut-ins have time to trigger."
+chapter = 0
+number = 1
+recommended_level = 1
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("4")])
+enemy_rearguard = Array[ExtResource("2")]([])
+reward_money = 20
+exp_reward = 5
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(0, 1)})
+equipment_drops = Array[ExtResource("3")]([])
+drop_chance = 0

@@ -1,0 +1,17 @@
+﻿{
+    "poppystreet.mp3":  {
+                            "size":  1965268,
+                            "lufs":  -34.9,
+                            "peak":  -21
+                        },
+    "drinkingnight.mp3":  {
+                              "size":  5889599,
+                              "lufs":  -9.8,
+                              "peak":  0.9
+                          },
+    "homepage.mp3":  {
+                         "size":  5024423,
+                         "lufs":  -18.5,
+                         "peak":  -6.4
+                     }
+}

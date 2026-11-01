@@ -14,5 +14,6 @@ defense = 45
 evasion = 15
 accuracy = 75
 speed = 55
+portrait_path = "res://Art/enemies/karaoke_rival.png"
 description = "Will not give up the microphone."
 is_starter = false

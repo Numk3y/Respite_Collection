@@ -10,10 +10,10 @@ config_version=5
 
 [application]
 
-config/name="Friend Fleet"
+config/name="Respite Collection"
 run/main_scene="res://Scenes/Main.tscn"
 config/use_custom_user_dir=true
-config/custom_user_dir_name="FriendFleet"
+config/custom_user_dir_name="RespiteCollection"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 run/low_processor_mode=true
 config/icon="res://icon.svg"
@@ -24,7 +24,9 @@ Terms="*res://Scripts/autoload/terms.gd"
 DB="*res://Scripts/autoload/db.gd"
 GameState="*res://Scripts/autoload/game_state.gd"
 Gacha="*res://Scripts/autoload/gacha.gd"
-Idle="*res://Scripts/autoload/idle.gd"
+Combat="*res://Scripts/autoload/combat.gd"
+Commissions="*res://Scripts/autoload/commissions.gd"
+Music="*res://Scripts/autoload/music.gd"
 
 [display]
 

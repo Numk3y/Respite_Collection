@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"hopeless_alcoholic_passive"
+display_name = "Another One"
+description = "Takes a swig every 2 turns for +1 Drunk (max 3). Each Drunk stack gives +10% Attack and +5% Defense but -6% Accuracy."
+effect_id = &"liquid_courage"
+params = {"accuracy_per_stack": -0.06, "attack_per_stack": 0.1, "defense_per_stack": 0.05, "max_stacks": 3, "rally_threshold": 0.0, "swig_every": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"hopeless_alcoholic"
+display_name = "Hopeless Alcoholic"
+char_class = 4
+rarity = 1
+hp = 140
+attack = 40
+defense = 20
+evasion = 10
+accuracy = 60
+speed = 45
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/hopeless_alcoholic.png"
+description = "Has been "only having one more" for six hours. Hits harder with every sip."

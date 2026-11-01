@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"training_dummy"
+display_name = "Training Dummy"
+char_class = 0
+rarity = 1
+hp = 800
+attack = 1
+defense = 0
+evasion = 0
+accuracy = 50
+speed = 10
+portrait_path = "res://Art/enemies/training_dummy.png"
+description = "It just stands there and takes it. Tough enough that every Ultimate gets a chance to fire."

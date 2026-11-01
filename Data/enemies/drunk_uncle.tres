@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"drunk_uncle_active"
+display_name = "One More Round"
+kind = 1
+description = "Orders another drink: heals 25% of max HP, but his aim gets worse for 2 attacks."
+effect_id = &"booze"
+
+[resource]
+script = ExtResource("1")
+id = &"drunk_uncle"
+display_name = "Drunk Uncle"
+title = "Mini Boss"
+char_class = 1
+rarity = 2
+hp = 180
+attack = 30
+defense = 25
+evasion = 10
+accuracy = 60
+speed = 40
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/drunk_uncle.png"
+description = "Has been at the bar since noon and wants to arm-wrestle everyone."

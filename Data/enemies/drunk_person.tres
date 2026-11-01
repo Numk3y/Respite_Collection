@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"drunk_person"
+display_name = "Drunk Person"
+char_class = 1
+rarity = 1
+hp = 65
+attack = 26
+defense = 15
+evasion = 25
+accuracy = 55
+speed = 45
+portrait_path = "res://Art/enemies/drunk_person.png"
+description = "Swings wildly, misses a lot, and will not go home."

@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"drowsy_passive"
+display_name = "Drowsiness"
+description = "Each hit has a 15% chance to put the enemy to sleep: it skips its next turn and takes 20% more damage while asleep. Once it wakes, Drowsy can't put it to sleep again for 3 of its turns. Every turn Drowsy acts, he has a 5% chance to doze off and skip his next turn."
+effect_id = &"drowsiness"
+params = {"chance": 0.15, "cooldown": 3, "damage_taken": 0.2, "self_chance": 0.05, "turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"drowsy_active"
+display_name = "Disposing to Sleep"
+kind = 1
+description = "A huge sleepy spell hits 3 enemies for 120% of Drowsy's Attack each, with an 80% chance to put each one to sleep for 1 turn."
+effect_id = &"disposing_to_sleep"
+params = {"damage_mult": 1.2, "sleep_chance": 0.8, "sleep_turns": 1, "targets": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"drowsy"
+display_name = "Drowsy"
+char_class = 2
+rarity = 2
+hp = 85
+attack = 85
+defense = 35
+evasion = 20
+accuracy = 85
+speed = 55
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "He's super drowsy, so he casts sleepy spells to make his opponents fall asleep with him."
+is_starter = false

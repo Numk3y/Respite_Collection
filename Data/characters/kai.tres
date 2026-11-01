@@ -31,4 +31,4 @@ speed = 60
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 description = "Steady damage, built for long battles."
-is_starter = true
+is_starter = false

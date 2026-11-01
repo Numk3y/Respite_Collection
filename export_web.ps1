@@ -9,6 +9,9 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+# Even out the music volume (writes Scripts/autoload/music_levels.gd; skipped if ffmpeg isn't installed)
+& "$PSScriptRoot\level_music.ps1"
+
 # Remove the previous build but keep the marker files
 Get-ChildItem docs -File | Where-Object { $_.Name -notin @(".gdignore", ".nojekyll") } | Remove-Item
 

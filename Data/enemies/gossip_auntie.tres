@@ -14,5 +14,6 @@ defense = 30
 evasion = 20
 accuracy = 80
 speed = 60
+portrait_path = "res://Art/enemies/gossip_auntie.png"
 description = "Her rumours hit everyone at once."
 is_starter = false

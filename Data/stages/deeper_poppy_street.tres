@@ -1,0 +1,49 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/drunk_person.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/bottle_thrower.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/bouncer.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/tipsy_bartender.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/drunk_uncle.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/equipment/foam_bat.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/equipment/hoodie.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_charm.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="15"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("5"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"deeper_poppy_street"
+display_name = "Deeper Poppy Street"
+description = "Past the neon signs the street gets darker and the drinks get stronger. The Drunk Uncle is back, and this time he brought backup."
+chapter = 1
+number = 3
+recommended_level = 3
+enemy_level = 6
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 80
+exp_reward = 26
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(1, 2), "snack": Vector2i(2, 4)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])
+drop_chance = 0.06

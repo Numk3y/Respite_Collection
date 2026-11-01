@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"instance_owner_passive"
+display_name = "Group Perms"
+description = "+15% Defense for every other enemy still standing. Every 3 turns, vote-kicks your strongest attacker: they skip their next turn rejoining."
+effect_id = &"group_owner"
+params = {"defense_per_ally": 0.15, "kick_every": 3, "kick_turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"instance_owner_active"
+display_name = "Close Instance"
+kind = 1
+description = "Hits every enemy for 90% of his Attack and wipes all their buffs."
+effect_id = &"close_instance"
+params = {"damage_mult": 0.9}
+
+[resource]
+script = ExtResource("1")
+id = &"instance_owner"
+display_name = "The Instance Owner"
+title = "Boss"
+char_class = 2
+rarity = 3
+hp = 700
+attack = 52
+defense = 40
+evasion = 10
+accuracy = 80
+speed = 45
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/instance_owner.png"
+description = "Runs the Drinking Night group instance, and the whole crowd knows it. Untouchable while the room is full."

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"egirl_passive"
+display_name = "Ring Light"
+description = "Each hit has a 12% chance to Blind the target with her ring light: -50% Accuracy for its next turn."
+effect_id = &"blinding"
+params = {"accuracy": -0.5, "chance": 0.12, "turns": 1}
+
+[resource]
+script = ExtResource("1")
+id = &"egirl"
+display_name = "E-Girl"
+char_class = 2
+rarity = 1
+hp = 70
+attack = 34
+defense = 15
+evasion = 25
+accuracy = 70
+speed = 55
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/egirl.png"
+description = "Cat-ear headset, winged eyeliner and a ring light she never turns off."

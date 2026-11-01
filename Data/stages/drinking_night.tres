@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/eboy.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/egirl.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/hopeless_alcoholic.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/mic_spammer.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/unemployed_racist.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="15"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+
+[resource]
+script = ExtResource("1")
+id = &"drinking_night"
+display_name = "Drinking Night 1"
+description = "The weekly Drinking Night is in full swing. The E-crowd has taken over the dance floor and they do not want company."
+chapter = 2
+number = 1
+recommended_level = 7
+enemy_level = 8
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 120
+exp_reward = 40
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(1, 2), "snack": Vector2i(2, 4)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])
+drop_chance = 0.07

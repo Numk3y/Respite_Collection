@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"spijette_passive"
+display_name = "Bloodlust"
+description = "Once per battle, when Spijette would die, he hangs on at 1 HP for 2 turns (he can't drop lower or be healed), then collapses."
+effect_id = &"undying"
+params = {"turns": 2}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"spijette_active"
+display_name = "SelfDecaying"
+kind = 1
+description = "Attack +30% but Defense -50% for 3 of Spijette's actions. Defeating an enemy while it's active restores 20% of max HP."
+effect_id = &"self_decaying"
+params = {"attack": 0.3, "defense": -0.5, "kill_heal_pct": 0.2, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"spijette"
+display_name = "Spijette"
+char_class = 4
+rarity = 2
+hp = 135
+attack = 140
+defense = 15
+evasion = 25
+accuracy = 80
+speed = 40
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "A berserker who hits incredibly hard and fast, but cannot take a punch."
+is_starter = true

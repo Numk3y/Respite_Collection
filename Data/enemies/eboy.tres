@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"eboy"
+display_name = "E-Boy"
+char_class = 1
+rarity = 1
+hp = 85
+attack = 30
+defense = 18
+evasion = 30
+accuracy = 60
+speed = 60
+portrait_path = "res://Art/enemies/eboy.png"
+description = "Black nail polish, one dangly earring and a chain necklace. Mostly here to be seen."

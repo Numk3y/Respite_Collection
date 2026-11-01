@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mic_spammer"
+display_name = "Mic Spammer"
+char_class = 3
+rarity = 1
+hp = 60
+attack = 45
+defense = 10
+evasion = 15
+accuracy = 70
+speed = 50
+portrait_path = "res://Art/enemies/mic_spammer.png"
+description = "Plays distorted soundboard clips at full volume. Aims all of it at one ear."

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"coconutbird_caster_passive"
+display_name = "Sus Green Plants"
+description = "Never attacks. Every turn, it heals the front-row teammate with the lowest HP for 70% of its own Attack (the back row once the front row is healthy or down)."
+effect_id = &"sus_green_plants"
+params = {"heal_mult": 0.7}
+
+[resource]
+script = ExtResource("1")
+id = &"coconutbird_caster"
+display_name = "CoconutBird_Caster"
+char_class = 5
+rarity = 1
+hp = 70
+attack = 50
+defense = 30
+evasion = 15
+accuracy = 70
+speed = 50
+passive_skill = SubResource("passive")
+description = "Joins every new account. Nobody asks where the green plants come from."
+is_starter = false

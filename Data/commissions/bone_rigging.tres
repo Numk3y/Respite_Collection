@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CommissionData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/skirt_fix.tres" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = &"bone_rigging"
+display_name = "Unity Bone Rigging & Weight Painting"
+description = "Fixing broken dynamic bones, weight painting jackets, and debugging PhysBones. Needs someone with unbreakable patience."
+duration_seconds = 900
+status_tag = 2
+required_class = 0
+required_stat = ""
+required_value = 0
+reward_money = 450
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(2, 4)})
+exp_reward = 70
+credit_card_chance = 0
+incident_chance = 0.1
+incidents = Array[ExtResource("2")]([ExtResource("3")])

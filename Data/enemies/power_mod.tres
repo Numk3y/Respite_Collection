@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"power_mod_passive"
+display_name = "Abuse of Power"
+description = "Never attacks. Whenever someone damages him, one of his back-row allies instantly hits back for 60% of their Attack."
+effect_id = &"one_above_all"
+params = {"attack_mult": 0.6}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"power_mod_active"
+display_name = "Ban Wave"
+kind = 1
+description = "Taunts every enemy and gains +50% Defense for 3 turns."
+effect_id = &"guardian"
+params = {"defense": 0.5, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"power_mod"
+display_name = "Power-Tripping Mod"
+title = "Mini Boss"
+char_class = 0
+rarity = 2
+hp = 320
+attack = 40
+defense = 70
+evasion = 5
+accuracy = 70
+speed = 40
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/power_mod.png"
+description = "Has a badge, a ban list and nothing else going on. Never does anything himself."

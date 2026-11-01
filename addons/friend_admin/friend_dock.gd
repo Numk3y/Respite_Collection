@@ -13,6 +13,9 @@ var _class: OptionButton
 var _rarity: OptionButton
 var _stats: Dictionary = {}  # stat name -> SpinBox
 var _skill_fields: Dictionary = {}  # SkillData.Kind -> {"name": LineEdit, "description": LineEdit}
+var _ultimate_effect: OptionButton
+var _passive_effect: OptionButton
+var _ultimate_max: SpinBox
 var _description: TextEdit
 var _starter: CheckBox
 var _pool_box: VBoxContainer
@@ -36,9 +39,9 @@ func _ready() -> void:
 	_class.item_selected.connect(func(_index): _apply_class_template())
 
 	_rarity = _add_field("Rarity", OptionButton.new())
-	for key in CharacterData.Rarity.keys():
-		_rarity.add_item(key)
-	_rarity.selected = CharacterData.Rarity.R
+	for rarity in CharacterData.RARITIES:
+		_rarity.add_item(CharacterData.Rarity.keys()[rarity], rarity)
+	_rarity.select(_rarity.get_item_index(CharacterData.Rarity.R))
 
 	_section("Base stats (picking a class fills in suggested values)")
 	for stat in CharacterData.STATS:
@@ -52,8 +55,21 @@ func _ready() -> void:
 		var kind_name := _term("passive_skill" if kind == SkillData.Kind.PASSIVE else "active_skill")
 		_section("%s skill" % kind_name)
 		var skill_name: LineEdit = _add_field("Name", LineEdit.new())
-		var skill_description: LineEdit = _add_field("Description (placeholder until skills are implemented)", LineEdit.new())
+		var skill_description: LineEdit = _add_field("Description", LineEdit.new())
 		_skill_fields[kind] = {"name": skill_name, "description": skill_description}
+	# Pick which coded effect each skill uses (tune their params in the Inspector)
+	_passive_effect = _add_field("Passive effect", OptionButton.new())
+	_passive_effect.add_item("(none yet)")
+	for effect in FormationBattleEngine.PASSIVE_EFFECTS:
+		_passive_effect.add_item(String(effect))
+	_ultimate_effect = _add_field("Ultimate effect", OptionButton.new())
+	_ultimate_effect.add_item("(none yet)")
+	for effect in FormationBattleEngine.ULTIMATE_EFFECTS:
+		_ultimate_effect.add_item(String(effect))
+	_ultimate_max = _add_field("Ultimate gauge size", SpinBox.new())
+	_ultimate_max.min_value = 1
+	_ultimate_max.max_value = 1000
+	_ultimate_max.value = CharacterData.new().ultimate_max
 
 	_section("Other")
 	_description = _add_field("Description", TextEdit.new())
@@ -133,18 +149,23 @@ func _create() -> void:
 		_status.text = "Please enter a display name."
 		return
 	if _starter.button_pressed and not CharacterData.is_vanguard_class(_selected_class()):
-		_status.text = "Only vanguard classes (Tank, Warrior) can be starters."
+		_status.text = "Only vanguard classes (Tank, Warrior, Berserker) can be starters."
 		return
 
 	var c := CharacterData.new()
 	c.id = id
 	c.display_name = _name.text.strip_edges()
 	c.char_class = _selected_class()
-	c.rarity = _rarity.selected
+	c.rarity = _rarity.get_selected_id()
 	for stat in CharacterData.STATS:
 		c.set(stat, int(_stats[stat].value))
 	c.passive_skill = _make_skill(id, SkillData.Kind.PASSIVE)
 	c.active_skill = _make_skill(id, SkillData.Kind.ACTIVE)
+	if _passive_effect.selected > 0:
+		c.passive_skill.effect_id = StringName(_passive_effect.get_item_text(_passive_effect.selected))
+	if _ultimate_effect.selected > 0:
+		c.active_skill.effect_id = StringName(_ultimate_effect.get_item_text(_ultimate_effect.selected))
+	c.ultimate_max = int(_ultimate_max.value)
 	c.description = _description.text.strip_edges()
 	c.is_starter = _starter.button_pressed
 
@@ -167,8 +188,8 @@ func _create() -> void:
 
 	EditorInterface.get_resource_filesystem().scan()
 	EditorInterface.edit_resource(c)
-	_status.text = "Created %s (pools: %s). Drag a photo into Art → Portrait in the Inspector." % [
-		c.display_name, ", ".join(added_pools) if not added_pools.is_empty() else "none"]
+	_status.text = "Created %s (pools: %s). Put their picture at %s (PNG, JPG or WebP; any letter case). It loads automatically, and until then the game shows a placeholder card." % [
+		c.display_name, ", ".join(added_pools) if not added_pools.is_empty() else "none", c.default_portrait_path()]
 	_id.clear()
 	_name.clear()
 	_description.clear()

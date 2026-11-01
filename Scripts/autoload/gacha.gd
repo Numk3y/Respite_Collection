@@ -8,7 +8,17 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	_rng.randomize()
 
-## Returns [{character, rarity, is_new, uid}]; empty if money is short or the pool is empty
+## Money cost of `count` pulls from this pool
+func money_cost(pool: GachaPool, count: int) -> int:
+	return pool.cost * count
+
+## Credit Card cost of `count` pulls (the same on every pool)
+func card_cost(count: int) -> int:
+	return GameState.CREDIT_CARDS_PER_PULL * count
+
+## Each pull costs the pool's Money price AND Credit Cards.
+## Returns [{character, rarity, is_new, uid, result: "new" | "ascend" | "overflow", rank, money}];
+## empty if either currency is short or the pool is empty
 func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
@@ -23,7 +33,7 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 		push_warning("Gacha pool %s has no characters to pull" % pool.id)
 		return results
 
-	if not GameState.try_spend(pool.cost * count):
+	if not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
 		return results
 
 	var top := CharacterData.Rarity.SSR
@@ -37,9 +47,12 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 		var entry: PoolEntry = _weighted_pick(by_rarity[rarity], func(e): return e.weight)
 		since_top = 0 if rarity == top else since_top + 1
 
-		var is_new := not GameState.owns(entry.character.id)
-		var owned := GameState.add_character(entry.character)
-		results.append({"character": entry.character, "rarity": rarity, "is_new": is_new, "uid": owned.uid})
+		# Duplicates raise the owned copy's Ascension instead of adding a second card
+		var received := GameState.receive_character(entry.character)
+		received.character = entry.character
+		received.rarity = rarity
+		received.is_new = received.result == "new"
+		results.append(received)
 
 	GameState.data.pity[String(pool.id)] = since_top
 	GameState.save_game()  # save right away so closing the game can't reroll a pull

@@ -14,5 +14,6 @@ defense = 85
 evasion = 5
 accuracy = 70
 speed = 35
+portrait_path = "res://Art/enemies/bouncer.png"
 description = "Big, slow and very sturdy."
 is_starter = false

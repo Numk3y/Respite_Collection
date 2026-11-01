@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"muni_passive"
+display_name = "Bing Chilling"
+description = "Bro is just chilling. As long as Muni is alive, every front-row ally heals 6% of Muni's Attack at the end of each of their turns."
+effect_id = &"chilling"
+params = {"regen_pct": 0.06}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"muni_active"
+display_name = "Change To A Brain Rot Avatar"
+kind = 1
+description = "Muni starts yelling \"67\" and \"tung tung tung sahur\". Every enemy decays: -30% Attack, -25% Defense and -20% Speed for 2 turns. It's so cringe that Muni's own front row also gets -10% damage and -10% Defense for 2 turns. Takes twice as long to charge as most Ultimates."
+effect_id = &"brain_rot"
+params = {"ally_damage": -0.1, "ally_defense": -0.1, "attack": -0.3, "defense": -0.25, "speed": -0.2, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"muni"
+display_name = "Muni"
+char_class = 2
+rarity = 2
+hp = 85
+attack = 80
+defense = 35
+evasion = 20
+accuracy = 85
+speed = 55
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 200
+description = "Bro is just chilling. Until the brain rot kicks in."
+is_starter = false

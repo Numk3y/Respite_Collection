@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"unemployed_racist_active"
+display_name = "Unhinged Rant"
+kind = 1
+description = "Goes on a rant: +40% Attack but -40% Defense for 3 turns. Knocking someone out mid-rant heals him 10% of max HP."
+effect_id = &"self_decaying"
+params = {"attack": 0.4, "defense": -0.4, "kill_heal_pct": 0.1, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"unemployed_racist"
+display_name = "Unemployed Racist"
+char_class = 1
+rarity = 1
+hp = 150
+attack = 38
+defense = 35
+evasion = 10
+accuracy = 60
+speed = 40
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/unemployed_racist.png"
+description = "No job, no filter and far too much free time. The longer he rants, the dumber and angrier he gets."

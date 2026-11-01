@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/eboy.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/hopeless_alcoholic.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/egirl.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/sigma_male.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/unemployed_racist.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/rizz_lord.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/mic_spammer.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/enemies/power_mod.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/enemies/instance_owner.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="16"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="17"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="18"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="19"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("11")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("12"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("10")])
+
+[sub_resource type="Resource" id="wave_4"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("8"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("13"), ExtResource("7")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"drinking_night_group_instance"
+display_name = "Drinking Night Group Instance"
+description = "The private group instance where the real party happens. The Instance Owner hides behind a full room: the more of his crowd still standing, the tougher he is, and he kicks anyone who gets too strong."
+chapter = 2
+number = 5
+recommended_level = 12
+enemy_level = 7
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3"), SubResource("wave_4")])
+reward_money = 350
+exp_reward = 100
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(2, 4), "gossip": Vector2i(1, 3), "snack": Vector2i(4, 7)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17"), ExtResource("18"), ExtResource("19")])
+drop_chance = 0.18

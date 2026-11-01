@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"retinazer_passive"
+display_name = "It Is What It Is"
+description = "Takes 10% less damage from every hit. Each attack has a 33% chance to also hit every other enemy in the target's row for 50% damage."
+effect_id = &"unfazed"
+params = {"cleave_chance": 0.33, "cleave_mult": 0.5, "damage_reduction": 0.1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"retinazer_active"
+display_name = "Man, Imma Get Some Taco Bell"
+kind = 1
+description = "Sleeps through his next turn. Then wakes up at full HP with every debuff removed, and gains +60% Attack for 3 turns."
+effect_id = &"power_nap"
+params = {"attack": 0.6, "sleep_turns": 1, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"retinazer"
+display_name = "Retinazer"
+char_class = 1
+rarity = 3
+hp = 130
+attack = 92
+defense = 50
+evasion = 0
+accuracy = 78
+speed = 66
+growth_bonus = {"speed": 0.02}
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "A person you can rely on."

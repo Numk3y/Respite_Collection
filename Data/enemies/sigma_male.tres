@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"sigma_male_passive"
+display_name = "Sigma Grindset"
+description = "Takes 10% less damage from every hit. Each attack has a 25% chance to also hit the rest of the target's row for half damage."
+effect_id = &"unfazed"
+params = {"cleave_chance": 0.25, "cleave_mult": 0.5, "damage_reduction": 0.1}
+
+[resource]
+script = ExtResource("1")
+id = &"sigma_male"
+display_name = "Sigma Male"
+char_class = 0
+rarity = 1
+hp = 220
+attack = 38
+defense = 80
+evasion = 5
+accuracy = 65
+speed = 35
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/sigma_male.png"
+description = "Wakes up at 4 AM to stand in the corner of the party and not talk to anyone."

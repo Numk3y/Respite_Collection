@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CommissionIncident" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+text = "Successfully fixed a clipping skirt after 3 hours of suffering. Discovered 1 forgotten Credit Card in the asset folder!"
+weight = 10
+credit_cards = 1

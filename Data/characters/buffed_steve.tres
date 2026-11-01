@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"buffed_steve_passive"
+display_name = "Desperate Scramble"
+description = "Gains +1.5% Attack and +1% Speed for every 1% of HP lost. When a hit drops him below 30% HP he goes Berserk: +40% Attack but -20% Defense for 3 turns (can't happen again for 10 turns)."
+effect_id = &"desperate_scramble"
+params = {"attack": 0.4, "attack_per_pct": 0.015, "cooldown": 10, "defense": -0.2, "speed_per_pct": 0.01, "threshold": 0.3, "turns": 3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"buffed_steve_active"
+display_name = "None"
+kind = 1
+description = "Steve has no Ultimate."
+
+[resource]
+script = ExtResource("1")
+id = &"buffed_steve"
+display_name = "Steve"
+char_class = 4
+rarity = 1
+hp = 150
+attack = 85
+defense = -15
+evasion = 0
+accuracy = 65
+speed = 50
+portrait_path = "res://Art/characters/Steve.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "Straight out from Minecraft, but now he's strong asf, and he needs ass wipe. His physical strength is unmatched, but his bowel comfort has hit rock bottom."
+is_starter = false

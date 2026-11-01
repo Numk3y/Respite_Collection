@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"perby_passive"
+display_name = "BOW WOW"
+description = "Every hit makes the enemy bleed, losing 20% of Perby's Attack at the end of each of its next 3 turns (a new hit refreshes it). Perby gains +5% Attack for every bleeding enemy."
+effect_id = &"bow_wow"
+params = {"attack_per_bleed": 0.05, "bleed_pct": 0.2, "turns": 3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"perby_active"
+display_name = "MORALE BOOSTER"
+kind = 1
+description = "The whole team gets +20% damage and +15% Speed for 3 turns. While it lasts, Perby's bleeds deal +75% damage."
+effect_id = &"morale_booster"
+params = {"bleed_bonus": 0.75, "damage": 0.2, "speed": 0.15, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"perby"
+display_name = "Perby"
+char_class = 1
+rarity = 3
+hp = 140
+attack = 100
+defense = 60
+evasion = 25
+accuracy = 80
+speed = 70
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "A good boy with a mean bite. One bark and the whole team is fired up."
+is_starter = false

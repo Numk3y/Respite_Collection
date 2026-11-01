@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"strea_passive"
+display_name = "DB Grub"
+description = "Strea is a grub. Every hit has a 50% chance to eat 30% of the enemy's Attack: the enemy loses it for its next turn, and Strea gains that much Attack for his next turn."
+effect_id = &"db_grub"
+params = {"chance": 0.5, "steal_pct": 0.3, "turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"strea_active"
+display_name = "Balloon Boy \"A-HAHAHA-HAHA\""
+kind = 1
+description = "Turns into Balloon Boy and haunts the enemy front row (the back row once the front row is down), hitting one enemy for 250% of his Attack. Takes 1.5x as long to charge as most Ultimates."
+effect_id = &"balloon_boy"
+params = {"damage_mult": 2.5}
+
+[resource]
+script = ExtResource("1")
+id = &"strea"
+display_name = "Strea"
+char_class = 3
+rarity = 2
+hp = 85
+attack = 110
+defense = 35
+evasion = 15
+accuracy = 90
+speed = 52
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 150
+portrait_path = "res://Art/characters/Streashift.png"
+description = "A certified grub who eats everyone else's damage. Laughs like Balloon Boy when he goes all in."
+is_starter = false

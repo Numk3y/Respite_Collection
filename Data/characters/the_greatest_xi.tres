@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"the_greatest_xi_passive"
+display_name = "One Above All"
+description = "Xi never attacks. Whenever an enemy damages him, a random back-row ally instantly counterattacks that enemy for 100% of their Attack."
+effect_id = &"one_above_all"
+params = {"attack_mult": 1.0}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"the_greatest_xi_active"
+display_name = "CCP (Collective Consensus Protocol)"
+kind = 1
+description = "Taunts all enemies and gains +50% Defense for 2 turns. When it ends, a shockwave deals 30% of Xi's max HP to every enemy."
+effect_id = &"ccp"
+params = {"defense": 0.5, "explode_pct": 0.3, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"the_greatest_xi"
+display_name = "The Greatest Xi"
+char_class = 0
+rarity = 2
+hp = 250
+attack = 50
+defense = 80
+evasion = 0
+accuracy = 70
+speed = 45
+portrait_path = "res://Art/characters/Xi.png"
+cutin_path = "res://Art/cutins/Xi.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 200
+description = "Possessing infinite social credit and an unbreakable titanium chin. He never needs to lift a finger himself—the entire system moves to avenge his dignity."
+is_starter = false

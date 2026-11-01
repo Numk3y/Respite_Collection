@@ -31,4 +31,4 @@ speed = 80
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 description = "A frontline warrior who opens every fight with a charge."
-is_starter = true
+is_starter = false

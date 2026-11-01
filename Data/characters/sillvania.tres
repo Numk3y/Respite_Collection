@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"sillvania_passive"
+display_name = "Winnie the Hamster!"
+description = "Every time Sillvania attacks, her hamster Winnie scurries over and heals the front-row ally with the lowest HP for 55% of Sillvania's Attack (the back row once the front row is healthy or down)."
+effect_id = &"winnie"
+params = {"heal_mult": 0.55}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"sillvania_active"
+display_name = "Let's Go Winnie"
+kind = 1
+description = "Sillvania stops attacking to focus on healing. Right away and for her next 3 turns, she and Winnie heal 2 allies for 80% of her Attack each: front-row allies with the lowest HP first, then the back row."
+effect_id = &"lets_go_winnie"
+params = {"heal_mult": 0.8, "targets": 2, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"sillvania"
+display_name = "Sillvania"
+char_class = 5
+rarity = 2
+hp = 85
+attack = 70
+defense = 35
+evasion = 15
+accuracy = 80
+speed = 55
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "An artist who uses her art to save lives, with a little help from her hamster Winnie."
+is_starter = false

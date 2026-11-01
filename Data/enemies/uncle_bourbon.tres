@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"uncle_bourbon_passive"
+display_name = "Liquid Courage"
+description = "Every Drunk stack (max 5) gives +10% Attack and +5% Defense but -6% Accuracy. Takes a swig (+1 Drunk) every 3 turns. Once per battle, when a hit drops him below 40% HP he orders a double: heals 20% of max HP and gains 2 Drunk."
+effect_id = &"liquid_courage"
+params = {"accuracy_per_stack": -0.06, "attack_per_stack": 0.1, "defense_per_stack": 0.05, "max_stacks": 5, "rally_heal": 0.2, "rally_stacks": 2, "rally_threshold": 0.4, "swig_every": 3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"uncle_bourbon_active"
+display_name = "Bottoms Up"
+kind = 1
+description = "Chugs a whole bottle: +2 Drunk, heals 15% of max HP, then smashes it across every enemy for 80% damage."
+effect_id = &"bottoms_up"
+params = {"damage_mult": 0.8, "heal_pct": 0.15, "stacks": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"uncle_bourbon"
+display_name = "Uncle Bourbon"
+title = "Boss"
+char_class = 4
+rarity = 3
+hp = 600
+attack = 48
+defense = 35
+evasion = 10
+accuracy = 70
+speed = 42
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/uncle_bourbon.png"
+description = "The Drunk Uncle's older brother, and the reason Poppy Street never closes. The drunker he gets, the harder he hits."
