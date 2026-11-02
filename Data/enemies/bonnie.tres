@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"bonnie_passive"
+display_name = "Stage Lights"
+description = "Each hit that lands has a 15% chance to Blind the target: -50% Accuracy for 2 turns."
+effect_id = &"blinding"
+params = {"chance": 0.15}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"bonnie_active"
+display_name = "Guitar Smash"
+kind = 1
+description = "Swings his guitar at one enemy for 200% of his Attack."
+effect_id = &"balloon_boy"
+params = {"damage_mult": 2.0}
+
+[resource]
+script = ExtResource("1")
+id = &"bonnie"
+display_name = "Bonnie"
+title = "Animatronic"
+char_class = 1
+rarity = 2
+hp = 130
+attack = 36
+defense = 25
+evasion = 15
+accuracy = 70
+speed = 55
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/bonnie.png"
+description = "The bass player. Always the first to leave the stage, and nobody ever sees him walk."

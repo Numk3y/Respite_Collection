@@ -75,6 +75,20 @@ func base_stats() -> Dictionary:
 		stats[stat] = get(stat)
 	return stats
 
+## Stats at a level and Ascension rank, before gear (GameState.get_unit_stats adds gear; Tools/balance_check
+## builds benchmark units with it). Each level adds GameState.GROWTH_PER_LEVEL (+ growth_bonus) of the base.
+func stats_at(level: int, ascension: int = 0) -> Dictionary:
+	var stats := base_stats()
+	var levels := level - 1
+	var ascension_mult := 1.0 + GameState.ASCENSION_BONUS * ascension
+	for stat in stats:
+		if stats[stat] < 0:
+			continue  # a negative stat (e.g. Steve's Defense) stays as it is; growth would only make it worse
+		var level_mult := 1.0 + (GameState.GROWTH_PER_LEVEL + float(growth_bonus.get(stat, 0.0))) * levels
+		var mult := level_mult * (ascension_mult if stat in GameState.ASCENSION_STATS else 1.0)
+		stats[stat] = roundi(stats[stat] * mult)
+	return stats
+
 ## The Ultimate in the shape BattleEngine expects, or {} if this character has no working Ultimate yet
 func ultimate_dict() -> Dictionary:
 	if active_skill == null or active_skill.effect_id == &"":

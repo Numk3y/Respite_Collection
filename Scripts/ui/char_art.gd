@@ -22,6 +22,8 @@ const CLASS_COLORS := {
 	CharacterData.CharClass.HEALER: Color("#c2507e"),
 }
 const MYSTERY_COLOR := Color("#2a2a3a")
+const CAPTION_FONT_SIZE := 13
+const CAPTION_MIN_FONT_SIZE := 9
 
 var _background: PlaceholderPlate
 var _initial: Label
@@ -43,7 +45,7 @@ func _init() -> void:
 	_caption = Label.new()
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_caption.add_theme_font_size_override("font_size", 13)
+	_caption.add_theme_font_size_override("font_size", CAPTION_FONT_SIZE)
 	var caption_style := StyleBoxFlat.new()
 	caption_style.bg_color = Color(0, 0, 0, 0.45)
 	caption_style.set_content_margin_all(4)
@@ -104,6 +106,20 @@ func _update_caption() -> void:
 	else:
 		_caption.text = _class_text
 		_caption.offset_bottom = -CardFrame.plate_height_at(size) - 2
+	_caption.add_theme_font_size_override("font_size", _caption_font_size())
+
+## The caption wraps between words, but a single word wider than the box ("Unemployed") would be cut off, so the
+## size steps down from CAPTION_FONT_SIZE until the longest word fits (the game uses Godot's default font)
+func _caption_font_size() -> int:
+	var width := size.x - 8.0  # the caption's 4px margins
+	if width <= 0.0:
+		return CAPTION_FONT_SIZE
+	var font := ThemeDB.fallback_font
+	var font_size := CAPTION_FONT_SIZE
+	for word in _caption.text.replace("\n", " ").split(" ", false):
+		while font_size > CAPTION_MIN_FONT_SIZE and font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width:
+			font_size -= 1
+	return font_size
 
 func _set_colors(background: Color, frame: Color) -> void:
 	_background.color = background

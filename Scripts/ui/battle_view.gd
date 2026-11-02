@@ -16,6 +16,8 @@ const STEP_SEC := 0.18  # length of one animation step at 1x
 const ALLY_COLOR := Color("#3b82f6")
 const ENEMY_COLOR := Color("#ef4444")
 const DOWNED_ALPHA := 0.3
+const NAME_FONT_SIZE := 15
+const NAME_MIN_FONT_SIZE := 11
 
 var _battle: Dictionary
 var _speed := 1
@@ -23,14 +25,20 @@ var _views: Array[Dictionary] = []  # one per battle unit, same index
 var _overlay: Control
 var _banner: Label
 var _cut_in: CutInOverlay
+var _jumpscare: JumpscareOverlay
+var _fx: BattleFX
+var _arena: Control
+var _results: BattleResults
+var _log_names: Array[Dictionary] = []  # {"name", "side"}, longest first, for colouring names in the log
+var _log_number := RegEx.create_from_string("\\d+")
+var _stage_name := ""
 var _wave_label: Label
 var _wave_count := 1
 var _log: RichTextLabel
-var _result_label: Label
-var _after_buttons: Array[Button] = []
 
 func start(stage: StageData, battle: Dictionary) -> void:
 	_battle = battle
+	_stage_name = stage.display_name
 	_speed = clampi(int(GameState.get_setting("battle_speed", 1)), 1, SPEEDS.back())
 	_build(stage)
 	_play()
@@ -97,6 +105,11 @@ func _build(stage: StageData) -> void:
 		view.slot.visible = u.side == 0 or int(u.wave) == 0  # later waves' enemies wait off the field
 		_views.append(view)
 
+	_arena = arena
+	# Sparks, bolts, rings and the turn marker: above the cards, below the damage numbers
+	_fx = BattleFX.new()
+	_fx.speed = _speed
+	arena.add_child(_fx)
 	# Overlay for damage numbers and the Ultimate banner, drawn above the cards
 	_overlay = Control.new()
 	_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -113,29 +126,35 @@ func _build(stage: StageData) -> void:
 	_banner.add_theme_constant_override("outline_size", 10)
 	_banner.modulate.a = 0.0
 	_overlay.add_child(_banner)
+	# The animatronics' entrance darkens the arena and the cards, so it sits above them too
+	_jumpscare = JumpscareOverlay.new()
+	arena.add_child(_jumpscare)
 	# Ultimate cut-ins go above everything else in the arena
 	_cut_in = CutInOverlay.new()
 	arena.add_child(_cut_in)
 
+	# The log: names coloured by side, numbers highlighted, knockouts in red (see _style_line)
 	_log = RichTextLabel.new()
-	_log.custom_minimum_size = Vector2(0, 84)
+	_log.custom_minimum_size = Vector2(0, 110)
 	_log.scroll_following = true
+	_log.bbcode_enabled = true
+	_log.add_theme_font_size_override("normal_font_size", 14)
+	_log.add_theme_font_size_override("bold_font_size", 14)
+	var log_style := StyleBoxFlat.new()
+	log_style.bg_color = Color(0.03, 0.05, 0.1, 0.82)
+	log_style.border_color = UITheme.CYAN.darkened(0.3)
+	log_style.border_width_left = 3
+	log_style.set_corner_radius_all(6)
+	log_style.set_content_margin_all(8)
+	log_style.content_margin_left = 12
+	_log.add_theme_stylebox_override("normal", log_style)
 	add_child(_log)
-	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 12)
-	add_child(footer)
-	_result_label = Label.new()
-	_result_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_result_label.add_theme_font_size_override("font_size", 16)
-	footer.add_child(_result_label)
-	for pair in [["battle_again", again_pressed], ["battle_home", home_pressed]]:
-		var button := Button.new()
-		button.text = Terms.t(pair[0])
-		button.pressed.connect(pair[1].emit)
-		button.hide()
-		footer.add_child(button)
-		_after_buttons.append(button)
+	var seen := {}
+	for u in _battle.units:
+		if not seen.has(u.name):
+			seen[u.name] = true
+			_log_names.append({"name": u.name, "side": u.side})
+	_log_names.sort_custom(func(a, b): return a.name.length() > b.name.length())
 
 ## A unit card. The slot holds the place in the column; the body inside it is what slides and shakes.
 func _unit_view(u: Dictionary) -> Dictionary:
@@ -177,13 +196,15 @@ func _unit_view(u: Dictionary) -> Dictionary:
 
 	var name_label := Label.new()
 	name_label.text = u.name
-	name_label.clip_text = true
-	name_label.add_theme_font_size_override("font_size", 15)
+	name_label.tooltip_text = u.name
+	name_label.mouse_filter = Control.MOUSE_FILTER_PASS  # so the tooltip shows
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS  # only if even the smallest size won't fit
+	name_label.add_theme_font_size_override("font_size", _fit_font_size(u.name, info.custom_minimum_size.x))
 	info.add_child(name_label)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
-		"hp_bar": null, "hp_label": null, "energy_bar": null, "buffs": null}
+		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "buffs": null}
 	# Everyone has HP now; the rearguard is only hit once its vanguard is down
-	view.hp_bar = _bar(u.max_hp, u.max_hp, Color("#22c55e"), 12)
+	view.hp_bar = HpBar.new(u.max_hp)
 	info.add_child(view.hp_bar)
 	view.hp_label = _small_label("%d / %d" % [u.max_hp, u.max_hp])
 	info.add_child(view.hp_label)
@@ -208,6 +229,15 @@ func _bar(max_value: float, value: float, color: Color, height: float) -> Progre
 	bar.add_theme_stylebox_override("fill", fill)
 	return bar
 
+## Long names ("Unemployed Racist B") step down from NAME_FONT_SIZE until they fit the card's text width.
+## The game uses Godot's default font (UITheme sets no custom one), so it can be measured before the card is shown.
+func _fit_font_size(text: String, width: float) -> int:
+	var font := ThemeDB.fallback_font
+	var font_size := NAME_FONT_SIZE
+	while font_size > NAME_MIN_FONT_SIZE and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width:
+		font_size -= 1
+	return font_size
+
 ## Short fixed texts (HP numbers, "Ultimate") shouldn't wrap: a hidden card isn't laid out, and a wrapping label
 ## measured at zero width would wrap one letter per line and stretch the card. Only the buff list wraps.
 func _small_label(text: String, wrap: bool = false) -> Label:
@@ -224,6 +254,8 @@ func _small_label(text: String, wrap: bool = false) -> Label:
 
 func _set_speed(s: int) -> void:
 	_speed = s
+	if _fx:
+		_fx.speed = s
 	GameState.set_setting("battle_speed", s)
 
 ## Duration of n animation steps at the current speed
@@ -243,12 +275,14 @@ func _play() -> void:
 	_finish()
 
 ## Between waves: the cleared enemies leave, a "Battle 2/3" banner (or the boss banner) shows,
-## and the next wave's enemies slide in from the right
+## and the next wave's enemies slide in from the right. A wave with its own banner (the animatronics) gets a
+## jumpscare entrance instead.
 func _animate_wave(event: Dictionary) -> void:
 	var wave: int = event.wave
 	_wave_label.text = Terms.t("battle_wave", {"current": wave + 1, "total": event.wave_count})
-	var key := "battle_wave_boss" if event.boss else "battle_wave_banner"
-	_show_banner(Terms.t(key, {"current": wave + 1, "total": event.wave_count}))
+	var wave_text := Terms.t("battle_wave_boss" if event.boss else "battle_wave_banner", {"current": wave + 1, "total": event.wave_count})
+	if event.banner.is_empty():
+		_show_banner(wave_text)
 	var arriving: Array[Dictionary] = []
 	for view in _views:
 		if view.side != 1:
@@ -261,6 +295,9 @@ func _animate_wave(event: Dictionary) -> void:
 			arriving.append(view)
 	_apply_state(event)
 	_append_lines(event)
+	if not event.banner.is_empty():
+		await _jumpscare_entrance(arriving, Terms.t(event.banner), wave_text)
+		return
 	await _wait(1.5)
 	if not arriving.is_empty():
 		var t := create_tween().set_parallel()
@@ -271,16 +308,49 @@ func _animate_wave(event: Dictionary) -> void:
 		await t.finished
 	await _wait(2)
 
+## Lights out, then the scare: while the title slams in, every arriving card springs out of nowhere, glowing
+## red-hot, each with its own burst of sparks
+func _jumpscare_entrance(arriving: Array[Dictionary], title: String, subtitle: String) -> void:
+	await _jumpscare.blackout(_speed)
+	var total := _jumpscare.reveal(title, subtitle, _jumpscare.get_parent())
+	if not arriving.is_empty():
+		var t := create_tween().set_parallel()
+		for i in arriving.size():
+			var view: Dictionary = arriving[i]
+			var body: Control = view.body
+			body.position.x = 0.0
+			body.pivot_offset = CARD_SIZE / 2.0
+			body.scale = Vector2(0.15, 0.15)
+			body.modulate = Color(2.4, 0.7, 0.7, 0.0)  # over-bright red, fading to normal
+			var delay := _dur(0.5 * i)
+			var center: Vector2 = view.slot.global_position - _jumpscare.global_position + CARD_SIZE / 2.0
+			t.tween_callback(_jumpscare.pop_burst.bind(center)).set_delay(delay)
+			t.tween_property(body, "modulate:a", 1.0, _dur(0.3)).set_delay(delay)
+			t.tween_property(body, "scale", Vector2.ONE, _dur(4)).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT).set_delay(delay)
+			t.tween_property(body, "modulate", Color.WHITE, _dur(3)).set_delay(delay + _dur(0.3))
+		await t.finished
+	# Let the title finish its hold and fade before the fight starts
+	var rest := total - _dur(4 + 0.5 * maxi(arriving.size() - 1, 0))
+	if rest > 0.0:
+		var hold := create_tween()
+		hold.tween_interval(rest)
+		await hold.finished
+	await _wait(1)
+
 func _animate(event: Dictionary) -> void:
 	if event.kind == "wave":
 		await _animate_wave(event)
 		return
 	var actor: Dictionary = _views[event.actor]
 	var direction := 1.0 if actor.side == 0 else -1.0
+	var fx_color := BattleFX.ALLY_FX if actor.side == 0 else BattleFX.ENEMY_FX
+	# A pulsing outline marks whoever is acting
+	_fx.set_marker(actor.body, CARD_SIZE, fx_color)
 	if event.kind == "ultimate":
 		# Everything waits for the cut-in, then the caster's card flashes gold and the skill lands
 		var caster: Dictionary = _battle.units[event.actor]
 		await _cut_in.play(caster.data, caster.name, event.skill, caster.side == 0, _speed)
+		_fx.aura(_center(actor))
 		await _flash(actor.body, Color(1.9, 1.6, 0.5), 1.5)
 	elif event.kind == "idle":
 		_float_text(actor, Terms.t("battle_idle"), Color("#fde68a"), 30)
@@ -292,16 +362,30 @@ func _animate(event: Dictionary) -> void:
 		_float_text(actor, Terms.t("battle_sleep"), Color("#93c5fd"), 30)
 		await _flash(actor.body, Color(0.6, 0.8, 1.6), 2)
 	var attacking: bool = not event.hits.is_empty()
+	# Front-row fighters lunge in and slash; the back row recoils and fires glowing bolts at every target
+	var melee: bool = actor.vanguard
 	if attacking:
 		var forward := create_tween().set_parallel()
-		forward.tween_property(actor.body, "position:x", BUMP_DISTANCE * direction, _dur(1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		var lunge := BUMP_DISTANCE * direction * (1.0 if melee else -0.35)
+		forward.tween_property(actor.body, "position:x", lunge, _dur(1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		forward.tween_property(actor.body, "modulate", Color(1.5, 1.5, 1.5), _dur(1))
 		await forward.finished
+		if not melee:
+			# All bolts fly together; wait for them to land
+			var flight := 0.0
+			for hit in event.hits:
+				flight = _fx.bolt(_center(actor), _center(_views[hit.target]), fx_color)
+			var land := create_tween()
+			land.tween_interval(flight)
+			await land.finished
 	for hit in event.hits:
-		_react(_views[hit.target], hit)
+		if melee and hit.hit:
+			_fx.slash(_center(_views[hit.target]), fx_color, direction)
+		_react(_views[hit.target], hit, fx_color)
 	for target in event.get("off_balance", []):
 		_float_text(_views[target], Terms.t("battle_off_balance"), Color("#fb923c"), 34)
 	for heal in event.heals:
+		_fx.heal(_center(_views[heal.target]))
 		_float_text(_views[heal.target], "+%d" % heal.amount, Color("#4ade80"))
 	for target in event.get("slept", []):
 		_float_text(_views[target], Terms.t("battle_slept"), Color("#93c5fd"), 60)
@@ -316,7 +400,9 @@ func _animate(event: Dictionary) -> void:
 	for target in event.get("blinded", []):
 		_float_text(_views[target], Terms.t("battle_blinded"), Color("#fde047"), 60)
 	for drain in event.get("drains", []):
-		_float_text(_views[drain.target], "-%d" % drain.amount, Color("#dc2626") if drain.get("bleed", false) else Color("#c084fc"), 30)
+		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#c084fc")
+		_fx.hit(_center(_views[drain.target]), drain_color)
+		_float_text(_views[drain.target], "-%d" % drain.amount, drain_color, 30)
 	for target in event.get("grubbed", []):
 		_float_text(_views[target], Terms.t("battle_grubbed"), Color("#fb923c"), 60)
 	for target in event.get("decayed", []):
@@ -340,6 +426,11 @@ func _animate(event: Dictionary) -> void:
 	_apply_state(event)
 	_append_lines(event)
 	await _wait(1.5)
+	_fx.set_marker(null, Vector2.ZERO)
+
+## A card's centre in the effects layer's coordinates
+func _center(view: Dictionary) -> Vector2:
+	return _fx.to_local_center(view.body, CARD_SIZE)
 
 ## A rearguard friend leaps in: ASSIST! banner, a cyan bump toward the enemy, then the follow-up hit
 func _animate_assist(assist: Dictionary) -> void:
@@ -351,19 +442,25 @@ func _animate_assist(assist: Dictionary) -> void:
 	forward.tween_property(helper.body, "position:x", BUMP_DISTANCE * 1.4 * direction, _dur(0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	forward.tween_property(helper.body, "modulate", Color(0.6, 1.6, 1.9), _dur(0.8))
 	await forward.finished
-	_react(_views[assist.target], {"hit": true, "damage": assist.damage})
+	var color := BattleFX.ALLY_FX if helper.side == 0 else BattleFX.ENEMY_FX
+	_fx.slash(_center(_views[assist.target]), Color("#7df9ff"), direction)
+	_react(_views[assist.target], {"hit": true, "damage": assist.damage}, color)
 	var back := create_tween().set_parallel()
 	back.tween_property(helper.body, "position:x", 0.0, _dur(1)).set_trans(Tween.TRANS_QUAD)
 	back.tween_property(helper.body, "modulate", Color.WHITE, _dur(1))
 	await back.finished
 
-## Target reaction: shake and red flash with a damage number (gold on a crit), or a MISS
-func _react(view: Dictionary, hit: Dictionary) -> void:
+## Target reaction: sparks and an impact ring, a shake and red flash with a damage number, or a MISS.
+## Crits are gold, bigger, and shake the whole arena.
+func _react(view: Dictionary, hit: Dictionary, fx_color: Color = BattleFX.ALLY_FX) -> void:
 	if not hit.hit:
 		_float_text(view, Terms.t("battle_miss"), Color("#cbd5e1"))
 		return
-	if hit.get("crit", false):
-		_float_text(view, Terms.t("battle_crit", {"damage": hit.damage}), Color("#fde047"))
+	var crit: bool = hit.get("crit", false)
+	_fx.hit(_center(view), fx_color, crit)
+	if crit:
+		_float_text(view, Terms.t("battle_crit", {"damage": hit.damage}), Color("#fde047"), 0.0, 32)
+		_fx.shake(_arena, 10.0, 0.35)
 	else:
 		_float_text(view, "-%d" % hit.damage, Color("#fca5a5"))
 	var shake := create_tween()
@@ -379,18 +476,23 @@ func _flash(node: Control, color: Color, steps: float) -> void:
 	t.tween_property(node, "modulate", Color.WHITE, _dur(steps / 2))
 	await t.finished
 
-## Floating text over a card; y_offset stacks several labels (e.g. CRIT and OFF-BALANCE) without overlap
-func _float_text(view: Dictionary, text: String, color: Color, y_offset: float = 0.0) -> void:
+## Floating text over a card that pops in big and settles; y_offset stacks several labels (e.g. CRIT and
+## OFF-BALANCE) without overlap. A little random sideways jitter keeps repeated numbers from stacking exactly.
+func _float_text(view: Dictionary, text: String, color: Color, y_offset: float = 0.0, font_size: int = 24) -> void:
 	var label := Label.new()
 	label.text = text
-	label.add_theme_font_size_override("font_size", 24)
+	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
-	label.add_theme_constant_override("outline_size", 6)
+	label.add_theme_constant_override("outline_size", 7)
 	_overlay.add_child(label)
 	var body: Control = view.body
-	label.position = body.global_position - _overlay.global_position + Vector2(CARD_SIZE.x * 0.3, 8 + y_offset)
+	label.position = body.global_position - _overlay.global_position \
+		+ Vector2(CARD_SIZE.x * 0.3 + randf_range(-14.0, 14.0), 8 + y_offset)
+	label.pivot_offset = label.get_combined_minimum_size() / 2.0
+	label.scale = Vector2(1.7, 1.7)
 	var t := create_tween().set_parallel()
+	t.tween_property(label, "scale", Vector2.ONE, _dur(0.9)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(label, "position:y", label.position.y - 42, _dur(4))
 	t.tween_property(label, "modulate:a", 0.0, _dur(4)).set_delay(_dur(1.5))
 	t.chain().tween_callback(label.queue_free)
@@ -402,27 +504,70 @@ func _show_banner(text: String) -> void:
 	t.tween_interval(_dur(4))
 	t.tween_property(_banner, "modulate:a", 0.0, _dur(1.5))
 
-## Bars, gauges, buffs and knocked-out fading from the engine's state after this action
+## Bars, gauges, buffs and knockouts from the engine's state after this action. HP bars drain smoothly with a
+## red trail; a friend or enemy dropping to 0 bursts into shards and fades; a full Ultimate gauge glows.
 func _apply_state(event: Dictionary) -> void:
 	for i in _views.size():
 		var view: Dictionary = _views[i]
 		var s: Dictionary = event.state[i]
 		if view.hp_bar:
-			view.hp_bar.value = s.hp
+			view.hp_bar.set_hp(s.hp, _dur(1.2))
 			view.hp_label.text = "%d / %d" % [s.hp, view.max_hp]
-			view.slot.modulate.a = DOWNED_ALPHA if s.hp <= 0 else 1.0
+			if view.hp > 0 and s.hp <= 0 and view.slot.visible:
+				_knockout(view)
+			elif s.hp > 0:
+				view.slot.modulate.a = 1.0
+			view.hp = s.hp
 		if view.energy_bar:
 			view.energy_bar.value = s.energy
+			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
 		view.buffs.text = ", ".join(s.buffs)
 
-func _append_lines(event: Dictionary) -> void:
-	if not event.lines.is_empty():
-		_log.append_text("\n".join(event.lines) + "\n")
+func _knockout(view: Dictionary) -> void:
+	_fx.knockout(_center(view), BattleFX.ALLY_FX if view.side == 0 else BattleFX.ENEMY_FX)
+	var t := create_tween().set_parallel()
+	t.tween_property(view.slot, "modulate:a", DOWNED_ALPHA, _dur(2))
+	t.tween_property(view.body, "modulate", Color(0.55, 0.55, 0.6), _dur(2))
 
+func _append_lines(event: Dictionary) -> void:
+	for line in event.lines:
+		_log.append_text(_style_line(line) + "\n")
+
+## Colours a plain log line for the RichTextLabel: names by side (blue friends, red enemies), numbers bold
+## (green on heals, gold on crits), knockouts red, wave headers centred gold. Names become placeholder characters
+## first so a short name can't match inside a longer one ("Drunk Person" in "Drunk Person A") or inside tags.
+func _style_line(line: String) -> String:
+	var text := line.replace("[", char(0xE100)).replace("]", char(0xE101))  # player text can't break the BBCode
+	for i in _log_names.size():
+		text = text.replace(_log_names[i].name, char(0xE000 + i))
+	if text.begins_with("---"):
+		return "[center][b][color=#fde68a]%s[/color][/b][/center]" % _expand_names(text)
+	var number_color := "#ffb86b"
+	if text.contains(" recovers "):  # log_heal
+		number_color = "#6ee7a0"
+	elif line.contains("critical"):
+		number_color = "#fde047"
+	text = _log_number.sub(text, "[b][color=%s]$0[/color][/b]" % number_color, true)
+	text = text.replace(" is down!", " [color=#f87171][b]is down![/b][/color]")
+	return _expand_names(text)
+
+func _expand_names(text: String) -> String:
+	for i in _log_names.size():
+		var color := "#7cc4ff" if _log_names[i].side == 0 else "#ff8a80"
+		var safe: String = _log_names[i].name.replace("[", "[lb]")
+		text = text.replace(char(0xE000 + i), "[b][color=%s]%s[/color][/b]" % [color, safe])
+	return text.replace(char(0xE100), "[lb]").replace(char(0xE101), "[rb]")
+
+## The battle is over: the result goes in the log, then the results screen opens on top with the rewards and
+## the Again / Home buttons
 func _finish() -> void:
-	_log.append_text("\n".join(_battle.end_lines))
+	_fx.set_marker(null, Vector2.ZERO)
+	var win: bool = _battle.win
+	_log.append_text("[center][b][font_size=18][color=%s]%s[/color][/font_size][/b][/center]" % [
+		"#fde047" if win else "#f87171", "\n".join(_battle.end_lines).replace("[", "[lb]")])
 	var report: Dictionary = _battle.report
-	if _battle.win:
+	var lines := PackedStringArray()  # rewards and the rest, for the results screen
+	if win:
 		var extras := ""
 		for key in report.materials:
 			if report.materials[key] > 0:
@@ -430,8 +575,7 @@ func _finish() -> void:
 		var drops := ""
 		for item in report.drops:
 			drops += Terms.t("report_drop", {"item": item})
-		var lines := PackedStringArray([Terms.t("battle_victory", {
-			"rewards": Terms.t("battle_rewards", {"amount": report.money, "materials": extras, "drops": drops})})])
+		lines.append(Terms.t("battle_rewards", {"amount": report.money, "materials": extras, "drops": drops}))
 		if report.exp > 0:
 			lines.append(Terms.t("battle_exp", {"amount": report.exp}))
 		for up in report.level_ups:
@@ -440,8 +584,64 @@ func _finish() -> void:
 			lines.append(Terms.t("battle_first_clear", {"amount": report.first_clear_cards}))
 		if report.card_drops > 0:
 			lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
-		_result_label.text = "\n".join(lines)
+	elif report.card_drops > 0:  # beat the animatronics, then lost a later wave: their card still counts
+		lines.append(Terms.t("battle_defeat_partial"))
+		lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
 	else:
-		_result_label.text = Terms.t("battle_defeat")
-	for button in _after_buttons:
-		button.show()
+		lines.append(Terms.t("battle_defeat"))
+
+	await _wait(3)  # a beat to see the final blow land
+	_results = BattleResults.new()
+	_arena.add_child(_results)
+	_results.again_pressed.connect(again_pressed.emit)
+	_results.home_pressed.connect(home_pressed.emit)
+	_results.open(_battle, _stage_name, lines)
+
+## An HP bar that drains smoothly: the green fill moves first, a red "damage trail" follows a moment later
+## (heals: the trail jumps up and the fill catches up)
+class HpBar extends Control:
+	var _max := 1.0
+	var _hp := 1.0
+	var _trail := 1.0
+	var _tween: Tween
+
+	func _init(max_hp: int) -> void:
+		_max = maxf(float(max_hp), 1.0)
+		_hp = _max
+		_trail = _max
+		custom_minimum_size = Vector2(0, 12)
+
+	func set_hp(value: float, seconds: float) -> void:
+		if is_equal_approx(value, _hp):
+			return
+		if _tween:
+			_tween.kill()
+		_tween = create_tween()
+		if value < _hp:
+			_tween.tween_method(_set_fill, _hp, value, seconds * 0.35).set_ease(Tween.EASE_OUT)
+			_tween.tween_interval(seconds * 0.25)
+			_tween.tween_method(_set_trail, _trail, value, seconds * 0.5).set_trans(Tween.TRANS_SINE)
+		else:
+			_trail = value
+			_tween.tween_method(_set_fill, _hp, value, seconds * 0.6).set_trans(Tween.TRANS_SINE)
+
+	func _set_fill(v: float) -> void:
+		_hp = v
+		queue_redraw()
+
+	func _set_trail(v: float) -> void:
+		_trail = v
+		queue_redraw()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		draw_rect(r, Color(0, 0, 0, 0.45))
+		var share := clampf(_hp / _max, 0.0, 1.0)
+		var trail := clampf(_trail / _max, 0.0, 1.0)
+		if trail > share:
+			draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * trail, size.y)), Color("#ef4444"))
+		# Green when healthy, amber below half, red below a quarter
+		var color := Color("#22c55e") if share > 0.5 else Color("#f59e0b") if share > 0.25 else Color("#ef4444")
+		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * share, size.y)), color)
+		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * share, size.y * 0.4)), Color(1, 1, 1, 0.18))  # a little shine
+		draw_rect(r, Color(1, 1, 1, 0.12), false, 1.0)

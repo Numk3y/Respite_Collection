@@ -190,7 +190,7 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 			_start_wave(units, wave)
 			if record:
 				var wave_event := {"actor": -1, "kind": "wave", "wave": wave, "wave_count": waves.size(),
-					"boss": waves[wave].get("boss", false), "hits": [], "heals": [], "off_balance": [], "assists": [],
+					"boss": waves[wave].get("boss", false), "banner": waves[wave].get("banner", ""), "hits": [], "heals": [], "off_balance": [], "assists": [],
 					"guard_charges": [], "lines": PackedStringArray([Terms.t("log_wave", {"current": wave + 1, "total": waves.size()})]),
 					"state": _state(units)}
 				events.append(wave_event)
@@ -205,7 +205,18 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 			events.append(event)
 			lines.append_array(event.lines)
 
-	var result := {"win": win, "actions": actions, "log": lines, "waves_cleared": wave + (1 if win else 0), "wave_count": waves.size()}
+	# Share of the allies' total HP left at the end (balance testing tells close wins from easy ones)
+	var hp_left := 0.0
+	var hp_max := 0.0
+	for u in units:
+		if u.side == 0:
+			hp_left += maxf(u.hp, 0.0)
+			hp_max += u.max_hp
+	var result := {"win": win, "actions": actions, "log": lines, "waves_cleared": wave + (1 if win else 0), "wave_count": waves.size(),
+		"ally_hp": hp_left / hp_max if hp_max > 0.0 else 0.0,
+		# Per unit, same order as `units`: HP removed from enemies, HP lost, HP restored (to anyone), HP left at the end
+		"stats": units.map(func(u): return {"dealt": u.dealt, "taken": u.taken, "healed": u.healed,
+			"hp": maxi(u.hp, 0), "max_hp": u.max_hp})}
 	if record:
 		var end_lines := PackedStringArray([Terms.t(end_key)])
 		lines.append_array(end_lines)
@@ -267,6 +278,9 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"passive_cooldown": 0,  # own actions left before the passive can trigger again
 				"buffs": [],
 				"data": u.get("data"),
+				"dealt": 0,  # combat stats for the results screen (see _count_damage / _heal)
+				"taken": 0,
+				"healed": 0,
 			})
 
 func _snapshot(units: Array[Dictionary]) -> Array:
@@ -362,7 +376,7 @@ func _chill_regen(u: Dictionary, event: Dictionary, record: bool) -> void:
 	for ally in _units.filter(func(a): return a.side == u.side and _alive(a)):
 		var p := _passive_params(ally, &"chilling")
 		if not p.is_empty():
-			_heal(u, maxi(roundi(_stat(ally, "attack") * float(p.regen_pct)), 1), event, record)
+			_heal(u, maxi(roundi(_stat(ally, "attack") * float(p.regen_pct)), 1), event, record, ally)
 
 ## Passive Group Owner: +Defense for every other living ally
 func _group_bonus(u: Dictionary, stat: String) -> float:
@@ -402,7 +416,9 @@ func _bleed_tick(u: Dictionary, event: Dictionary, record: bool) -> void:
 			continue
 		var source: Dictionary = _units[b.source]
 		var amount := maxi(roundi(b.amount * (1.0 + float(_flag_buff(source, "bleed_bonus").get("bleed_bonus", 0.0)))), 1)
+		var before: int = u.hp
 		u.hp = maxi(u.hp - amount, 1 if _has_flag(u, "undying") else 0)
+		_count_damage(source, u, before - u.hp)
 		event.drains.append({"target": u.index, "amount": amount, "bleed": true})
 		if record:
 			event.lines.append(Terms.t("log_bleed", {"name": u.name, "amount": amount}))
@@ -677,7 +693,7 @@ func _heal_order(u: Dictionary) -> Array:
 ## Heals the first `count` allies of `u` in healing order (see _heal_order)
 func _heal_lowest(u: Dictionary, count: int, amount: int, event: Dictionary, record: bool) -> void:
 	for ally in _heal_order(u).slice(0, count):
-		_heal(ally, amount, event, record)
+		_heal(ally, amount, event, record, u)
 
 ## Passive Winnie: after an attack, the pet heals the first ally in healing order
 func _check_winnie(u: Dictionary, event: Dictionary, record: bool) -> void:
@@ -690,7 +706,7 @@ func _check_winnie(u: Dictionary, event: Dictionary, record: bool) -> void:
 	event.get_or_add("winnie", []).append(u.index)
 	if record:
 		event.lines.append(Terms.t("log_winnie", {"name": u.name, "skill": u.passive.name, "target": order[0].name}))
-	_heal(order[0], roundi(_stat(u, "attack") * float(p.heal_mult)), event, record)
+	_heal(order[0], roundi(_stat(u, "attack") * float(p.heal_mult)), event, record, u)
 
 ## A buff with "explode_pct" ran out (e.g. CCP): a shockwave of that share of the unit's max HP hits every
 ## living enemy, reduced by each one's Defense
@@ -756,25 +772,39 @@ func _tick_buffs(u: Dictionary, counts: String, event: Dictionary, record: bool,
 		if record:
 			event.lines.append(Terms.t("log_undying_end", {"name": u.name}))
 
-func _heal(u: Dictionary, amount: int, event: Dictionary, record: bool) -> void:
+## `source` is whoever does the healing, for the results screen; empty = the unit heals itself
+func _heal(u: Dictionary, amount: int, event: Dictionary, record: bool, source: Dictionary = {}) -> void:
 	if u.hp <= 0 or _has_flag(u, "undying"):
 		return  # a unit on its last stand stays at 1 HP
 	amount = mini(amount, u.max_hp - u.hp)
 	if amount <= 0:
 		return
 	u.hp += amount
+	(u if source.is_empty() else source).healed += amount
 	event.heals.append({"target": u.index, "amount": amount})
 	if record:
 		event.lines.append(Terms.t("log_heal", {"target": u.name, "amount": amount}))
 
+## Results-screen stats: HP actually removed (overkill doesn't count). The target always counts it as taken; the
+## source counts it as dealt only when it's an enemy (self-inflicted drains aren't "damage dealt").
+func _count_damage(source: Dictionary, target: Dictionary, amount: int) -> void:
+	if amount <= 0:
+		return
+	target.taken += amount
+	if source.side != target.side:
+		source.dealt += amount
+
 ## Every point of damage goes through here, so passives that react to being hit work for attacks and assists alike
 func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	var before: int = target.hp
 	if _has_flag(target, "undying"):
 		target.hp = maxi(target.hp - dealt, 1)
+		_count_damage(attacker, target, before - target.hp)
 		_gain_energy(target, ENERGY_PER_HIT_TAKEN)
 		_check_counter(target, attacker, event, record, rng)
 		return
 	target.hp = maxi(target.hp - dealt, 0)
+	_count_damage(attacker, target, before - target.hp)
 	_gain_energy(target, ENERGY_PER_HIT_TAKEN)
 	_check_counter(target, attacker, event, record, rng)
 	if target.hp > 0:
@@ -871,7 +901,9 @@ func _cancer_drain(u: Dictionary, event: Dictionary, record: bool) -> void:
 	if p.is_empty() or u.hp <= 0:
 		return
 	var amount := maxi(roundi(u.max_hp * float(p.drain_pct)), 1)
+	var before: int = u.hp
 	u.hp = maxi(u.hp - amount, 1 if _has_flag(u, "undying") else 0)
+	_count_damage(u, u, before - u.hp)  # self-inflicted: counts as taken, not dealt
 	event.drains.append({"target": u.index, "amount": amount})
 	if record:
 		event.lines.append(Terms.t("log_cancer", {"name": u.name, "skill": u.passive.name, "amount": amount}))

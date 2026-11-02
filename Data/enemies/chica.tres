@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"chica_passive"
+display_name = "Let's Eat!"
+description = "After each attack, her cupcake heals the most hurt ally for 50% of her Attack."
+effect_id = &"winnie"
+params = {"heal_mult": 0.5}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"chica_active"
+display_name = "Pizza Party"
+kind = 1
+description = "Stops attacking for 2 turns to serve pizza: each turn heals the 2 most hurt allies for 70% of her Attack."
+effect_id = &"lets_go_winnie"
+params = {"heal_mult": 0.7, "targets": 2, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"chica"
+display_name = "Chica"
+title = "Animatronic"
+char_class = 5
+rarity = 2
+hp = 100
+attack = 30
+defense = 20
+evasion = 15
+accuracy = 70
+speed = 50
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/chica.png"
+description = "Wears a bib that says LET'S EAT. Spends the night in the kitchen, rattling the pots."

@@ -2,7 +2,6 @@ extends Control
 ## Screen flow: starter pick -> Home (tabs: Home / Team / Recruit / Commissions / Roster / Event) -> Battle -> Map selection -> Battle screen.
 ## All text comes from Terms (Scripts/autoload/terms.gd).
 
-const ROWS := ["vanguard", "rearguard"]
 
 var _is_web := OS.has_feature("web")
 var _screen: Control
@@ -21,7 +20,7 @@ var _tabs: TabContainer
 var _home_hint: Label
 var _mirror_room: MirrorRoom
 # Team
-var _team_rows: Dictionary = {}  # "vanguard" / "rearguard" -> HBoxContainer
+var _team_tab: TeamTab
 # Roster
 var _collection_grid: HFlowContainer
 
@@ -485,11 +484,16 @@ func _test_mode_enabled() -> bool:
 func _open_test_mode() -> void:
 	var dialog := AcceptDialog.new()
 	dialog.title = Terms.t("test_mode_title")
+	# The dialog grows to fit its content and never shrinks back, so the friend list gets a fixed height that
+	# fits the screen and scrolls; the window itself is capped too, keeping OK reachable
+	var screen := get_viewport_rect().size
+	dialog.max_size = Vector2i(screen * 0.95)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(560, 380)
+	box.custom_minimum_size = Vector2(560, 0)
 	box.add_theme_constant_override("separation", 8)
 	dialog.add_child(box)
 	var hint := _wrapped_label(Terms.t("test_mode_hint"))
+	hint.custom_minimum_size.x = 560  # a wrapped label measured at zero width would be very tall
 	hint.add_theme_color_override("font_color", UITheme.TEXT_DIM)
 	box.add_child(hint)
 	var currency_row := HBoxContainer.new()
@@ -497,10 +501,13 @@ func _open_test_mode() -> void:
 	box.add_child(currency_row)
 	currency_row.add_child(_button(Terms.t("test_money"), GameState.add_money.bind(10000)))
 	currency_row.add_child(_button(Terms.t("test_cards"), GameState.add_credit_cards.bind(10)))
+	currency_row.add_child(_button(Terms.t("test_animatronics"), func(): Combat.force_animatronics = true))
 
 	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size.y = clampf(screen.y - 300.0, 150.0, 420.0)  # room left for title, hint, buttons, OK
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS  # so it's obvious the list scrolls
 	box.add_child(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -643,44 +650,17 @@ func _battle_background(stage: StageData) -> Texture2D:
 
 # ───────── Team tab ─────────
 
+## Built by Scripts/ui/team_tab.gd; the picker and details window stay here
 func _build_team_tab() -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.name = Terms.term("tab_team")
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var tab := VBoxContainer.new()
-	tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab.add_theme_constant_override("separation", 10)
-	scroll.add_child(tab)
-
-	tab.add_child(_title(Terms.t("team_title"), 22))
-	tab.add_child(_wrapped_label(Terms.t("team_hint")))
-	for row in ROWS:
-		tab.add_child(_title("%s — %s" % [Terms.term(row), Terms.row_classes(row == "vanguard")], 18))
-		var box := HBoxContainer.new()
-		box.add_theme_constant_override("separation", 12)
-		tab.add_child(box)
-		_team_rows[row] = box
-	return scroll
+	_team_tab = TeamTab.new()
+	_team_tab.name = Terms.term("tab_team")
+	_team_tab.change_requested.connect(_open_picker)
+	_team_tab.details_requested.connect(_open_details)
+	return _team_tab
 
 func _refresh_team() -> void:
-	for row in ROWS:
-		_clear(_team_rows[row])
-	for slot in GameState.TEAM_SLOTS:
-		var vanguard := GameState.is_vanguard_slot(slot)
-		var box: HBoxContainer = _team_rows[ROWS[0] if vanguard else ROWS[1]]
-		var uid := GameState.team_uid(slot)
-		var c := GameState.get_character(uid)
-		if c == null:
-			var empty := _button(Terms.t("slot_empty", {"classes": Terms.row_classes(vanguard)}), _open_picker.bind(slot))
-			empty.custom_minimum_size = Vector2(150, 220)
-			box.add_child(empty)
-			continue
-		var card := CharCard.new()
-		card.set_character(c, _card_text(uid))
-		card.add_action(Terms.t("slot_change"), _open_picker.bind(slot))
-		card.add_action(Terms.t("details_button"), _open_details.bind(uid))
-		card.add_action(Terms.t("slot_remove"), GameState.clear_team_slot.bind(slot, 0))
-		box.add_child(card)
+	if is_instance_valid(_team_tab):
+		_team_tab.refresh()
 
 ## A grid of every owned friend's card: click one to select it (double-click assigns right away). Friends whose
 ## class can't use this row are listed last, dimmed and can't be picked.

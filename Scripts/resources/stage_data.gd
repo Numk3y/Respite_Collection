@@ -66,11 +66,17 @@ func get_enemy_team() -> Dictionary:
 		out.append(_wave_team(enemy_vanguard, enemy_rearguard, false))
 	for w in waves:
 		if w:
-			out.append(_wave_team(w.enemy_vanguard, w.enemy_rearguard, w.is_boss))
+			out.append(wave_team(w))
 	return {"waves": out}
 
+## One wave's team at this map's enemy level; also used for waves that aren't part of the map (the animatronics)
+func wave_team(w: WaveData) -> Dictionary:
+	var team := _wave_team(w.enemy_vanguard, w.enemy_rearguard, w.is_boss)
+	team.banner = w.banner
+	return team
+
 func _wave_team(vanguard: Array[CharacterData], rearguard: Array[CharacterData], boss: bool) -> Dictionary:
-	var team := {"vanguard": [], "rearguard": [], "boss": boss}
+	var team := {"vanguard": [], "rearguard": [], "boss": boss, "banner": ""}
 	for c in vanguard.slice(0, 3):
 		if c:
 			team.vanguard.append(c.battle_unit(_scaled_stats(c)))

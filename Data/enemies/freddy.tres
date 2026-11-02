@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"freddy_passive"
+display_name = "Still Running"
+description = "Once per battle, a lethal hit leaves him at 1 HP. He keeps going for 2 more turns before shutting down."
+effect_id = &"undying"
+params = {"turns": 2}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"freddy_active"
+display_name = "Toreador March"
+kind = 1
+description = "Taunts every enemy and gains +50% Defense for 2 turns. When the song ends, a shockwave of 15% of his max HP hits every enemy."
+effect_id = &"ccp"
+params = {"defense": 0.5, "turns": 2, "explode_pct": 0.15}
+
+[resource]
+script = ExtResource("1")
+id = &"freddy"
+display_name = "Freddy"
+title = "Animatronic"
+char_class = 0
+rarity = 2
+hp = 200
+attack = 34
+defense = 45
+evasion = 5
+accuracy = 65
+speed = 35
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/freddy.png"
+description = "The band's frontman. Wanders off the stage after closing and hums to himself in the dark."

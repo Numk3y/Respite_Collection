@@ -30,7 +30,8 @@ const ASCENSION_STATS := ["hp", "attack", "defense", "speed"]
 const ASCENSION_OVERFLOW_MONEY := 100  # a copy pulled after max Ascension turns into this much Money
 const CREDIT_CARDS_PER_PULL := 1  # every pull costs this many Credit Cards on top of the Money cost
 const FIRST_CLEAR_CREDIT_CARDS := 2  # for winning on a map for the first time
-const CREDIT_CARD_DROP_CHANCE := 0.01  # 1% chance per win to find 1 Credit Card
+const ANIMATRONIC_WAVE_CHANCE := 0.015  # 1.5% chance per sortie that the animatronics replace wave 2
+const ANIMATRONIC_CREDIT_CARDS := 1  # for clearing the animatronic wave
 
 var data: Dictionary = {}
 var _save_queued := false
@@ -421,15 +422,7 @@ func get_unit_stats(uid: int, with_equipment: bool = true) -> Dictionary:
 	if c == null:
 		return {}
 	var o := get_owned(uid)
-	var stats := c.base_stats()
-	var levels := int(o.level) - 1
-	var ascension_mult := 1.0 + ASCENSION_BONUS * int(o.get("ascension", 0))
-	for stat in stats:
-		if stats[stat] < 0:
-			continue  # a negative stat (e.g. Steve's Defense) stays as it is; growth would only make it worse
-		var level_mult := 1.0 + (GROWTH_PER_LEVEL + float(c.growth_bonus.get(stat, 0.0))) * levels
-		var mult := level_mult * (ascension_mult if stat in ASCENSION_STATS else 1.0)
-		stats[stat] = roundi(stats[stat] * mult)
+	var stats := c.stats_at(int(o.level), int(o.get("ascension", 0)))
 	if with_equipment:
 		for slot_key in o.equips:
 			var e := get_equipment(int(o.equips[slot_key]))

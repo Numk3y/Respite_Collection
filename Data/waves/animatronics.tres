@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="WaveData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/enemies/freddy.tres" id="3"]
+[ext_resource type="Resource" path="res://Data/enemies/bonnie.tres" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/foxy.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/chica.tres" id="6"]
+
+[resource]
+script = ExtResource("1")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("4"), ExtResource("3"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6")])
+banner = "battle_wave_animatronics"

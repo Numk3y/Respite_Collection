@@ -7,3 +7,5 @@ extends Resource
 @export var enemy_vanguard: Array[CharacterData] = []
 @export var enemy_rearguard: Array[CharacterData] = []
 @export var is_boss := false  # shows the boss banner when this wave starts
+## A Terms key for a special banner shown instead of the usual one when this wave starts (e.g. the animatronics)
+@export var banner: String = ""

@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"foxy_passive"
+display_name = "Hook"
+description = "Each hit that lands makes the target bleed for 15% of his Attack for 3 turns. +5% Attack for every bleeding enemy."
+effect_id = &"bow_wow"
+params = {"bleed_pct": 0.15}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"foxy_active"
+display_name = "Out of Order"
+kind = 1
+description = "Sprints out of the cove: +40% Attack and -50% Defense for 2 turns. Each knockout heals him for 20% of his max HP."
+effect_id = &"self_decaying"
+params = {"attack": 0.4, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"foxy"
+display_name = "Foxy"
+title = "Animatronic"
+char_class = 4
+rarity = 2
+hp = 110
+attack = 42
+defense = 12
+evasion = 35
+accuracy = 70
+speed = 85
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/foxy.png"
+description = "The pirate behind the curtain. The sign says Out of Order. He disagrees."
