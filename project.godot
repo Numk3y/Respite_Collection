@@ -37,6 +37,14 @@ window/stretch/aspect="expand"
 
 enabled=PackedStringArray("res://addons/friend_admin/plugin.cfg")
 
+[importer_defaults]
+
+texture={
+"compress/lossy_quality": 0.8,
+"compress/mode": 1,
+"process/size_limit": 1600
+}
+
 [physics]
 
 3d/physics_engine="Jolt Physics"
