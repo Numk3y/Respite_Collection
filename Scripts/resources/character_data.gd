@@ -55,6 +55,8 @@ const CUTIN_DIR := "res://Art/cutins/"
 ## Picture for the Ultimate cut-in. Leave empty to auto-load Art/cutins/<id>.png (any extension/case);
 ## with no cut-in image the portrait is used.
 @export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var cutin_path: String
+## Picture shown on the battle card while transformed by a skill (e.g. Roki's horse form). Empty = no change.
+@export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var alt_form_path: String
 @export_group("")
 @export_multiline var description: String
 @export var is_starter: bool = false  # vanguard classes only
@@ -136,6 +138,13 @@ func get_cutin() -> Texture2D:
 	if path.is_empty():
 		path = find_art(CUTIN_DIR, String(id))
 	return load(path) as Texture2D if not path.is_empty() else get_portrait()
+
+## The transformed picture (alt_form_path), or null if there isn't one
+func get_alt_form() -> Texture2D:
+	if alt_form_path.is_empty():
+		return null
+	var path := find_art(alt_form_path.get_base_dir() + "/", alt_form_path.get_file())
+	return load(path) as Texture2D if not path.is_empty() else null
 
 const ART_EXTENSIONS := ["png", "webp", "jpg", "jpeg"]
 static var _art_index := {}  # folder -> {lowercase file name or name without extension: real path}

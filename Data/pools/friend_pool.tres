@@ -19,6 +19,7 @@
 [ext_resource type="Resource" path="res://Data/characters/perby.tres" id="21"]
 [ext_resource type="Resource" path="res://Data/characters/muni.tres" id="22"]
 [ext_resource type="Resource" path="res://Data/characters/strea.tres" id="23"]
+[ext_resource type="Resource" path="res://Data/characters/roki.tres" id="24"]
 
 [sub_resource type="Resource" id="entry_gobby"]
 script = ExtResource("2")
@@ -90,6 +91,10 @@ character = ExtResource("22")
 script = ExtResource("2")
 character = ExtResource("23")
 
+[sub_resource type="Resource" id="entry_roki"]
+script = ExtResource("2")
+character = ExtResource("24")
+
 [resource]
 script = ExtResource("1")
 id = &"friend_pool"
@@ -99,4 +104,4 @@ cost = 150
 weight_r = 82
 weight_sr = 14
 weight_ssr = 4
-entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_yo"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea")])
+entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_yo"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki")])

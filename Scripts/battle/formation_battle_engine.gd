@@ -89,6 +89,10 @@ const ULTIMATE_EFFECTS := {
 	# One enemy, picked like a normal single-target attack (vanguard first, taunt respected), for `damage_mult` x
 	# Attack
 	&"balloon_boy": {"damage_mult": 2.5},
+	# Turns into a horse for N own actions: each costs `drain_pct` of max HP (never below 1 HP) and adds
+	# `speed_per_turn` Speed, stacking. While it lasts, back-row Marksman allies get +`ally_speed` Speed and the
+	# caster's Ultimate gauge stays empty.
+	&"umamusume": {"turns": 5, "drain_pct": 0.05, "speed_per_turn": 0.1, "ally_speed": 0.3},
 }
 
 ## Passive effects a passive SkillData.effect_id can use, with their default params
@@ -149,6 +153,9 @@ const PASSIVE_EFFECTS := {
 	# Each hit that lands has `chance` to steal `steal_pct` of the target's Attack: the target loses it for its next
 	# N actions and this unit gains that much Attack for its own next N actions
 	&"db_grub": {"chance": 0.5, "steal_pct": 0.3, "turns": 1},
+	# Enemies' single-target attacks have `lure_chance` to switch onto this unit (a taunt still comes first; area
+	# attacks aren't affected). Each attack that hits it has `block_chance` to deal `block_pct` less damage.
+	&"rat_time": {"lure_chance": 0.4, "block_chance": 0.6, "block_pct": 0.3},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -289,7 +296,7 @@ func _snapshot(units: Array[Dictionary]) -> Array:
 		"energy_max": u.energy_max, "has_ultimate": not u.ultimate.is_empty(), "data": u.data})
 
 func _state(units: Array[Dictionary]) -> Array:
-	return units.map(func(u): return {"hp": u.hp, "energy": u.energy, "buffs": _buff_names(u)})
+	return units.map(func(u): return {"hp": u.hp, "energy": u.energy, "buffs": _buff_names(u), "horse": _has_flag(u, "horse")})
 
 ## Buff names for display; stacks of the same buff (e.g. Cancer) show once as "Cancer x3"
 func _buff_names(u: Dictionary) -> PackedStringArray:
@@ -322,12 +329,46 @@ func _targetable(units: Array[Dictionary], side: int, back_row: bool = false) ->
 ## A stat with buffs applied, e.g. Defense +50% -> base * 1.5. Buffs move a negative stat up and debuffs push
 ## it further down (Defense -15 with +50% -> -7.5), so they always mean the same thing.
 func _stat(u: Dictionary, stat: String) -> float:
-	var mult := 1.0 + _scramble_bonus(u, stat) + _drunk_bonus(u, stat) + _bow_wow_bonus(u, stat) + _group_bonus(u, stat)
+	var mult := 1.0 + _scramble_bonus(u, stat) + _drunk_bonus(u, stat) + _bow_wow_bonus(u, stat) + _group_bonus(u, stat) \
+		+ _horse_bonus(u, stat)
 	for b in u.buffs:
 		mult += b.get("mods", {}).get(stat, 0.0)
 	var base: float = u.base[stat]
 	var floor_value := 1.0 if stat == "speed" else (float(MIN_DEFENSE) if stat == "defense" else 0.0)
 	return maxf(base + absf(base) * (mult - 1.0), floor_value)
+
+## Ultimate Umamusume: the horse gets faster with every turn it gallops; back-row Marksmen on its side run
+## alongside it (one horse's boost; several horses don't stack)
+func _horse_bonus(u: Dictionary, stat: String) -> float:
+	if stat != "speed":
+		return 0.0
+	var bonus := 0.0
+	var own := _flag_buff(u, "horse")
+	if not own.is_empty():
+		bonus += int(own.stacks) * float(own.speed_per_turn)
+	if u.cls == CharacterData.CharClass.SHOOTER and not u.vanguard:
+		var cheer := 0.0
+		for a in _units:
+			if a.side == u.side and a.index != u.index and _alive(a):
+				cheer = maxf(cheer, float(_flag_buff(a, "horse").get("ally_speed", 0.0)))
+		bonus += cheer
+	return bonus
+
+## Ultimate Umamusume: each own action as a horse costs HP (never the last 1) and adds a Speed stack
+func _horse_tick(u: Dictionary, event: Dictionary, record: bool) -> void:
+	var horse := _flag_buff(u, "horse")
+	if horse.is_empty() or horse.fresh or u.hp <= 0:
+		return
+	horse.stacks = int(horse.stacks) + 1
+	var before: int = u.hp
+	u.hp = maxi(u.hp - maxi(roundi(u.max_hp * float(horse.drain_pct)), 1), 1)
+	var lost: int = before - u.hp
+	_count_damage(u, u, lost)  # self-inflicted: counts as taken, not dealt
+	if lost > 0:
+		event.drains.append({"target": u.index, "amount": lost})
+	if record:
+		event.lines.append(Terms.t("log_horse_tick", {"name": u.name, "amount": lost,
+			"speed": roundi(int(horse.stacks) * float(horse.speed_per_turn) * 100.0)}))
 
 ## Passive Liquid Courage: each Drunk stack shifts Attack, Defense and Accuracy
 func _drunk_bonus(u: Dictionary, stat: String) -> float:
@@ -516,6 +557,7 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		_add_cancer_stack(actor)
 	_bleed_tick(actor, event, record)
 	_chill_regen(actor, event, record)
+	_horse_tick(actor, event, record)
 	_tick_buffs(actor, "actions", event, record, rng)
 	_cancer_drain(actor, event, record)
 	_check_swig(actor, event, record)
@@ -533,6 +575,8 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	return event
 
 func _gain_energy(u: Dictionary, amount: int) -> void:
+	if _has_flag(u, "horse"):
+		return  # Ultimate Umamusume: the gauge stays empty while the horse runs
 	if not u.ultimate.is_empty() and u.hp > 0:
 		u.energy = mini(u.energy + amount, u.energy_max)
 
@@ -642,6 +686,13 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 				event.hits.append(hit)
 				if hit.hit and rng.randf() < float(p.sleep_chance):
 					_put_to_sleep(actor, target, int(p.sleep_turns), false, event, record)
+		&"umamusume":
+			_add_buff(actor, {"id": &"umamusume", "name": skill_name, "horse": true, "remaining": int(p.turns),
+				"counts": "actions", "stacks": 0, "drain_pct": float(p.drain_pct),
+				"speed_per_turn": float(p.speed_per_turn), "ally_speed": float(p.ally_speed)})
+			event.get_or_add("horse", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_horse", {"name": actor.name}))
 
 ## Puts `target` to sleep for its next `turns` actions (no attack, no energy). With Drowsiness on `source`, the
 ## sleeper takes extra damage and is immune for a while after waking; respect_cooldown skips immune targets.
@@ -942,7 +993,18 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 			# Single-target attacks must go to a taunting enemy if there is one
 			var taunting := foes.filter(func(u): return _has_flag(u, "taunt"))
 			var pool := taunting if not taunting.is_empty() else foes
-			targets = [pool[rng.randi_range(0, pool.size() - 1)]]
+			var target: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
+			# Passive Rat Time: the smell of cheese can pull the attack onto the rat (a taunt still comes first)
+			if taunting.is_empty():
+				for rat in foes:
+					var lure := _passive_params(rat, &"rat_time")
+					if rat.index != target.index and not lure.is_empty() and rng.randf() < float(lure.lure_chance):
+						target = rat
+						event.get_or_add("lured", []).append(rat.index)
+						if record:
+							event.lines.append(Terms.t("log_rat_lure", {"attacker": actor.name, "name": rat.name, "skill": rat.passive.name}))
+						break
+			targets = [target]
 	# Passive Unfazed: a chance the swing carries through the rest of the target's row at reduced damage
 	var cleaved: Array = []
 	var unfazed := _passive_params(actor, &"unfazed")
@@ -995,6 +1057,13 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	if target.cls == CharacterData.CharClass.TANK and raw >= target.max_hp * GUARD_HEAVY_PCT:
 		hit.guard = true
 	var dealt := _mitigate(raw, target)
+	# Passive Rat Time: a chance to take part of the hit off
+	var rat := _passive_params(target, &"rat_time")
+	if not rat.is_empty() and rng.randf() < float(rat.block_chance):
+		dealt = maxi(roundi(dealt * (1.0 - float(rat.block_pct))), 1)
+		event.get_or_add("rat_blocked", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_rat_block", {"name": target.name, "skill": target.passive.name}))
 	hit.hit = true
 	hit.damage = dealt
 	if record:

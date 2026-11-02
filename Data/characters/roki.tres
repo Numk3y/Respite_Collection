@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"roki_passive"
+display_name = "Rat Time"
+description = "Roki smells like cheese: enemies' single-target attacks have a 40% chance to go for Roki instead. Every attack that hits Roki has a 60% chance to deal 30% less damage."
+effect_id = &"rat_time"
+params = {"lure_chance": 0.4, "block_chance": 0.6, "block_pct": 0.3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"roki_active"
+display_name = "Umamusume"
+kind = 1
+description = "Roki turns into a horse for 5 turns. Each turn as a horse costs 5% of max HP (never the last 1 HP) and adds +10% Speed, stacking. While Roki is a horse, back-row Marksmen get +30% Speed, and Roki's Ultimate gauge stays empty."
+effect_id = &"umamusume"
+params = {"turns": 5, "drain_pct": 0.05, "speed_per_turn": 0.1, "ally_speed": 0.3}
+
+[resource]
+script = ExtResource("1")
+id = &"roki"
+display_name = "Roki"
+char_class = 0
+rarity = 3
+hp = 260
+attack = 50
+defense = 85
+evasion = 10
+accuracy = 72
+speed = 45
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 150
+alt_form_path = "res://Art/characters/Roki2.png"
+description = "Smells faintly of cheese. Nobody knows how the horse thing works, Roki included."
+is_starter = false

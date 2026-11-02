@@ -202,7 +202,8 @@ func _unit_view(u: Dictionary) -> Dictionary:
 	name_label.add_theme_font_size_override("font_size", _fit_font_size(u.name, info.custom_minimum_size.x))
 	info.add_child(name_label)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
-		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "buffs": null}
+		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "buffs": null,
+		"art": art, "data": u.data, "horse": false}
 	# Everyone has HP now; the rearguard is only hit once its vanguard is down
 	view.hp_bar = HpBar.new(u.max_hp)
 	info.add_child(view.hp_bar)
@@ -362,24 +363,29 @@ func _animate(event: Dictionary) -> void:
 		_float_text(actor, Terms.t("battle_sleep"), Color("#93c5fd"), 30)
 		await _flash(actor.body, Color(0.6, 0.8, 1.6), 2)
 	var attacking: bool = not event.hits.is_empty()
-	# Front-row fighters lunge in and slash; the back row recoils and fires glowing bolts at every target
+	# Front-row fighters lunge in and slash; the back row recoils and fires glowing bolts at every target;
+	# a transformed horse (Roki's Umamusume) pukes on them instead
 	var melee: bool = actor.vanguard
+	var puking: bool = actor.horse
 	if attacking:
 		var forward := create_tween().set_parallel()
 		var lunge := BUMP_DISTANCE * direction * (1.0 if melee else -0.35)
 		forward.tween_property(actor.body, "position:x", lunge, _dur(1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		forward.tween_property(actor.body, "modulate", Color(1.5, 1.5, 1.5), _dur(1))
 		await forward.finished
-		if not melee:
-			# All bolts fly together; wait for them to land
+		if puking or not melee:
+			# All shots fly together; wait for them to land
 			var flight := 0.0
 			for hit in event.hits:
-				flight = _fx.bolt(_center(actor), _center(_views[hit.target]), fx_color)
+				var to := _center(_views[hit.target])
+				flight = _fx.puke(_center(actor), to) if puking else _fx.bolt(_center(actor), to, fx_color)
+			if puking:
+				_float_text(actor, Terms.t("battle_puke"), Color("#a3e635"), 60)
 			var land := create_tween()
 			land.tween_interval(flight)
 			await land.finished
 	for hit in event.hits:
-		if melee and hit.hit:
+		if melee and hit.hit and not puking:
 			_fx.slash(_center(_views[hit.target]), fx_color, direction)
 		_react(_views[hit.target], hit, fx_color)
 	for target in event.get("off_balance", []):
@@ -411,6 +417,12 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[ally], Terms.t("battle_cringe"), Color("#d9f99d"), 60)
 	for target in event.get("bled", []):
 		_float_text(_views[target], Terms.t("battle_bleed"), Color("#dc2626"), 60)
+	for rat in event.get("lured", []):
+		_float_text(_views[rat], Terms.t("battle_lured"), Color("#fde047"), 60)
+	for rat in event.get("rat_blocked", []):
+		_float_text(_views[rat], Terms.t("battle_rat_block"), Color("#93c5fd"), 34)
+	for horse in event.get("horse", []):
+		_float_text(_views[horse], Terms.t("battle_horse"), Color("#f0abfc"), 60, 30)
 	if attacking:
 		var back := create_tween().set_parallel()
 		back.tween_property(actor.body, "position:x", 0.0, _dur(1.2)).set_trans(Tween.TRANS_QUAD)
@@ -518,10 +530,27 @@ func _apply_state(event: Dictionary) -> void:
 			elif s.hp > 0:
 				view.slot.modulate.a = 1.0
 			view.hp = s.hp
+		var horse: bool = s.get("horse", false)
+		if horse != view.horse:
+			view.horse = horse
+			_transform(view, horse)
 		if view.energy_bar:
 			view.energy_bar.value = s.energy
 			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
 		view.buffs.text = ", ".join(s.buffs)
+
+## A transformation starts or ends (e.g. Roki's horse form): the card flashes and bursts and its picture swaps to
+## the character's alt form, or back
+func _transform(view: Dictionary, on: bool) -> void:
+	var data: CharacterData = view.data
+	if data == null:
+		return
+	var alt := data.get_alt_form() if on else null
+	if on and alt == null:
+		return  # no transformed picture: keep the normal one
+	view.art.set_character(data, alt)
+	_fx.aura(_center(view))
+	_flash(view.body, Color(2.0, 1.6, 2.0) if on else Color(1.6, 1.6, 1.6), 2)
 
 func _knockout(view: Dictionary) -> void:
 	_fx.knockout(_center(view), BattleFX.ALLY_FX if view.side == 0 else BattleFX.ENEMY_FX)

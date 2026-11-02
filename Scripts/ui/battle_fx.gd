@@ -132,6 +132,44 @@ func bolt(from: Vector2, to: Vector2, color: Color, size_px: float = 9.0) -> flo
 	t.tween_callback(b.queue_free)
 	return flight
 
+const PUKE_COLORS := [Color("#a3e635"), Color("#84cc16"), Color("#d9f99d"), Color("#eab308")]
+
+## An arcing spray of green-yellow blobs from one card to another that splats on arrival (Roki's horse form,
+## just for fun). Doesn't wait; returns how many seconds until it lands.
+func puke(from: Vector2, to: Vector2) -> float:
+	var flight := _d(0.32)
+	var p := CPUParticles2D.new()
+	p.position = from
+	p.one_shot = true
+	p.explosiveness = 0.25
+	p.amount = 48
+	p.lifetime = 0.5
+	p.speed_scale = speed
+	var offset := to - from
+	p.direction = (offset + Vector2(0, -offset.length() * 0.18)).normalized()  # aim a little high: it arcs down
+	p.spread = 9.0
+	p.initial_velocity_min = offset.length() * 2.1
+	p.initial_velocity_max = offset.length() * 2.6
+	p.gravity = Vector2(0, 520)
+	p.scale_amount_min = 3.0
+	p.scale_amount_max = 7.0
+	var offsets := PackedFloat32Array()
+	for i in PUKE_COLORS.size():
+		offsets.append(float(i) / PUKE_COLORS.size())
+	var ramp := Gradient.new()
+	ramp.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	ramp.offsets = offsets
+	ramp.colors = PackedColorArray(PUKE_COLORS)
+	p.color_initial_ramp = ramp
+	p.color_ramp = _fade_ramp()
+	add_child(p)
+	p.emitting = true
+	p.finished.connect(p.queue_free)
+	var splat := create_tween()
+	splat.tween_interval(flight)
+	splat.tween_callback(_burst.bind(to, 26, 0.8, PUKE_COLORS, true))
+	return flight
+
 ## Green sparkles and little plus signs rising from a healed card
 func heal(pos: Vector2) -> void:
 	var p := CPUParticles2D.new()
