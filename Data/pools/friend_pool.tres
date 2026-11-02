@@ -5,7 +5,6 @@
 [ext_resource type="Resource" path="res://Data/characters/gobby.tres" id="5"]
 [ext_resource type="Resource" path="res://Data/characters/justbyluck.tres" id="6"]
 [ext_resource type="Resource" path="res://Data/characters/spijette.tres" id="7"]
-[ext_resource type="Resource" path="res://Data/characters/yo.tres" id="8"]
 [ext_resource type="Resource" path="res://Data/characters/retinazer.tres" id="11"]
 [ext_resource type="Resource" path="res://Data/characters/baldvegeta.tres" id="12"]
 [ext_resource type="Resource" path="res://Data/characters/baldguy.tres" id="13"]
@@ -32,10 +31,6 @@ character = ExtResource("6")
 [sub_resource type="Resource" id="entry_spijette"]
 script = ExtResource("2")
 character = ExtResource("7")
-
-[sub_resource type="Resource" id="entry_yo"]
-script = ExtResource("2")
-character = ExtResource("8")
 
 [sub_resource type="Resource" id="entry_retinazer"]
 script = ExtResource("2")
@@ -104,4 +99,4 @@ cost = 150
 weight_r = 82
 weight_sr = 14
 weight_ssr = 4
-entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_yo"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki")])
+entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki")])

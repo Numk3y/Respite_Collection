@@ -1,5 +1,5 @@
 extends Control
-## Screen flow: starter pick -> Home (tabs: Home / Team / Recruit / Commissions / Roster / Event) -> Battle -> Map selection -> Battle screen.
+## Screen flow: starter pick -> Home (tabs: Home / Team / Recruit / Commissions / Casino / Friends / Event) -> Battle -> Map selection -> Battle screen.
 ## All text comes from Terms (Scripts/autoload/terms.gd).
 
 
@@ -21,8 +21,8 @@ var _home_hint: Label
 var _mirror_room: MirrorRoom
 # Team
 var _team_tab: TeamTab
-# Roster
-var _collection_grid: HFlowContainer
+# Friends tab (the friend list)
+var _collection_tab: CollectionTab
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -254,7 +254,7 @@ func _queue_roster_refresh() -> void:
 
 func _refresh_roster() -> void:
 	_roster_dirty = false
-	if not is_instance_valid(_collection_grid):
+	if not is_instance_valid(_collection_tab):
 		return
 	_refresh_collection()
 	_refresh_team()
@@ -880,24 +880,14 @@ func _build_gacha_tab() -> Control:
 	tab.name = Terms.term("tab_gacha")
 	return tab
 
-# ───────── Roster tab ─────────
+# ───────── Friends tab ─────────
 
+## Built by Scripts/ui/collection_tab.gd; the details window stays here
 func _build_collection_tab() -> Control:
-	var tab := VBoxContainer.new()
-	tab.name = Terms.term("tab_collection")
-	var parts := _scroll_flow()
-	tab.add_child(parts[0])
-	_collection_grid = parts[1]
-	return tab
+	_collection_tab = CollectionTab.new()
+	_collection_tab.name = Terms.term("tab_collection")
+	_collection_tab.details_requested.connect(_open_details)
+	return _collection_tab
 
 func _refresh_collection() -> void:
-	_clear(_collection_grid)
-	for o in GameState.data.owned:
-		var uid := int(o.uid)
-		var c := GameState.get_character(uid)
-		if c == null:
-			continue  # the character resource was deleted; skip this save entry
-		var card := CharCard.new()
-		card.set_character(c, _card_text(uid))
-		card.add_action(Terms.t("details_button"), _open_details.bind(uid))
-		_collection_grid.add_child(card)
+	_collection_tab.refresh()
