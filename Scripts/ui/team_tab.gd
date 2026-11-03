@@ -194,8 +194,10 @@ func _member_card(slot: int, uid: int, stats: Dictionary, best: Dictionary) -> C
 	box.add_child(art_holder)
 	var art := CharArt.new()
 	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	art.set_character(c)
+	art.set_character(c, c.get_portrait_at(GameState.get_ascension(uid)))
 	art_holder.add_child(art)
+	if GameState.get_ascension(uid) >= GameState.MAX_ASCENSION:
+		art_holder.add_child(AwakenGlow.new())
 	var badge := ClassBadge.new(c.char_class)
 	badge.position = Vector2(-4, -4)
 	art_holder.add_child(badge)

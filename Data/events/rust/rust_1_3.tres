@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_wolf.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/db_grub.tres" id="8"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("5"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6")])
+
+[resource]
+script = ExtResource("1")
+id = &"rust_1_3"
+display_name = "Wolf Pack"
+description = "A group in wolf headdresses has been roaming the road all night, clubbing every grub they meet."
+chapter = 1
+number = 3
+recommended_level = 7
+enemy_level = 3
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 140
+exp_reward = 40
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(2, 3), "coffee": Vector2i(0, 2)})

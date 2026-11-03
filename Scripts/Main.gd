@@ -1,5 +1,6 @@
 extends Control
 ## Screen flow: starter pick -> Home (tabs: Home / Team / Recruit / Commissions / Casino / Friends / Event) -> Battle -> Map selection -> Battle screen.
+## Event tab -> event missions (Map selection in event mode) or the World Boss fight -> Battle screen.
 ## All text comes from Terms (Scripts/autoload/terms.gd).
 
 
@@ -10,6 +11,7 @@ var _roster_dirty := false
 var _backup_message: Label
 var _restore_target: TextEdit
 var _file_picked_callback = null  # JavaScriptObject; must stay referenced or the browser drops it
+var _boss_starting := false  # waiting for the server to hand out a World Boss attempt
 
 # Header
 var _money_chip: CurrencyChip
@@ -148,13 +150,6 @@ func _card_text(uid: int) -> String:
 		text += "\n" + "  ".join(pairs.slice(i, i + 2))
 	return text
 
-func _mods_text(e: EquipmentData) -> String:
-	var parts: PackedStringArray = []
-	var mods := e.modifiers()
-	for stat in mods:
-		parts.append("%s %+d" % [Terms.stat_short(stat), mods[stat]])
-	return "(%s)" % ", ".join(parts) if not parts.is_empty() else ""
-
 # ───────── Starter selection ─────────
 
 func _show_starter_select() -> void:
@@ -224,10 +219,6 @@ func _show_main(tab: int = 0) -> void:
 	tabs.add_child(casino)
 	tabs.add_child(_build_collection_tab())
 	tabs.add_child(_build_event_tab())
-	# Events aren't designed yet: the tab is visible but can't be opened
-	var event_index := tabs.get_tab_count() - 1
-	tabs.set_tab_title(event_index, Terms.t("tab_locked", {"name": Terms.term("tab_event")}))
-	tabs.set_tab_disabled(event_index, true)
 	tabs.current_tab = tab
 
 	_refresh_status()
@@ -236,6 +227,7 @@ func _show_main(tab: int = 0) -> void:
 	var reports := Commissions.resolve_finished()
 	if not reports.is_empty():
 		CommissionTab.show_reports(self, reports)
+	_collect_event_rewards()
 
 func _refresh_status() -> void:
 	if not is_instance_valid(_money_chip):
@@ -355,7 +347,7 @@ func _refresh_featured() -> void:
 		return
 	var o := GameState.get_owned(uid)
 	_mirror_room.set_featured(c, c.display_name, "%s · %s · %s%d" % [Terms.rarity_name(c.rarity),
-		Terms.class_label(c.char_class), Terms.term("level"), int(o.level)])
+		Terms.class_label(c.char_class), Terms.term("level"), int(o.level)], GameState.get_ascension(uid))
 
 # ───────── Save backups ─────────
 
@@ -538,93 +530,16 @@ func _update_test_status(status: Label, c: CharacterData) -> void:
 	var o := GameState.find_owned(c.id)
 	status.text = "" if o.is_empty() else Terms.t("test_owned", {"rank": int(o.get("ascension", 0))})
 
-# ───────── Map selection ─────────
-# Test maps first, then each story chapter: X-1 to X-4, then the X-5 boss. Chapters open one after another;
-# the first locked chapter is shown with what opens it, later ones stay hidden.
+# ───────── Map selection (built by Scripts/ui/map_select.gd) ─────────
 
 func _show_map_select() -> void:
 	var root := _new_screen()
-	var header := HBoxContainer.new()
-	root.add_child(header)
-	var title := _title(Terms.t("map_title"))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	header.add_child(_button(Terms.t("back"), _show_main))
+	var screen := MapSelect.new()
+	root.add_child(screen)
+	screen.back_pressed.connect(_show_main)
+	screen.battle_pressed.connect(_show_battle)
+	screen.open(GameState.has_team())
 
-	var can_battle := GameState.has_team()
-	if not can_battle:
-		root.add_child(_wrapped_label(Terms.t("map_need_team")))
-
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	root.add_child(scroll)
-	var list := VBoxContainer.new()
-	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 10)
-	scroll.add_child(list)
-
-	var test_maps := DB.stages.filter(func(s): return not s.is_story())
-	if not test_maps.is_empty():
-		list.add_child(_title(Terms.t("map_section_test"), 22))
-		for stage in test_maps:
-			list.add_child(_map_panel(stage, can_battle))
-
-	for chapter in DB.chapters():
-		list.add_child(_title(Terms.chapter_title(chapter), 22))
-		if not GameState.is_chapter_unlocked(chapter):
-			list.add_child(_wrapped_label(Terms.t("map_chapter_locked", {
-				"previous": chapter - 1, "code": "%d-%d" % [chapter - 1, StageData.BOSS_NUMBER]})))
-			break
-		for number in range(1, StageData.BOSS_NUMBER + 1):
-			var stage := DB.get_map(chapter, number)
-			if stage:
-				list.add_child(_map_panel(stage, can_battle))
-			else:
-				var soon := _wrapped_label(Terms.t("map_coming_soon", {"code": "%d-%d" % [chapter, number]}))
-				soon.modulate.a = 0.45
-				list.add_child(soon)
-
-## Map entry: code and name, a short description, recommended level, cleared/locked status and the Battle button
-func _map_panel(stage: StageData, can_battle: bool) -> Control:
-	var unlocked := GameState.is_stage_unlocked(stage)
-	var panel := PanelContainer.new()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
-	panel.add_child(row)
-	var info := VBoxContainer.new()
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(info)
-
-	var heading := stage.display_name
-	if stage.is_story():
-		heading = Terms.t("map_heading", {"code": stage.code(), "name": stage.display_name})
-	if stage.is_boss():
-		heading += "  " + Terms.t("map_boss_tag")
-	var title := _title(heading, 20)
-	if stage.is_boss():
-		title.add_theme_color_override("font_color", Color("#f87171"))
-	info.add_child(title)
-	if not stage.description.is_empty():
-		info.add_child(_wrapped_label(stage.description))
-	info.add_child(_wrapped_label(Terms.t("map_recommended", {"lv": stage.recommended_level})))
-	if not unlocked:
-		var locked := _wrapped_label(Terms.t("map_locked", {"previous": "%d-%d" % [stage.chapter, stage.number - 1]}))
-		locked.add_theme_color_override("font_color", Color("#fca5a5"))
-		info.add_child(locked)
-	elif GameState.is_stage_cleared(stage.id):
-		var cleared := _wrapped_label(Terms.t("map_cleared"))
-		cleared.add_theme_color_override("font_color", Color("#86efac"))
-		info.add_child(cleared)
-	if not unlocked:
-		panel.modulate.a = 0.6
-
-	var go := _button(Terms.t("map_go"), _show_battle.bind(stage), 20)
-	go.custom_minimum_size = Vector2(140, 56)
-	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	go.disabled = not can_battle or not unlocked
-	row.add_child(go)
-	return panel
 
 # ───────── Battle (built by Scripts/ui/battle_view.gd) ─────────
 
@@ -637,8 +552,21 @@ func _show_battle(stage: StageData) -> void:
 	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(view)
 	view.again_pressed.connect(_show_battle.bind(stage))
-	view.home_pressed.connect(_show_main)
+	var event := DB.event_of(stage)
+	view.home_pressed.connect(_show_event_tab if event else _show_main)
+	# Event missions: offer to go straight on to the next one (it unlocks by winning this one)
+	var next := _next_event_mission(event, stage)
+	if next:
+		view.next_text = Terms.t("battle_next_mission", {"code": next.code(), "name": next.display_name})
+		view.next_pressed.connect(_show_battle.bind(next))
 	view.start(stage, battle)
+
+## The mission after `stage` in its event, or null (not an event mission, or the last one)
+func _next_event_mission(event: EventData, stage: StageData) -> StageData:
+	if event == null:
+		return null
+	var i := event.missions.find(stage)
+	return event.missions[i + 1] if i >= 0 and i + 1 < event.missions.size() else null
 
 ## The map's own Background if set, else its chapter's picture (Art/backgrounds/PoppyStreet.png for
 ## "Poppy Street"), else the shared Art/backgrounds/battle.*; null if none exist
@@ -742,136 +670,91 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 		box.add_child(label)
 	return tile
 
-# ───────── Character details: class, skills, gear, stats ─────────
+# ───────── Character details (Scripts/ui/character_detail.gd) ─────────
 
 func _open_details(uid: int) -> void:
-	var c := GameState.get_character(uid)
-	if c == null:
-		return
-	var dialog := AcceptDialog.new()
-	dialog.title = Terms.t("details_title", {"name": c.display_name})
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(500, 0)
-	dialog.add_child(box)
+	if GameState.get_character(uid):
+		add_child(CharacterDetail.new(uid))
 
-	box.add_child(_title(Terms.t("details_class", {
-		"class": Terms.class_label(c.char_class), "row": Terms.class_row(c.char_class)}), 18))
-	box.add_child(_wrapped_label(_skill_text(c.passive_skill, "passive_skill")))
-	box.add_child(_wrapped_label(_skill_text(c.active_skill, "active_skill")))
-	box.add_child(_wrapped_label(Terms.t("details_ultimate_gauge", {"amount": c.ultimate_max})))
-	box.add_child(_wrapped_label(Terms.t("details_friendship", {"amount": GameState.get_friendship(uid)})))
-	var stat_names: PackedStringArray = []
-	for stat in GameState.ASCENSION_STATS:
-		stat_names.append(Terms.stat_short(stat))
-	var rank := GameState.get_ascension(uid)
-	box.add_child(_wrapped_label(Terms.t("details_ascension", {
-		"rank": rank, "max": GameState.MAX_ASCENSION, "bonus": roundi(rank * GameState.ASCENSION_BONUS * 100),
-		"stats": "/".join(stat_names)})))
-	box.add_child(HSeparator.new())
-
-	# Level, EXP bar and Money level-up buttons
-	var stats_label := Label.new()
-	var level_ui := {"label": Label.new(), "bar": ProgressBar.new(), "buttons": {}, "stats": stats_label}
-	box.add_child(level_ui.label)
-	level_ui.bar.show_percentage = false
-	level_ui.bar.custom_minimum_size = Vector2(0, 12)
-	box.add_child(level_ui.bar)
-	var buy_row := HBoxContainer.new()
-	buy_row.add_theme_constant_override("separation", 8)
-	box.add_child(buy_row)
-	for levels in [1, 5, 10]:
-		var button := _button("", _on_buy_levels.bind(uid, levels, level_ui))
-		buy_row.add_child(button)
-		level_ui.buttons[levels] = button
-	box.add_child(HSeparator.new())
-
-	var grid := GridContainer.new()
-	grid.columns = 2
-	box.add_child(grid)
-	for slot_key in EquipmentData.SLOT_KEYS:
-		var label := Label.new()
-		label.text = Terms.slot_name(slot_key)
-		grid.add_child(label)
-		var option := OptionButton.new()
-		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_fill_equipment_options(option, uid, slot_key)
-		option.item_selected.connect(func(index): _on_equipment_selected(option, uid, slot_key, index, stats_label))
-		grid.add_child(option)
-	box.add_child(HSeparator.new())
-	box.add_child(stats_label)
-	_refresh_level_ui(uid, level_ui)
-	_popup(dialog)
-
-func _on_buy_levels(uid: int, levels: int, level_ui: Dictionary) -> void:
-	GameState.buy_levels(uid, levels)
-	_refresh_level_ui(uid, level_ui)
-
-func _refresh_level_ui(uid: int, level_ui: Dictionary) -> void:
-	var o := GameState.get_owned(uid)
-	var level := int(o.level)
-	var at_max := level >= GameState.MAX_LEVEL
-	if at_max:
-		level_ui.label.text = Terms.t("details_level_max", {"lv": level})
-		level_ui.bar.max_value = 1
-		level_ui.bar.value = 1
-	else:
-		var next := GameState.exp_to_next(level)
-		level_ui.label.text = Terms.t("details_level", {"lv": level, "current": int(o.exp), "next": next})
-		level_ui.bar.max_value = next
-		level_ui.bar.value = int(o.exp)
-	for levels in level_ui.buttons:
-		var button: Button = level_ui.buttons[levels]
-		var cost := GameState.level_up_cost(uid, levels)
-		button.text = Terms.t("level_up_max") if at_max else Terms.t("level_up_button", {"count": levels, "cost": cost})
-		button.disabled = at_max or GameState.get_money() < cost
-		button.visible = not at_max or levels == 1
-	_update_stats_label(level_ui.stats, uid)
-
-func _skill_text(skill: SkillData, kind_key: String) -> String:
-	if skill == null or skill.display_name.is_empty():
-		return Terms.t("skill_missing", {"kind": Terms.term(kind_key)})
-	return Terms.t("skill_line", {"kind": Terms.term(kind_key), "name": skill.display_name, "description": skill.description})
-
-func _fill_equipment_options(option: OptionButton, uid: int, slot_key: String) -> void:
-	option.clear()
-	option.add_item(Terms.t("equip_none"))
-	option.set_item_metadata(0, 0)
-	var current := int(GameState.get_owned(uid).equips[slot_key])
-	for entry in GameState.list_equipment(slot_key):
-		var text := "%s %s" % [entry.data.display_name, _mods_text(entry.data)]
-		var wearer := GameState.equipped_by(entry.uid)
-		if wearer != 0 and wearer != uid:
-			text = Terms.t("equip_worn_by", {"item": text, "owner": GameState.get_character(wearer).display_name})
-		option.add_item(text)
-		option.set_item_metadata(option.item_count - 1, entry.uid)
-		if entry.uid == current:
-			option.selected = option.item_count - 1
-	if current == 0:
-		option.selected = 0
-
-func _on_equipment_selected(option: OptionButton, uid: int, slot_key: String, index: int, stats_label: Label) -> void:
-	GameState.equip(uid, slot_key, option.get_item_metadata(index))
-	_update_stats_label(stats_label, uid)
-
-func _update_stats_label(label: Label, uid: int) -> void:
-	var base := GameState.get_unit_stats(uid, false)
-	var final := GameState.get_unit_stats(uid)
-	var lines: PackedStringArray = []
-	for stat in CharacterData.STATS:
-		var diff: int = final[stat] - base[stat]
-		if diff == 0:
-			lines.append(Terms.t("stat_line", {"stat": Terms.stat_name(stat), "value": final[stat]}))
-		else:
-			lines.append(Terms.t("stat_line_mod", {"stat": Terms.stat_name(stat), "value": final[stat], "mod": "%+d" % diff}))
-	label.text = "\n".join(lines)
-
-# ───────── Event tab (locked placeholder) ─────────
+# ───────── Event tab and the World Boss (built by Scripts/ui/event_tab.gd; server: WorldBoss) ─────────
 
 func _build_event_tab() -> Control:
-	var tab := VBoxContainer.new()
+	var tab := EventTab.new()
 	tab.name = Terms.term("tab_event")
-	tab.add_child(_wrapped_label(Terms.t("event_locked")))
+	tab.missions_pressed.connect(_show_event_missions)
+	tab.challenge_pressed.connect(_start_world_boss)
+	tab.event_over.connect(_collect_event_rewards)
 	return tab
+
+func _show_event_tab() -> void:
+	_show_main()
+	_go_to_tab(Terms.term("tab_event"))
+
+func _show_event_missions(event: EventData) -> void:
+	var root := _new_screen()
+	var screen := MapSelect.new()
+	root.add_child(screen)
+	screen.back_pressed.connect(_show_event_tab)
+	screen.battle_pressed.connect(_show_battle)
+	screen.open_event(event, GameState.has_team())
+
+## Asks the server for an attempt (and its seed), plays the fight, then reports the damage. If the report can't
+## get through, WorldBoss keeps it in the save and sends it later.
+func _start_world_boss(event: EventData) -> void:
+	if _boss_starting:
+		return
+	_boss_starting = true
+	var attempt := await WorldBoss.start_attempt()
+	_boss_starting = false
+	if not attempt.ok:
+		_show_event_tab()
+		_show_message(Terms.t("boss_start_failed" if attempt.status == 0 else "boss_start_refused"))
+		return
+	var battle := Combat.world_boss_fight(event, int(attempt.data.seed))
+	Music.play_chapter(event.boss_stage.chapter)
+	var root := _new_screen()
+	_set_screen_background(_battle_background(event.boss_stage))
+	var view := BattleView.new()
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(view)
+	view.again_pressed.connect(_start_world_boss.bind(event))
+	view.home_pressed.connect(_show_event_tab)
+	view.start(event.boss_stage, battle)
+	view.set_note(Terms.t("boss_sending"))
+	var answer := await WorldBoss.report_fight(str(attempt.data.attempt_id), int(battle.report.damage))
+	if not is_instance_valid(view):
+		return
+	if answer.is_empty():
+		view.set_note(Terms.t("boss_send_later"))
+	elif answer.defeated:
+		view.set_note(Terms.t("boss_sent_kill"))
+	else:
+		view.set_note(Terms.t("boss_sent", {"hp": Terms.number(int(answer.hp))}))
+
+## Pays out finished events this player hit (WorldBoss grants them) and lists what came in
+func _collect_event_rewards() -> void:
+	var results := await WorldBoss.collect_rewards()
+	if results.is_empty():
+		return
+	var lines := PackedStringArray()
+	for r in results:
+		lines.append(Terms.t("event_rewards_header", {"event": r.event.display_name, "damage": Terms.number(r.damage),
+			"rank": r.rank, "players": r.players}))
+		for reward: EventReward in r.rewards:
+			lines.append(Terms.t("event_rewards_line", {"rewards": ", ".join(reward.lines())}))
+	var dialog := AcceptDialog.new()
+	dialog.title = Terms.t("event_rewards_title")
+	dialog.dialog_text = "\n".join(lines)
+	dialog.dialog_autowrap = true
+	dialog.min_size = Vector2i(480, 0)
+	_popup(dialog)
+
+func _show_message(text: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.dialog_text = text
+	dialog.dialog_autowrap = true
+	dialog.min_size = Vector2i(420, 0)
+	_popup(dialog)
 
 # ───────── Recruit tab (built by Scripts/ui/gacha_tab.gd) ─────────
 

@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/drunk_person.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/bottle_thrower.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/bouncer.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/karaoke_rival.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/tipsy_bartender.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/drunk_uncle.tres" id="10"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("8")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("9")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("6")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"sample_event_1_4"
+display_name = "The Uncle Stall"
+description = "At the end of the first row, the Drunk Uncle has set up a stall that only sells more drinks."
+chapter = 1
+number = 4
+recommended_level = 5
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 120
+exp_reward = 35
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(1, 3), "coffee": Vector2i(0, 1)})

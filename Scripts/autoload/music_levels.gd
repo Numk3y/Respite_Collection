@@ -3,5 +3,6 @@
 const GAIN_DB := {
 	"drinkingnight": -10.2,
 	"homepage": -1.5,
+	"mcdonald's": 3.3,
 	"poppystreet": 14.9,
 }

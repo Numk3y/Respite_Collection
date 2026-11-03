@@ -59,30 +59,31 @@ func wave_count() -> int:
 	return maxi(waves.size(), 1)
 
 ## {"waves": [team, ...]} for BattleEngine, where each team has the same shape as GameState.get_battle_team()
-## plus "boss": bool
-func get_enemy_team() -> Dictionary:
+## plus "boss": bool. With `match_level` > 0 the enemies take their stats at that level the way friends do
+## (CharacterData.stats_at) instead of the map's enemy level, e.g. a World Boss that keeps pace with the team.
+func get_enemy_team(match_level: int = 0) -> Dictionary:
 	var out := []
 	if waves.is_empty():
-		out.append(_wave_team(enemy_vanguard, enemy_rearguard, false))
+		out.append(_wave_team(enemy_vanguard, enemy_rearguard, false, match_level))
 	for w in waves:
 		if w:
-			out.append(wave_team(w))
+			out.append(wave_team(w, match_level))
 	return {"waves": out}
 
 ## One wave's team at this map's enemy level; also used for waves that aren't part of the map (the animatronics)
-func wave_team(w: WaveData) -> Dictionary:
-	var team := _wave_team(w.enemy_vanguard, w.enemy_rearguard, w.is_boss)
+func wave_team(w: WaveData, match_level: int = 0) -> Dictionary:
+	var team := _wave_team(w.enemy_vanguard, w.enemy_rearguard, w.is_boss, match_level)
 	team.banner = w.banner
 	return team
 
-func _wave_team(vanguard: Array[CharacterData], rearguard: Array[CharacterData], boss: bool) -> Dictionary:
+func _wave_team(vanguard: Array[CharacterData], rearguard: Array[CharacterData], boss: bool, match_level: int) -> Dictionary:
 	var team := {"vanguard": [], "rearguard": [], "boss": boss, "banner": ""}
 	for c in vanguard.slice(0, 3):
 		if c:
-			team.vanguard.append(c.battle_unit(_scaled_stats(c)))
+			team.vanguard.append(c.battle_unit(c.stats_at(match_level) if match_level > 0 else _scaled_stats(c)))
 	for c in rearguard.slice(0, 3):
 		if c:
-			team.rearguard.append(c.battle_unit(_scaled_stats(c)))
+			team.rearguard.append(c.battle_unit(c.stats_at(match_level) if match_level > 0 else _scaled_stats(c)))
 	# Tell identical enemies apart in battle: "Drunk Person A", "Drunk Person B", ...
 	var units: Array = team.vanguard + team.rearguard
 	var counts := {}

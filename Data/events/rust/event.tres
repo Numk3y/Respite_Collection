@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="EventData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/event_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/event_reward.gd" id="3"]
+[ext_resource type="Resource" path="res://Data/events/rust/rust_1_1.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/events/rust/rust_1_2.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/events/rust/rust_1_3.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/events/rust/rust_1_4.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/events/rust/rust_1_5.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/events/rust/world_boss_fight.tres" id="30"]
+
+[sub_resource type="Resource" id="reward_all"]
+script = ExtResource("3")
+money = 1000
+credit_cards = 3
+materials = Dictionary[String, int]({"gossip": 3})
+
+[sub_resource type="Resource" id="reward_1st"]
+script = ExtResource("3")
+money = 3000
+credit_cards = 10
+
+[sub_resource type="Resource" id="reward_2nd"]
+script = ExtResource("3")
+money = 2000
+credit_cards = 6
+
+[sub_resource type="Resource" id="reward_3rd"]
+script = ExtResource("3")
+money = 1000
+credit_cards = 4
+
+[resource]
+script = ExtResource("1")
+id = &"rust"
+display_name = "RUST"
+description = "Wake up naked on the beach, fight your way past grubs, scientists and wolf-geared players, take down the DB Grub, then team up with every player on the server against Full Metal AK."
+missions = Array[ExtResource("2")]([ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])
+boss_stage = ExtResource("30")
+boss_hp = 1000000
+hours = 72.0
+attempts_per_day = 5
+actions_per_fight = 120
+boss_matches_team_level = true
+max_damage_per_fight = 100000
+reward_all = SubResource("reward_all")
+reward_top = Array[ExtResource("3")]([SubResource("reward_1st"), SubResource("reward_2nd"), SubResource("reward_3rd")])

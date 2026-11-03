@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"rust_grub"
+display_name = "Grub"
+char_class = 1
+rarity = 1
+hp = 70
+attack = 30
+defense = 12
+evasion = 30
+accuracy = 60
+speed = 70
+portrait_path = "res://Art/enemies/rust_grub.png"
+description = "Fresh spawn with a rock and a torch. Fast, annoying and completely fearless."

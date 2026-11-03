@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"quest3_kid"
+display_name = "Quest 3 Kid"
+char_class = 0
+rarity = 1
+hp = 140
+attack = 28
+defense = 35
+evasion = 10
+accuracy = 60
+speed = 45
+portrait_path = "res://Art/enemies/quest3_kid.png"
+description = "Got the newer headset for his birthday and won't let anyone forget it. Harder to push around."

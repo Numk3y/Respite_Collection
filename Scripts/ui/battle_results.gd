@@ -3,12 +3,14 @@ extends Control
 ## End-of-battle screen over the whole window: a big VICTORY / DEFEAT title (gold rays and confetti on a win),
 ## the rewards, three award cards (Most Damage, Tanked the Most, Most Healing), a breakdown of every friend's
 ## damage dealt, damage taken and healing with bars that fill and numbers that count up, and every friend's
-## remaining HP along the bottom. Battle Again / Return Home are the way out.
+## remaining HP along the bottom. Battle Again / Return Home are the way out, plus Next Mission after a win when
+## `next_text` is set (event missions with another one after them).
 ## Stats come from the engine (result.stats, one entry per unit in result.units order); only HP actually
 ## removed or restored counts, so overkill and overheal don't inflate them.
 
 signal again_pressed
 signal home_pressed
+signal next_pressed
 
 const GOLD := Color("#ffd75e")
 const DEFEAT_RED := Color("#ff6b6b")
@@ -18,6 +20,14 @@ const STAT_ORDER := ["dealt", "taken", "healed"]
 var _dim: ColorRect
 var _rays: Rays
 var _content: VBoxContainer
+var _note: Label
+var next_text := ""  # e.g. "Next: 1-2 Monument Run"; empty = no Next Mission button
+
+## An extra line under the rewards (the world boss server's answer)
+func set_note(text: String) -> void:
+	if _note:
+		_note.text = text
+		_note.visible = not text.is_empty()
 
 func _init() -> void:
 	top_level = true  # covers the whole window, not just the arena it's added to
@@ -36,7 +46,8 @@ func _init() -> void:
 func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> void:
 	global_position = Vector2.ZERO
 	size = get_viewport_rect().size
-	var win: bool = battle.win
+	var boss: bool = battle.report.get("world_boss", false)
+	var win: bool = battle.win or boss  # a world boss fight always ends in a show of the damage done
 	_rays.color = GOLD if win else DEFEAT_RED
 	_rays.visible = win
 
@@ -52,20 +63,28 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	_content.add_theme_constant_override("separation", 10)
 	margin.add_child(_content)
 
-	var title := _label(Terms.t("results_victory" if win else "results_defeat"), 64, GOLD if win else DEFEAT_RED)
+	var title_key := "results_world_boss" if boss else ("results_victory" if win else "results_defeat")
+	var title := _label(Terms.t(title_key), 64, GOLD if win else DEFEAT_RED)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_constant_override("outline_size", 18)
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	title.add_theme_constant_override("shadow_offset_y", 5)
 	_content.add_child(title)
-	var sub := _label("%s  ·  %s" % [stage_name, Terms.t("results_waves", {"cleared": battle.waves_cleared, "total": battle.wave_count})], 16, UITheme.TEXT_DIM)
+	var sub_text := stage_name if boss else "%s  ·  %s" % [stage_name,
+		Terms.t("results_waves", {"cleared": battle.waves_cleared, "total": battle.wave_count})]
+	var sub := _label(sub_text, 16, UITheme.TEXT_DIM)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_content.add_child(sub)
 	if not lines.is_empty():
-		var rewards := _label(" · ".join(lines), 14, UITheme.TEXT)
+		var rewards := _label(" · ".join(lines), 22 if boss else 14, GOLD if boss else UITheme.TEXT)
 		rewards.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		rewards.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(rewards)
+	_note = _label("", 15, UITheme.CYAN)
+	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_note.visible = false
+	_content.add_child(_note)
 
 	# The friends and their numbers
 	var friends: Array[Dictionary] = []
@@ -101,9 +120,14 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
 	buttons.add_theme_constant_override("separation", 14)
 	_content.add_child(buttons)
-	for pair in [["battle_again", again_pressed, true], ["battle_home", home_pressed, false]]:
+	# After a win with another mission waiting, moving on is the highlighted choice
+	var show_next := win and not boss and not next_text.is_empty()
+	var choices := [[Terms.t("battle_again"), again_pressed, not show_next], [Terms.t("battle_home"), home_pressed, false]]
+	if show_next:
+		choices.append([next_text, next_pressed, true])
+	for pair in choices:
 		var button := Button.new()
-		button.text = Terms.t(pair[0])
+		button.text = pair[0]
 		button.custom_minimum_size = Vector2(170, 44)
 		if pair[2]:
 			button.theme_type_variation = &"PrimaryButton"

@@ -31,6 +31,7 @@ const STAR_COUNTS := {CharacterData.Rarity.R: 3, CharacterData.Rarity.SR: 4, Cha
 
 var button_row: HBoxContainer  # GachaTab's pull buttons go here
 var pity_label: Label  # GachaTab fills it in
+var pity_bar: PityBar  # GachaTab sets its progress
 
 var _pool: GachaPool
 var _featured: Array[CharacterData] = []
@@ -75,6 +76,8 @@ func _init() -> void:
 		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var mat := ShaderMaterial.new()
 		mat.shader = ART_SHADER
+		mat.set_shader_parameter("living", 1.0)  # Live2D-style idle (Shaders/living.gdshaderinc)
+		mat.set_shader_parameter("living_seed", float(i) * 0.5)  # the two featured friends move out of step
 		rect.material = mat
 		var initial := Label.new()
 		initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -176,6 +179,9 @@ func _build_column() -> void:
 	rate_lines.add_child(_rates_label)
 	pity_label = GachaBanner._label("", 14, Color("#fda4af"))
 	rate_lines.add_child(pity_label)
+	pity_bar = PityBar.new()
+	rate_lines.add_child(pity_bar)
+	rate_lines.add_child(GachaBanner._label(Terms.t("gacha_guarantee", {"count": Gacha.GUARANTEE_PULLS}), 13, UITheme.TEXT_DIM))
 	_column.add_child(_rate_box)
 
 	# One name plate per featured friend shown, all styled the same (positioned in _layout)
@@ -217,6 +223,20 @@ func _soft_dot() -> Texture2D:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_layout()
+
+## The featured friends lean a little towards the mouse, easing there rather than snapping
+func _process(delta: float) -> void:
+	if not is_visible_in_tree():
+		return
+	for art in _arts:
+		var rect: TextureRect = art.rect
+		if not rect.visible:
+			continue
+		var to_mouse := (get_local_mouse_position() - (rect.position + rect.size / 2.0)) / (rect.size * 0.5)
+		var mat := rect.material as ShaderMaterial
+		var stored = mat.get_shader_parameter("living_look")  # null until it's been set once
+		var look: Vector2 = stored if stored is Vector2 else Vector2.ZERO
+		mat.set_shader_parameter("living_look", look.lerp(to_mouse.clamp(Vector2(-1, -1), Vector2(1, 1)), minf(delta * 3.0, 1.0)))
 
 ## Shows a pool: its featured friends (up to two on the art side; the first is the lead) and its texts,
 ## with a short entrance animation
@@ -503,6 +523,45 @@ class BackRow extends Control:
 			var center := x + w * 0.5
 			var fade := smoothstep(start_x, start_x + w, center) * (1.0 - smoothstep(size.x - w * 0.2, size.x + w * 0.5, center))
 			rect.modulate = Color(TINT, 0.85 * fade)
+
+## Progress towards the guaranteed SSR: a pink-to-gold fill with a shine; it pulses once the guarantee is close
+class PityBar extends Control:
+	var _share := 0.0
+	var _t := 0.0
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(240, 10)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_progress(current: int, total: int) -> void:
+		visible = total > 0
+		var target := clampf(float(current) / maxf(total, 1.0), 0.0, 1.0)
+		create_tween().tween_method(func(v: float):
+			_share = v
+			queue_redraw(), _share, target, 0.5).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _share > 0.8:
+			queue_redraw()
+
+	func _draw() -> void:
+		var r := Rect2(Vector2.ZERO, size)
+		draw_rect(r, Color(0, 0, 0, 0.5))
+		var w := size.x * _share
+		if w > 0.0:
+			var steps := 6
+			for i in steps:  # pink fading into gold along the bar
+				var x0 := w * i / steps
+				var x1 := w * (i + 1) / steps
+				var c0 := Color("#ff6fa8").lerp(UITheme.GOLD, float(i) / steps)
+				var c1 := Color("#ff6fa8").lerp(UITheme.GOLD, float(i + 1) / steps)
+				draw_polygon(PackedVector2Array([Vector2(x0, 0), Vector2(x1, 0), Vector2(x1, size.y), Vector2(x0, size.y)]),
+					PackedColorArray([c0, c1, c1, c0]))
+			draw_rect(Rect2(0, 0, w, size.y * 0.4), Color(1, 1, 1, 0.25))
+			if _share > 0.8:  # nearly there: the tip glows
+				UITheme.draw_glow(self, Vector2(w, size.y / 2.0), 14.0, Color(UITheme.GOLD, 0.5 + 0.4 * sin(_t * 6.0)))
+		draw_rect(r, Color(1, 1, 1, 0.2), false, 1.0)
 
 ## A featured friend's name plate: rarity and gold stars, the name, then "UP!" and their title/class. Every
 ## plate uses the same sizes; right-aligned for the friend on the right edge.

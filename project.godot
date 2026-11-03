@@ -26,6 +26,7 @@ GameState="*res://Scripts/autoload/game_state.gd"
 Gacha="*res://Scripts/autoload/gacha.gd"
 Combat="*res://Scripts/autoload/combat.gd"
 Commissions="*res://Scripts/autoload/commissions.gd"
+WorldBoss="*res://Scripts/autoload/world_boss.gd"
 Music="*res://Scripts/autoload/music.gd"
 
 [display]

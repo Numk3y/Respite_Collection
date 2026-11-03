@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"poor_mic_kid"
+display_name = "Poor Mic Kid"
+char_class = 3
+rarity = 1
+hp = 55
+attack = 48
+defense = 8
+evasion = 15
+accuracy = 55
+speed = 50
+portrait_path = "res://Art/enemies/poor_mic_kid.png"
+description = "His mic sounds like a blender full of gravel, and he aims all of it at one person."

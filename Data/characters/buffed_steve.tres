@@ -14,18 +14,20 @@ params = {"attack": 0.4, "attack_per_pct": 0.015, "cooldown": 10, "defense": -0.
 [sub_resource type="Resource" id="active"]
 script = ExtResource("2")
 id = &"buffed_steve_active"
-display_name = "None"
+display_name = "I Need Asswipe"
 kind = 1
-description = "Steve has no Ultimate."
+description = "Bro really needs to find an asswipe for his incoming diarrhea. Poisons 3 enemies: each loses 200% of Steve's Attack every turn for 3 turns. Steve heals 50% of all the poison damage dealt."
+effect_id = &"i_need_asswipe"
+params = {"lifesteal": 0.5, "poison_mult": 2.0, "targets": 3, "turns": 3}
 
 [resource]
 script = ExtResource("1")
 id = &"buffed_steve"
 display_name = "Steve"
 char_class = 4
-rarity = 1
-hp = 150
-attack = 85
+rarity = 3
+hp = 190
+attack = 125
 defense = -15
 evasion = 0
 accuracy = 65
@@ -33,5 +35,6 @@ speed = 50
 portrait_path = "res://Art/characters/Steve.png"
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
+ultimate_max = 50
 description = "Straight out from Minecraft, but now he's strong asf, and he needs ass wipe. His physical strength is unmatched, but his bowel comfort has hit rock bottom."
 is_starter = false

@@ -31,11 +31,36 @@ func sortie(stage: StageData) -> Dictionary:
 	GameState.save_game()
 	return result
 
+## One recorded world boss fight. The seed comes from the server with the attempt, so the same team and seed
+## always play out the same way. The damage is HP removed from the boss fight's enemies; nothing else is granted.
+## Returns the engine result plus "report": {"world_boss": true, "damage": int}.
+func world_boss_fight(event: EventData, seed: int) -> Dictionary:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var levels := 0
+	var members := GameState.team_members()
+	for uid in members:
+		levels += int(GameState.get_owned(uid).level)
+	var team_level := roundi(float(levels) / members.size()) if not members.is_empty() else 1
+	var result := engine.simulate(GameState.get_battle_team(), event.boss_enemies(team_level), rng, true)
+	var damage := 0
+	for i in result.units.size():
+		if result.units[i].side == 1:
+			damage += int(result.stats[i].taken)
+	result.report = {"world_boss": true, "damage": damage}
+	return result
+
 func _grant_rewards(stage: StageData, won: bool) -> Dictionary:
 	var report := {
 		"won": won, "money": 0, "materials": {}, "drops": [], "stage": stage.display_name,
 		"exp": 0, "level_ups": [], "first_clear_cards": 0, "card_drops": 0,  # card_drops: from the animatronics
+		"bond_ups": [],  # [{name, bond}] friends whose Bond level rose
 	}
+	# Fighting together builds Bond, a little even in a loss
+	for uid in GameState.team_members():
+		var bond := GameState.add_friendship(uid, GameState.BOND_PER_WIN if won else GameState.BOND_PER_LOSS)
+		if bond > 0:
+			report.bond_ups.append({"name": GameState.get_character(uid).display_name, "bond": bond})
 	if not won:
 		return report
 

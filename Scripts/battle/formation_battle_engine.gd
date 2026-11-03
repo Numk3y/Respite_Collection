@@ -93,6 +93,18 @@ const ULTIMATE_EFFECTS := {
 	# `speed_per_turn` Speed, stacking. While it lasts, back-row Marksman allies get +`ally_speed` Speed and the
 	# caster's Ultimate gauge stays empty.
 	&"umamusume": {"turns": 5, "drain_pct": 0.05, "speed_per_turn": 0.1, "ally_speed": 0.3},
+	# Poisons up to `targets` living enemies (front row first; can't miss): each loses `poison_mult` x Attack (at cast
+	# time, ignoring Defense) at the end of each of its next N actions. The caster heals `lifesteal` of the poison damage.
+	&"i_need_asswipe": {"targets": 3, "poison_mult": 1.0, "turns": 3, "lifesteal": 0.1},
+	# For N own actions, enemy rearguard single-target attacks must hit the caster (a back-row-only taunt). Every time
+	# an enemy damages it, it strikes back at that enemy (can't miss) and heals `counter_heal` of the damage taken.
+	&"mid_fingered": {"turns": 2, "counter_heal": 0.3},
+	# Hits every living enemy for `damage_mult` x Attack each (not reduced like a Mage's spread) and Deafens the
+	# survivors: `accuracy`/`speed` for their next N actions
+	&"speaker_on": {"damage_mult": 0.8, "accuracy": -0.3, "speed": -0.2, "turns": 2},
+	# Fires `shots` times, each at a random attackable enemy (a taunt pulls every shot), for `damage_mult` x Attack.
+	# With `any_row` the shots spray both rows, back row included.
+	&"full_auto": {"shots": 5, "damage_mult": 0.6, "any_row": false},
 }
 
 ## Passive effects a passive SkillData.effect_id can use, with their default params
@@ -156,6 +168,15 @@ const PASSIVE_EFFECTS := {
 	# Enemies' single-target attacks have `lure_chance` to switch onto this unit (a taunt still comes first; area
 	# attacks aren't affected). Each attack that hits it has `block_chance` to deal `block_pct` less damage.
 	&"rat_time": {"lure_chance": 0.4, "block_chance": 0.6, "block_pct": 0.3},
+	# Starts every battle with +`hp` max HP (and full HP to match)
+	&"proud_father": {"hp": 0.5},
+	# When a hit leaves this unit alive below `threshold` of max HP: a random living rearguard ally gives up `take_pct`
+	# of its current HP and this unit heals `ratio` times that. Then it can't trigger again for `cooldown` own actions.
+	&"blender_master": {"threshold": 0.4, "take_pct": 0.2, "ratio": 2.0, "cooldown": 5},
+	# Takes `damage_reduction` less damage from every hit, and its attacks can hit any living enemy, back row
+	# included (a taunt still pulls them). Without a tank holding a taunt, the back row gets picked off.
+	# Enrage: Attack x(1 + `enrage`) for every action it has taken, compounding, so a long fight needs real sustain.
+	&"full_metal_kit": {"damage_reduction": 0.25, "enrage": 0.04},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -181,6 +202,7 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 	var win := false
 	var actions := 0
 	var wave_actions := 0
+	var max_actions: int = enemies.get("max_actions", MAX_ACTIONS)  # world boss fights are short on purpose
 	var wave := 0
 	var end_key := "log_timeout"
 	while true:
@@ -203,7 +225,8 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 				events.append(wave_event)
 				lines.append_array(wave_event.lines)
 			continue
-		if wave_actions >= MAX_ACTIONS:
+		if wave_actions >= max_actions:
+			end_key = enemies.get("timeout_key", end_key)
 			break  # stalemate: counts as a loss
 		actions += 1
 		wave_actions += 1
@@ -256,6 +279,7 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				continue
 			placed += 1
 			var s: Dictionary = u.stats
+			var max_hp := int(s.hp)
 			var ultimate: Dictionary = u.get("ultimate", {})
 			if not ultimate.is_empty() and not ULTIMATE_EFFECTS.has(ultimate.effect):
 				push_warning("%s: unknown Ultimate effect '%s'; it won't fire." % [u.name, ultimate.effect])
@@ -264,6 +288,9 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 			if not passive.is_empty() and not PASSIVE_EFFECTS.has(passive.effect):
 				push_warning("%s: unknown passive effect '%s'; it won't trigger." % [u.name, passive.effect])
 				passive = {}
+			# Passive Proud Father: 650 children's worth of extra HP
+			if not passive.is_empty() and passive.effect == &"proud_father":
+				max_hp = roundi(max_hp * (1.0 + float(PASSIVE_EFFECTS[&"proud_father"].merged(passive.params, true).hp)))
 			units.append({
 				"index": units.size(),
 				"name": u.name,
@@ -272,8 +299,8 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"active": wave <= 0,
 				"vanguard": vanguard,
 				"cls": cls,
-				"hp": int(s.hp),
-				"max_hp": int(s.hp),
+				"hp": max_hp,
+				"max_hp": max_hp,
 				"base": {"attack": float(s.attack), "defense": float(s.defense), "evasion": float(s.evasion),
 					"accuracy": float(s.accuracy), "speed": maxf(float(s.speed), 1.0)},
 				"timer": 0.0,
@@ -330,7 +357,7 @@ func _targetable(units: Array[Dictionary], side: int, back_row: bool = false) ->
 ## it further down (Defense -15 with +50% -> -7.5), so they always mean the same thing.
 func _stat(u: Dictionary, stat: String) -> float:
 	var mult := 1.0 + _scramble_bonus(u, stat) + _drunk_bonus(u, stat) + _bow_wow_bonus(u, stat) + _group_bonus(u, stat) \
-		+ _horse_bonus(u, stat)
+		+ _horse_bonus(u, stat) + _enrage_bonus(u, stat)
 	for b in u.buffs:
 		mult += b.get("mods", {}).get(stat, 0.0)
 	var base: float = u.base[stat]
@@ -449,22 +476,32 @@ func _bow_wow_bonus(u: Dictionary, stat: String) -> float:
 	var bleeding := _units.filter(func(t): return t.side != u.side and _alive(t) and _has_flag(t, "bleed"))
 	return bleeding.size() * float(_passive_params(u, &"bow_wow").attack_per_bleed)
 
-## Bleeds lose HP at the end of each of the bleeder's own actions (ignoring Defense; this can knock it out).
-## Morale Booster on whoever caused the bleed makes it hurt more.
+## Passive Full Metal Kit: Attack compounds with every action taken so far
+func _enrage_bonus(u: Dictionary, stat: String) -> float:
+	if stat != "attack" or u.passive.is_empty() or u.passive.effect != &"full_metal_kit":
+		return 0.0
+	return pow(1.0 + float(_passive_params(u, &"full_metal_kit").enrage), int(u.get("actions_taken", 0))) - 1.0
+
+## Bleeds and poisons lose HP at the end of each of the victim's own actions (ignoring Defense; this can knock it
+## out). Morale Booster on whoever caused a bleed makes it hurt more; a poison heals its source (I Need Asswipe).
 func _bleed_tick(u: Dictionary, event: Dictionary, record: bool) -> void:
 	for b in u.buffs:
-		if not b.get("bleed", false) or u.hp <= 0:
+		var poison: bool = b.get("poison", false)
+		if not (b.get("bleed", false) or poison) or u.hp <= 0:
 			continue
 		var source: Dictionary = _units[b.source]
-		var amount := maxi(roundi(b.amount * (1.0 + float(_flag_buff(source, "bleed_bonus").get("bleed_bonus", 0.0)))), 1)
+		var bonus := 0.0 if poison else float(_flag_buff(source, "bleed_bonus").get("bleed_bonus", 0.0))
+		var amount := maxi(roundi(b.amount * (1.0 + bonus)), 1)
 		var before: int = u.hp
 		u.hp = maxi(u.hp - amount, 1 if _has_flag(u, "undying") else 0)
 		_count_damage(source, u, before - u.hp)
-		event.drains.append({"target": u.index, "amount": amount, "bleed": true})
+		event.drains.append({"target": u.index, "amount": amount, "bleed": not poison, "poison": poison})
 		if record:
-			event.lines.append(Terms.t("log_bleed", {"name": u.name, "amount": amount}))
+			event.lines.append(Terms.t("log_poison" if poison else "log_bleed", {"name": u.name, "amount": amount}))
 			if u.hp <= 0:
 				event.lines.append(Terms.t("log_down", {"target": u.name}))
+		if poison:
+			_heal(source, roundi((before - u.hp) * float(b.lifesteal)), event, record)
 
 ## Passive Desperate Scramble: +Attack/+Speed for every 1% of max HP lost
 func _scramble_bonus(u: Dictionary, stat: String) -> float:
@@ -570,6 +607,7 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		b.fresh = false
 	if actor.passive_cooldown > 0:
 		actor.passive_cooldown -= 1
+	actor.actions_taken = int(actor.get("actions_taken", 0)) + 1  # e.g. Full Metal Kit's enrage
 	if record:
 		event.state = _state(units)
 	return event
@@ -693,6 +731,49 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			event.get_or_add("horse", []).append(actor.index)
 			if record:
 				event.lines.append(Terms.t("log_horse", {"name": actor.name}))
+		&"i_need_asswipe":
+			if record:
+				event.lines.append(Terms.t("log_asswipe", {"name": actor.name}))
+			var front := _units.filter(func(t): return t.side != actor.side and _alive(t) and t.vanguard)
+			var back := _units.filter(func(t): return t.side != actor.side and _alive(t) and not t.vanguard)
+			front.shuffle()
+			back.shuffle()
+			var amount := _stat(actor, "attack") * float(p.poison_mult)
+			for target in (front + back).slice(0, int(p.targets)):
+				_add_buff(target, {"id": StringName("poison_%d" % actor.index), "name": Terms.t("buff_poison"),
+					"poison": true, "source": actor.index, "amount": amount, "lifesteal": float(p.lifesteal),
+					"remaining": int(p.turns), "counts": "actions"})
+				event.get_or_add("poisoned", []).append(target.index)
+				if record:
+					event.lines.append(Terms.t("log_poisoned", {"target": target.name}))
+		&"mid_fingered":
+			_add_buff(actor, {"id": &"mid_fingered", "name": skill_name, "taunt_back_row": true,
+				"counter_heal": float(p.counter_heal), "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("mid_fingered", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_mid_fingered", {"name": actor.name}))
+		&"speaker_on":
+			if record:
+				event.lines.append(Terms.t("log_speaker_on", {"name": actor.name}))
+			var mult_speaker := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+			for target in _units.filter(func(t): return t.side != actor.side and _alive(t)):
+				event.hits.append(_attack(actor, target, rng, record, event, mult_speaker))
+				if target.hp > 0:
+					_add_buff(target, {"id": &"deafened", "name": Terms.t("buff_deafened"), "remaining": int(p.turns),
+						"counts": "actions", "mods": {"accuracy": float(p.accuracy), "speed": float(p.speed)}})
+					event.get_or_add("deafened", []).append(target.index)
+		&"full_auto":
+			if record:
+				event.lines.append(Terms.t("log_full_auto", {"name": actor.name}))
+			var mult_shot := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+			for i in int(p.shots):
+				var foes := _units.filter(func(t): return t.side != actor.side and _alive(t)) if p.any_row \
+					else _targetable(_units, 1 - actor.side)
+				if foes.is_empty():
+					break
+				var taunting := foes.filter(func(t): return _has_flag(t, "taunt"))
+				var pool := taunting if not taunting.is_empty() else foes
+				event.hits.append(_attack(actor, pool[rng.randi_range(0, pool.size() - 1)], rng, record, event, mult_shot))
 
 ## Puts `target` to sleep for its next `turns` actions (no attack, no energy). With Drowsiness on `source`, the
 ## sleeper takes extra damage and is immune for a while after waking; respect_cooldown skips immune targets.
@@ -712,14 +793,15 @@ func _put_to_sleep(source: Dictionary, target: Dictionary, turns: int, respect_c
 		event.lines.append(Terms.t(log_key, {"target": target.name, "attacker": source.name}))
 
 ## A buff that helps its owner (stat boosts, taunt, healing mode, damage boost), as opposed to a debuff,
-## sleep or bleed; Close Instance strips these
+## sleep, bleed or poison; Close Instance strips these
 func _is_boon(b: Dictionary) -> bool:
-	if b.get("sleep", false) or b.get("bleed", false) or b.get("undying", false):
+	if b.get("sleep", false) or b.get("bleed", false) or b.get("poison", false) or b.get("undying", false):
 		return false
 	var mods: Dictionary = b.get("mods", {})
 	if not mods.is_empty() and mods.values().any(func(v): return v > 0.0):
 		return true
-	return b.get("taunt", false) or b.get("healing", false) or float(b.get("damage_bonus", 0.0)) > 0.0
+	return b.get("taunt", false) or b.get("taunt_back_row", false) or b.get("healing", false) \
+		or float(b.get("damage_bonus", 0.0)) > 0.0
 
 ## Passive Drowsiness: after acting, a small chance to doze off and sleep through the next action
 func _check_nod_off(u: Dictionary, rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
@@ -858,8 +940,10 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 	_count_damage(attacker, target, before - target.hp)
 	_gain_energy(target, ENERGY_PER_HIT_TAKEN)
 	_check_counter(target, attacker, event, record, rng)
+	_check_mid_finger(target, attacker, before - target.hp, event, record, rng)
 	if target.hp > 0:
 		_check_second_wind(target, event, record)
+		_check_blender(target, event, record, rng)
 		_check_its_raw(target, attacker, event, record, rng)
 		_check_berserk(target, event, record)
 		_check_rally(target, event, record)
@@ -911,6 +995,42 @@ func _check_counter(u: Dictionary, attacker: Dictionary, event: Dictionary, reco
 	_countering = true
 	_apply_damage(helper, attacker, dealt, event, record, rng)
 	_countering = false
+
+## Ultimate Mid Fingered: while it lasts, every enemy that damages the unit gets hit back (can't miss) and the unit
+## heals a share of the damage it took. Shown like a counter assist.
+func _check_mid_finger(u: Dictionary, attacker: Dictionary, taken: int, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	var buff := _flag_buff(u, "taunt_back_row")
+	if buff.is_empty() or _countering or u.hp <= 0 or attacker.side == u.side or attacker.hp <= 0:
+		return
+	_heal(u, roundi(taken * float(buff.counter_heal)), event, record)
+	var dealt := _mitigate(_raw_damage(u, rng), attacker)
+	event.assists.append({"actor": u.index, "target": attacker.index, "damage": dealt, "counter": true})
+	if record:
+		event.lines.append(Terms.t("log_counter", {"attacker": u.name, "target": attacker.name, "damage": dealt, "skill": buff.name}))
+	_countering = true
+	_apply_damage(u, attacker, dealt, event, record, rng)
+	_countering = false
+
+## Passive Blender Master: dropping below the threshold blends HP out of a random back-row ally, then it cools down
+func _check_blender(u: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	var p := _passive_params(u, &"blender_master")
+	if p.is_empty() or u.passive_cooldown > 0 or u.hp >= u.max_hp * float(p.threshold):
+		return
+	var donors := _units.filter(func(a): return a.side == u.side and not a.vanguard and _alive(a) and not _has_flag(a, "undying"))
+	if donors.is_empty():
+		return
+	var donor: Dictionary = donors[rng.randi_range(0, donors.size() - 1)]
+	var taken := roundi(donor.hp * float(p.take_pct))
+	if taken <= 0:
+		return
+	u.passive_cooldown = int(p.cooldown)
+	donor.hp -= taken
+	_count_damage(donor, donor, taken)  # self-inflicted: counts as taken, not dealt
+	event.drains.append({"target": donor.index, "amount": taken})
+	event.get_or_add("blended", []).append(u.index)
+	if record:
+		event.lines.append(Terms.t("log_blender", {"name": u.name, "skill": u.passive.name, "target": donor.name, "amount": taken}))
+	_heal(u, roundi(taken * float(p.ratio)), event, record)
 
 ## Passive Desperate Scramble: dropping below the threshold sends the unit Berserk, then it cools down
 func _check_berserk(u: Dictionary, event: Dictionary, record: bool) -> void:
@@ -976,6 +1096,8 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 			event.lines.append(Terms.t("log_all_enemies", {"attacker": actor.name}))
 	else:
 		var foes := _targetable(units, enemy_side, _has_flag(actor, "back_row"))
+		if not _passive_params(actor, &"full_metal_kit").is_empty():
+			foes = units.filter(func(u): return u.side == enemy_side and _alive(u))  # every row is in reach
 		if foes.is_empty():
 			return
 		if actor.cls == CharacterData.CharClass.MAGE:
@@ -990,8 +1112,8 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 			if record:
 				event.lines.append(Terms.t("log_aoe", {"attacker": actor.name}))
 		else:
-			# Single-target attacks must go to a taunting enemy if there is one
-			var taunting := foes.filter(func(u): return _has_flag(u, "taunt"))
+			# Single-target attacks must go to a taunting enemy if there is one (Mid Fingered only pulls the back row)
+			var taunting := foes.filter(func(u): return _has_flag(u, "taunt") or (not actor.vanguard and _has_flag(u, "taunt_back_row")))
 			var pool := taunting if not taunting.is_empty() else foes
 			var target: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
 			# Passive Rat Time: the smell of cheese can pull the attack onto the rat (a taunt still comes first)
@@ -1035,6 +1157,9 @@ func _mitigate(raw: float, target: Dictionary) -> int:
 	var unfazed := _passive_params(target, &"unfazed")
 	if not unfazed.is_empty():
 		damage *= 1.0 - float(unfazed.damage_reduction)
+	var kit := _passive_params(target, &"full_metal_kit")
+	if not kit.is_empty():
+		damage *= 1.0 - float(kit.damage_reduction)
 	return maxi(roundi(damage), 1)
 
 func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, record: bool, event: Dictionary, mult: float = 1.0) -> Dictionary:

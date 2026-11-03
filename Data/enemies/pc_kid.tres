@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"pc_kid"
+display_name = "PC Kid"
+char_class = 2
+rarity = 1
+hp = 60
+attack = 40
+defense = 10
+evasion = 15
+accuracy = 75
+speed = 55
+portrait_path = "res://Art/enemies/pc_kid.png"
+description = "Brought a gaming laptop to McDonald's. Spams area attacks and calls everyone a bot."

@@ -89,7 +89,8 @@ func resolve_finished() -> Array[Dictionary]:
 func _pay(c: CommissionData, uid: int, worker: CharacterData) -> Dictionary:
 	var report := {
 		"commission": c.display_name, "worker": worker.display_name, "money": c.reward_money,
-		"materials": {}, "exp": c.exp_reward, "credit_cards": 0, "incident": "", "level": 0, "friendship": 0,
+		"materials": {}, "exp": c.exp_reward, "credit_cards": 0, "incident": "", "level": 0,
+		"friendship": GameState.BOND_PER_SHIFT, "bond": -1,  # every finished shift builds Bond
 	}
 	for key in c.reward_materials:
 		var range_v: Vector2i = c.reward_materials[key]
@@ -105,7 +106,7 @@ func _pay(c: CommissionData, uid: int, worker: CharacterData) -> Dictionary:
 		for key in incident.materials:
 			report.materials[key] = report.materials.get(key, 0) + incident.materials[key]
 		report.exp += incident.exp_bonus
-		report.friendship = incident.friendship_bonus
+		report.friendship += incident.friendship_bonus
 
 	report.money = maxi(report.money, -GameState.get_money())  # docked pay can't push Money below 0
 	GameState.add_money(report.money)
@@ -115,7 +116,7 @@ func _pay(c: CommissionData, uid: int, worker: CharacterData) -> Dictionary:
 	if report.credit_cards > 0:
 		GameState.add_credit_cards(report.credit_cards)
 	if report.friendship > 0:
-		GameState.add_friendship(uid, report.friendship)
+		report.bond = GameState.add_friendship(uid, report.friendship)
 	if GameState.add_exp(uid, report.exp) > 0:
 		report.level = int(GameState.get_owned(uid).level)
 	return report

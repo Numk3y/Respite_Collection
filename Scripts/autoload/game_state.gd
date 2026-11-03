@@ -24,6 +24,15 @@ const FREE_FRIENDS := [&"coconutbird_caster"]  # everyone owns these: new accoun
 const MAX_LEVEL := 50
 const GROWTH_PER_LEVEL := 0.04  # each level adds 4% of the level-1 base stats
 const GOLD_PER_EXP := 2  # Money cost of 1 EXP when levelling up with Money
+const MATERIAL_EXP := {"snack": 60, "coffee": 200, "gossip": 500}  # EXP one of each material gives when fed
+## Bond: Friendship (stored as "affection") needed for each Bond level; each level adds BOND_STAT_BONUS to
+## ASCENSION_STATS. Friends gain Friendship by fighting (win or lose) and by finishing commission shifts.
+const BOND_THRESHOLDS := [0, 20, 60, 120, 200, 300]  # Bond 0..5
+const BOND_STAT_BONUS := 0.02
+const BOND_PER_WIN := 3
+const BOND_PER_LOSS := 1
+const BOND_PER_SHIFT := 5
+const PULL_HISTORY_MAX := 50
 const MAX_ASCENSION := 4  # each duplicate pulled raises Ascension by 1
 const ASCENSION_BONUS := 0.05  # +5% per rank to the stats below
 const ASCENSION_STATS := ["hp", "attack", "defense", "speed"]
@@ -85,8 +94,11 @@ func _new_save() -> Dictionary:
 		"next_equip_uid": 1,
 		"teams": teams,  # each team is 6 uids, 0 = empty slot
 		"pity": {},  # pool_id -> pulls since the last SSR
+		"pull_history": [],  # newest last, at most PULL_HISTORY_MAX: {char_id, rarity, pool, time}
 		"starter_chosen": false,
 		"commissions": {},  # commission_id -> {"uid", "started_at"}; see Commissions autoload
+		# World boss: the server account, fights not yet reported, results whose event isn't in this build; see WorldBoss
+		"world_boss": {"player_id": "", "token": "", "name": "", "pending": [], "unclaimed": []},
 		"settings": {},
 	}
 
@@ -287,6 +299,9 @@ func is_chapter_unlocked(chapter: int) -> bool:
 ## Maps outside the story are always open. In an open chapter the maps go in order: X-1 is open, and each
 ## later map opens once the one before it has been cleared (X-2 after X-1, ..., the boss X-5 after X-4).
 func is_stage_unlocked(stage: StageData) -> bool:
+	var event := DB.event_of(stage)
+	if event:
+		return event.is_mission_unlocked(stage)  # event missions go in the event's own order
 	if not stage.is_story():
 		return true
 	if not is_chapter_unlocked(stage.chapter):
@@ -305,6 +320,19 @@ func add_material(key: String, amount: int) -> void:
 
 func get_pity(pool_id: StringName) -> int:
 	return int(data.pity.get(String(pool_id), 0))
+
+## Every pull is logged (older saves start with an empty log)
+func add_pull_history(c: CharacterData, rarity: int, pool_id: StringName) -> void:
+	var log: Array = data.get_or_add("pull_history", [])
+	log.append({"char_id": String(c.id), "rarity": rarity, "pool": String(pool_id), "time": int(Time.get_unix_time_from_system())})
+	while log.size() > PULL_HISTORY_MAX:
+		log.pop_front()
+
+## The pull log, newest first
+func get_pull_history() -> Array:
+	var log: Array = data.get("pull_history", []).duplicate()
+	log.reverse()
+	return log
 
 func get_setting(key: String, default_value: Variant) -> Variant:
 	return data.settings.get(key, default_value)
@@ -357,12 +385,29 @@ func find_owned(char_id: StringName) -> Dictionary:
 func get_friendship(uid: int) -> int:
 	return int(get_owned(uid).get("affection", 0))
 
-func add_friendship(uid: int, amount: int) -> void:
+## Returns the new Bond level if this raised it, else -1
+func add_friendship(uid: int, amount: int) -> int:
 	var o := get_owned(uid)
 	if o.is_empty():
-		return
+		return -1
+	var before := get_bond(uid)
 	o.affection = get_friendship(uid) + amount
 	roster_changed.emit()
+	var after := get_bond(uid)
+	return after if after > before else -1
+
+static func bond_for(friendship: int) -> int:
+	var level := 0
+	for i in BOND_THRESHOLDS.size():
+		if friendship >= BOND_THRESHOLDS[i]:
+			level = i
+	return level
+
+func get_bond(uid: int) -> int:
+	return bond_for(get_friendship(uid))
+
+static func max_bond() -> int:
+	return BOND_THRESHOLDS.size() - 1
 
 func get_ascension(uid: int) -> int:
 	return int(get_owned(uid).get("ascension", 0))
@@ -423,6 +468,11 @@ func get_unit_stats(uid: int, with_equipment: bool = true) -> Dictionary:
 		return {}
 	var o := get_owned(uid)
 	var stats := c.stats_at(int(o.level), int(o.get("ascension", 0)))
+	# Bond: +BOND_STAT_BONUS per level to the Ascension stats (the balance check measures without it)
+	var bond_mult := 1.0 + BOND_STAT_BONUS * get_bond(uid)
+	for stat in ASCENSION_STATS:
+		if stats[stat] > 0:
+			stats[stat] = roundi(stats[stat] * bond_mult)
 	if with_equipment:
 		for slot_key in o.equips:
 			var e := get_equipment(int(o.equips[slot_key]))
@@ -476,6 +526,31 @@ func level_up_cost(uid: int, levels: int = 1) -> int:
 		needed += exp_to_next(level)
 		level += 1
 	return maxi(needed, 0) * GOLD_PER_EXP
+
+## EXP still needed to reach MAX_LEVEL
+func exp_to_max(uid: int) -> int:
+	var o := get_owned(uid)
+	if o.is_empty():
+		return 0
+	var needed := -int(o.exp)
+	for level in range(int(o.level), MAX_LEVEL):
+		needed += exp_to_next(level)
+	return maxi(needed, 0)
+
+## How many of a material can usefully be fed to a friend right now (owned, and not past max level)
+func feed_limit(uid: int, key: String) -> int:
+	var per: int = MATERIAL_EXP.get(key, 0)
+	if per <= 0:
+		return 0
+	return mini(get_material(key), ceili(float(exp_to_max(uid)) / per))
+
+## Feeds `count` of a material for EXP (MATERIAL_EXP each). Returns the levels gained, or -1 if not possible.
+func feed_material(uid: int, key: String, count: int) -> int:
+	count = mini(count, feed_limit(uid, key))
+	if count <= 0:
+		return -1
+	add_material(key, -count)
+	return add_exp(uid, count * int(MATERIAL_EXP[key]))
 
 ## Spend Money to instantly gain levels (capped at MAX_LEVEL). Returns false if they can't afford it.
 func buy_levels(uid: int, levels: int = 1) -> bool:

@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"db_grub_boss_passive"
+display_name = "Loot Goblin"
+description = "Each hit that lands has a 50% chance to steal 30% of the target's Attack for his next turn."
+effect_id = &"db_grub"
+params = {"chance": 0.5, "steal_pct": 0.3, "turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"db_grub_boss_active"
+display_name = "Double Tap"
+kind = 1
+description = "Fires both barrels: two shots at random enemies for 150% of his Attack each."
+effect_id = &"full_auto"
+params = {"damage_mult": 1.5, "shots": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"db_grub"
+display_name = "DB Grub"
+title = "Boss"
+char_class = 4
+rarity = 3
+hp = 520
+attack = 60
+defense = 25
+evasion = 25
+accuracy = 75
+speed = 65
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/db_grub.png"
+description = "Naked except for a double-barrel shotgun he definitely didn't craft himself. Somehow he keeps winning."

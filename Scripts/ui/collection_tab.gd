@@ -222,11 +222,14 @@ func _card(uid: int, c: CharacterData) -> Control:
 	art_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_holder.clip_contents = true  # keeps the sheen inside the picture
 	box.add_child(art_holder)
+	var awakened := GameState.get_ascension(uid) >= GameState.MAX_ASCENSION
 	var art := CharArt.new()
 	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	art.set_character(c)
+	art.set_character(c, c.get_portrait_at(GameState.get_ascension(uid)))
 	art_holder.add_child(art)
-	if c.rarity >= CharacterData.Rarity.SR:
+	if awakened:
+		art_holder.add_child(AwakenGlow.new())
+	elif c.rarity >= CharacterData.Rarity.SR:
 		var sheen := Sheen.new(c.rarity == CharacterData.Rarity.SSR)
 		sheen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		art_holder.add_child(sheen)

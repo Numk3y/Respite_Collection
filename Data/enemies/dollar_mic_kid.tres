@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"dollar_mic_kid_passive"
+display_name = "SHUT UP I'M WINNING"
+description = "Surviving a hit has a 40% chance to scream at the attacker: they get -25% Attack and Defense for 2 turns, and he gets +15% Speed for his next turn."
+effect_id = &"its_raw"
+params = {"attack": -0.25, "chance": 0.4, "defense": -0.25, "speed": 0.15, "speed_turns": 1, "turns": 2}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"dollar_mic_kid_active"
+display_name = "SPEAKER ON"
+kind = 1
+description = "Screams into the Dollar Mic with the speaker on: hits every enemy for 80% of his Attack and Deafens them (-30% Accuracy, -20% Speed for 2 turns)."
+effect_id = &"speaker_on"
+params = {"accuracy": -0.3, "damage_mult": 0.8, "speed": -0.2, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"dollar_mic_kid"
+display_name = "SCREAMING KID WITH DOLLAR MIC WITH SPEAKER ON"
+title = "Boss"
+char_class = 2
+rarity = 3
+hp = 900
+attack = 55
+defense = 30
+evasion = 10
+accuracy = 80
+speed = 50
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/dollar_mic_kid.png"
+description = "Bought the cheapest mic on the internet, plugged it into a portable speaker and found the volume knob. The king of McDonald's."

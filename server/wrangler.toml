@@ -1,0 +1,18 @@
+name = "respite-boss"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Raise this when a game update changes how boss damage works; older builds get "update_required"
+MIN_VERSION = "1"
+ALLOWED_ORIGINS = "https://numk3y.github.io,http://localhost:8060,http://127.0.0.1:8060"
+# ADMIN_KEY is a secret: set it with "npx wrangler secret put ADMIN_KEY" (and in .dev.vars for local testing)
+
+[[durable_objects.bindings]]
+name = "BOSS"
+class_name = "BossRoom"
+
+# SQLite-backed Durable Objects are the kind the free plan allows
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BossRoom"]

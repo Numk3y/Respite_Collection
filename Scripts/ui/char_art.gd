@@ -22,6 +22,7 @@ const CLASS_COLORS := {
 	CharacterData.CharClass.HEALER: Color("#c2507e"),
 }
 const MYSTERY_COLOR := Color("#2a2a3a")
+const LIVING_SHADER := preload("res://Shaders/living_art.gdshader")
 const CAPTION_FONT_SIZE := 13
 const CAPTION_MIN_FONT_SIZE := 9
 
@@ -70,6 +71,32 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		_initial.add_theme_font_size_override("font_size", maxi(int(size.y * 0.45), 8))
 		_update_caption()
+
+## Live2D-style idle motion on the picture (Shaders/living_art.gdshader): breathing, sway, hair flutter and a
+## head tilt. `seed` keeps several living pictures out of step.
+func set_living(on: bool, seed: float = 0.0) -> void:
+	if not on:
+		_portrait.material = null
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = LIVING_SHADER
+	mat.set_shader_parameter("living", 1.0)
+	mat.set_shader_parameter("living_seed", seed)
+	_portrait.material = mat
+	# The shader measures positions on the picture, so it needs the picture's size, kept current from the
+	# picture's own resized signal (the art box's resize notice can come before the material is set)
+	_sync_living_size()
+	if not _portrait.resized.is_connected(_sync_living_size):
+		_portrait.resized.connect(_sync_living_size)
+
+func _sync_living_size() -> void:
+	if _portrait.material:
+		(_portrait.material as ShaderMaterial).set_shader_parameter("rect_size", _portrait.size)
+
+## Which way the living picture leans (-1..1 on each axis), e.g. towards the mouse
+func set_look(look: Vector2) -> void:
+	if _portrait.material:
+		(_portrait.material as ShaderMaterial).set_shader_parameter("living_look", look)
 
 ## `picture` overrides the portrait (e.g. the cut-in image); null uses the portrait
 func set_character(c: CharacterData, picture: Texture2D = null) -> void:

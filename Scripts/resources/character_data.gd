@@ -57,6 +57,12 @@ const CUTIN_DIR := "res://Art/cutins/"
 @export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var cutin_path: String
 ## Picture shown on the battle card while transformed by a skill (e.g. Roki's horse form). Empty = no change.
 @export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var alt_form_path: String
+## Optional art shown once this friend reaches max Ascension. Empty = the normal portrait (still gets the
+## awakened frame).
+@export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var awakened_art_path: String
+@export_group("Bond")
+## Profile lines unlocked by Bond: the first at Bond 1, the next at Bond 2, ... (up to GameState.max_bond())
+@export_multiline var bond_lines: PackedStringArray = []
 @export_group("")
 @export_multiline var description: String
 @export var is_starter: bool = false  # vanguard classes only
@@ -138,6 +144,14 @@ func get_cutin() -> Texture2D:
 	if path.is_empty():
 		path = find_art(CUTIN_DIR, String(id))
 	return load(path) as Texture2D if not path.is_empty() else get_portrait()
+
+## The portrait for a given Ascension rank: the awakened art at max rank if there is one, else the usual portrait
+func get_portrait_at(rank: int) -> Texture2D:
+	if rank >= GameState.MAX_ASCENSION and not awakened_art_path.is_empty():
+		var path := find_art(awakened_art_path.get_base_dir() + "/", awakened_art_path.get_file())
+		if not path.is_empty():
+			return load(path) as Texture2D
+	return get_portrait()
 
 ## The transformed picture (alt_form_path), or null if there isn't one
 func get_alt_form() -> Texture2D:

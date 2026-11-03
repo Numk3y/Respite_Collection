@@ -3,6 +3,8 @@ extends Node
 
 signal pulled(results: Array[Dictionary])
 
+const GUARANTEE_PULLS := 10  # a pull this big always includes at least one SR or better
+
 var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -38,14 +40,23 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 
 	var top := CharacterData.Rarity.SSR
 	var since_top := GameState.get_pity(pool.id)
-	for _i in count:
+	var got_sr := false  # for the multi-pull guarantee
+	for i in count:
 		var rarity: int
 		if pool.pity_threshold > 0 and since_top + 1 >= pool.pity_threshold and by_rarity.has(top):
 			rarity = top
 		else:
 			rarity = _weighted_pick(rarities, func(r): return pool.weight_for(r))
+		# A pull of GUARANTEE_PULLS or more always has an SR or better: if none came up, the last one becomes SR
+		if count >= GUARANTEE_PULLS and i == count - 1 and not got_sr and rarity < CharacterData.Rarity.SR:
+			if rarities.has(CharacterData.Rarity.SR):
+				rarity = CharacterData.Rarity.SR
+			elif rarities.has(top):
+				rarity = top
+		got_sr = got_sr or rarity >= CharacterData.Rarity.SR
 		var entry: PoolEntry = _weighted_pick(by_rarity[rarity], func(e): return e.weight)
 		since_top = 0 if rarity == top else since_top + 1
+		GameState.add_pull_history(entry.character, rarity, pool.id)
 
 		# Duplicates raise the owned copy's Ascension instead of adding a second card
 		var received := GameState.receive_character(entry.character)

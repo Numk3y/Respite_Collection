@@ -7,6 +7,7 @@ extends VBoxContainer
 
 signal again_pressed
 signal home_pressed
+signal next_pressed
 
 const SPEEDS := [1, 2, 3]
 const CARD_SIZE := Vector2(236, 118)
@@ -32,9 +33,11 @@ var _results: BattleResults
 var _log_names: Array[Dictionary] = []  # {"name", "side"}, longest first, for colouring names in the log
 var _log_number := RegEx.create_from_string("\\d+")
 var _stage_name := ""
+var _note := ""
 var _wave_label: Label
 var _wave_count := 1
 var _log: RichTextLabel
+var next_text := ""  # set by Main when a mission follows this one; shown as Next Mission after a win
 
 func start(stage: StageData, battle: Dictionary) -> void:
 	_battle = battle
@@ -406,7 +409,7 @@ func _animate(event: Dictionary) -> void:
 	for target in event.get("blinded", []):
 		_float_text(_views[target], Terms.t("battle_blinded"), Color("#fde047"), 60)
 	for drain in event.get("drains", []):
-		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#c084fc")
+		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#84cc16") if drain.get("poison", false) else Color("#c084fc")
 		_fx.hit(_center(_views[drain.target]), drain_color)
 		_float_text(_views[drain.target], "-%d" % drain.amount, drain_color, 30)
 	for target in event.get("grubbed", []):
@@ -417,6 +420,14 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[ally], Terms.t("battle_cringe"), Color("#d9f99d"), 60)
 	for target in event.get("bled", []):
 		_float_text(_views[target], Terms.t("battle_bleed"), Color("#dc2626"), 60)
+	for target in event.get("poisoned", []):
+		_float_text(_views[target], Terms.t("battle_poison"), Color("#84cc16"), 60)
+	for kittay in event.get("mid_fingered", []):
+		_float_text(_views[kittay], Terms.t("battle_mid_fingered"), Color("#f472b6"), 60)
+	for target in event.get("deafened", []):
+		_float_text(_views[target], Terms.t("battle_deafened"), Color("#facc15"), 60)
+	for kittay in event.get("blended", []):
+		_float_text(_views[kittay], Terms.t("battle_blender"), Color("#c084fc"), 60)
 	for rat in event.get("lured", []):
 		_float_text(_views[rat], Terms.t("battle_lured"), Color("#fde047"), 60)
 	for rat in event.get("rat_blocked", []):
@@ -596,7 +607,9 @@ func _finish() -> void:
 		"#fde047" if win else "#f87171", "\n".join(_battle.end_lines).replace("[", "[lb]")])
 	var report: Dictionary = _battle.report
 	var lines := PackedStringArray()  # rewards and the rest, for the results screen
-	if win:
+	if report.get("world_boss", false):
+		lines.append(Terms.t("boss_result_damage", {"damage": Terms.number(report.damage)}))
+	elif win:
 		var extras := ""
 		for key in report.materials:
 			if report.materials[key] > 0:
@@ -618,13 +631,25 @@ func _finish() -> void:
 		lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
 	else:
 		lines.append(Terms.t("battle_defeat"))
+	for up in report.get("bond_ups", []):
+		lines.append(Terms.t("battle_bond_up", {"name": up.name, "bond": up.bond}))
 
 	await _wait(3)  # a beat to see the final blow land
 	_results = BattleResults.new()
 	_arena.add_child(_results)
 	_results.again_pressed.connect(again_pressed.emit)
 	_results.home_pressed.connect(home_pressed.emit)
+	_results.next_pressed.connect(next_pressed.emit)
+	_results.next_text = next_text
 	_results.open(_battle, _stage_name, lines)
+	if not _note.is_empty():
+		_results.set_note(_note)
+
+## A line under the results, e.g. the world boss server's answer, which can arrive before or after the battle ends
+func set_note(text: String) -> void:
+	_note = text
+	if _results:
+		_results.set_note(text)
 
 ## An HP bar that drains smoothly: the green fill moves first, a red "damage trail" follows a moment later
 ## (heals: the trail jumps up and the fill catches up)

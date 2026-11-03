@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"screaming_kid_passive"
+display_name = "Meltdown"
+description = "Gains +1.5% Attack and +1% Speed for every 1% of HP lost. When a hit drops him below 30% HP he melts down and goes Berserk: +40% Attack but -20% Defense for 3 turns."
+effect_id = &"desperate_scramble"
+params = {"attack": 0.4, "attack_per_pct": 0.015, "cooldown": 10, "defense": -0.2, "speed_per_pct": 0.01, "threshold": 0.3, "turns": 3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"screaming_kid_active"
+display_name = "Tantrum"
+kind = 1
+description = "+30% Attack and -50% Defense for 3 turns. Knocking someone out heals him 20% of his max HP."
+effect_id = &"self_decaying"
+params = {"attack": 0.3, "defense": -0.5, "kill_heal_pct": 0.2, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"screaming_kid"
+display_name = "Screaming Kid"
+title = "Mini Boss"
+char_class = 4
+rarity = 2
+hp = 300
+attack = 50
+defense = 20
+evasion = 20
+accuracy = 70
+speed = 70
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/screaming_kid.png"
+description = "Lost his game in the McDonald's bathroom and has been screaming ever since. The more you hurt him, the louder he gets."

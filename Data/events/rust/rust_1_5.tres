@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_wolf.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/db_grub.tres" id="8"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("7"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("5"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"rust_1_5"
+display_name = "DB Grub"
+description = "A naked grub with a double-barrel shotgun is camping the only road off the island. Nobody knows where he got it."
+chapter = 1
+number = 5
+recommended_level = 10
+enemy_level = 3
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 220
+exp_reward = 60
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(2, 4), "coffee": Vector2i(1, 2), "gossip": Vector2i(0, 1)})

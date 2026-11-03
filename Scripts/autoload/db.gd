@@ -9,6 +9,7 @@ var equipment: Dictionary[StringName, EquipmentData] = {}
 var pools: Array[GachaPool] = []
 var stages: Array[StageData] = []
 var commissions: Array[CommissionData] = []
+var events: Dictionary[StringName, EventData] = {}  # id -> event; Data/events/<id>/event.tres
 
 func _ready() -> void:
 	for res in _load_all("res://Data/characters/"):
@@ -38,6 +39,20 @@ func _ready() -> void:
 		if c:
 			commissions.append(c)
 	commissions.sort_custom(func(a, b): return a.duration_seconds < b.duration_seconds)
+	# Each event has its own folder; its mission stages sit beside event.tres and aren't story maps
+	for folder in ResourceLoader.list_directory("res://Data/events/"):
+		if not folder.ends_with("/"):
+			continue
+		var path := "res://Data/events/%sevent.tres" % folder
+		var ev := load(path) as EventData if ResourceLoader.exists(path) else null
+		if ev == null:
+			continue
+		if events.has(ev.id):
+			push_error("Duplicate event id: %s" % ev.id)
+		if ev.boss_stage == null:
+			push_error("Event %s has no boss_stage" % ev.id)
+			continue
+		events[ev.id] = ev
 	# Maps outside the story first, then story order: 1-1 ... 1-5, 2-1 ...
 	stages.sort_custom(func(a, b): return a.chapter < b.chapter or (a.chapter == b.chapter and a.number < b.number))
 
@@ -52,6 +67,13 @@ func get_map(chapter: int, number: int) -> StageData:
 	for s in stages:
 		if s.chapter == chapter and s.number == number:
 			return s
+	return null
+
+## The event a mission belongs to, or null for story and practice maps
+func event_of(stage: StageData) -> EventData:
+	for ev in events.values():
+		if ev.has_mission(stage):
+			return ev
 	return null
 
 ## Story chapter numbers that have at least one map, in order

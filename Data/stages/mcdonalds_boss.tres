@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/quest2_kid.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/quest3_kid.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/pc_kid.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/poor_mic_kid.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/eboy.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/screaming_kid.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/dollar_mic_kid.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="16"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="17"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/Mcdonald.png" id="18"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("9"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("6"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_4"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("11"), ExtResource("8")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"mcdonalds_boss"
+display_name = "McDonald's Boss"
+description = "Somewhere behind the counter, a kid found a Dollar Mic, a portable speaker and the volume knob. Get past his crowd and make it stop."
+chapter = 3
+number = 5
+recommended_level = 23
+background = ExtResource("18")
+enemy_level = 12
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3"), SubResource("wave_4")])
+reward_money = 900
+exp_reward = 260
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(3, 5), "gossip": Vector2i(2, 3), "snack": Vector2i(5, 8)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17")])
+drop_chance = 0.2

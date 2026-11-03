@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"quest2_kid"
+display_name = "Quest 2 Kid"
+char_class = 1
+rarity = 1
+hp = 80
+attack = 32
+defense = 15
+evasion = 25
+accuracy = 60
+speed = 65
+portrait_path = "res://Art/enemies/quest2_kid.png"
+description = "Ten years old, Quest 2 strapped on, playing in the middle of the McDonald's. Swings at anything that moves."

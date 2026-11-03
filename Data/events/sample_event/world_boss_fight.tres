@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/events/sample_event/world_boss.tres" id="5"]
+
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"sample_event_world_boss"
+display_name = "Giant Uncle Bourbon"
+description = "The World Boss. Every player's damage comes off the same health bar."
+chapter = 2
+number = 5
+recommended_level = 10
+enemy_level = 1
+waves = Array[ExtResource("4")]([SubResource("wave_1")])
+reward_money = 0
+exp_reward = 0

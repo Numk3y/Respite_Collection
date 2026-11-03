@@ -8,6 +8,8 @@ extends RefCounted
 ## CharacterData.battle_unit() builds one.
 ##
 ## `enemies` is one team or {"waves": [team, ...]} for missions with several battles in a row.
+## Optional keys: "max_actions" (actions per wave before the battle times out) and "timeout_key"
+## (Terms key of the line shown when it does); the world boss uses both.
 ##
 ## Returns {"win": bool, "actions": int, "log": PackedStringArray, "waves_cleared": int, "wave_count": int}.
 ## When record is true it also returns:

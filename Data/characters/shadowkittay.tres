@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"shadowkittay_passive"
+display_name = "Blender Master"
+description = "Kittay can make things out of nowhere, even your mom. When a hit drops him below 40% HP, he takes 20% of a random back-row teammate's current HP and heals 1.5 times that amount. Cooldown: 5 turns."
+effect_id = &"blender_master"
+params = {"cooldown": 5, "ratio": 1.5, "take_pct": 0.2, "threshold": 0.4}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"shadowkittay_active"
+display_name = "Mid Fingered"
+kind = 1
+description = "He just mid-fingers the enemy back row: for 2 turns, their single-target attacks must hit Kittay. Every time an enemy damages him, he counterattacks that enemy and heals 15% of the damage taken."
+effect_id = &"mid_fingered"
+params = {"counter_heal": 0.15, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"shadowkittay"
+display_name = "ShadowKittay"
+char_class = 4
+rarity = 2
+hp = 120
+attack = 125
+defense = 20
+evasion = 20
+accuracy = 75
+speed = 85
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "A shady cat who blends whatever he needs out of thin air."
+is_starter = false

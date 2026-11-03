@@ -4,8 +4,9 @@ extends Control
 ## standing in front of a glowing full-length mirror. Wall gradient, neon skirting line, a perspective floor grid,
 ## the mirror with sheen streaks, two light pillars and a holo pedestal under the character. The room itself is
 ## redrawn only on resize; the living parts animate every frame while the stage is visible: the card floats,
-## sways and breathes with a light sheen sweeping across it, light motes rise through the air and pulse rings
-## ripple out from the pedestal. Call set_featured() with the character to show.
+## sways and breathes with a light sheen sweeping across it, the picture itself moves in a Live2D-style idle and
+## leans towards the mouse, light motes rise through the air and pulse rings ripple out from the pedestal.
+## Call set_featured() with the character to show.
 
 const ART_HEIGHT := 0.8  # of the room height
 const MOTE_COUNT := 26
@@ -19,11 +20,13 @@ const PULSE_EVERY := 2.2  # seconds per pedestal ring
 
 var _art: CharArt
 var _sheen: Sheen
+var _awaken: AwakenGlow  # only at max Ascension
 var _fx: RoomFx
 var _plate: PanelContainer
 var _name_label: Label
 var _sub_label: Label
 var _time := 0.0
+var _look := Vector2.ZERO  # where the character leans, eased towards the mouse
 var _backdrop: Texture2D  # Art/backgrounds/home.* (or HomeBg.*) replaces the drawn room when it exists
 
 func _init() -> void:
@@ -39,6 +42,7 @@ func _init() -> void:
 	add_child(_fx)
 
 	_art = CharArt.new()
+	_art.set_living(true)  # Live2D-style idle: breathing, sway, hair flutter, head tilt
 	add_child(_art)
 	_sheen = Sheen.new()
 	_sheen.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -85,15 +89,26 @@ func _process(delta: float) -> void:
 	_art.scale = Vector2.ONE * (1.0 + sin(_time * BOB_SPEED + 0.6) * BREATH)
 	_sheen.phase = fmod(_time, SHEEN_EVERY) / 0.9  # the sweep takes 0.9 s, then rests
 	_sheen.queue_redraw()
+	# The character leans a little towards the mouse, easing there rather than snapping
+	var to_mouse := (get_local_mouse_position() - r.get_center()) / (r.size * 0.5)
+	_look = _look.lerp(to_mouse.clamp(Vector2(-1, -1), Vector2(1, 1)), minf(delta * 3.0, 1.0))
+	_art.set_look(_look)
 	_fx.time = _time
 	_fx.queue_redraw()
 
-## c = null shows a "?" placeholder (e.g. an empty team)
-func set_featured(c: CharacterData, title: String, subtitle: String) -> void:
+## c = null shows a "?" placeholder (e.g. an empty team). At max Ascension the awakened art and glow show.
+func set_featured(c: CharacterData, title: String, subtitle: String, ascension: int = 0) -> void:
 	if c:
-		_art.set_character(c)
+		_art.set_character(c, c.get_portrait_at(ascension))
 	else:
 		_art.set_mystery(title)
+	var awakened := c != null and ascension >= GameState.MAX_ASCENSION
+	if awakened and _awaken == null:
+		_awaken = AwakenGlow.new()
+		_art.add_child(_awaken)
+	elif not awakened and _awaken:
+		_awaken.queue_free()
+		_awaken = null
 	_name_label.text = title
 	_sub_label.text = subtitle
 	_layout()
