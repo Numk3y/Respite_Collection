@@ -300,7 +300,7 @@ func set_pool(pool: GachaPool, rates_text: String) -> void:
 				sr.append(c)
 		_showcase.set_characters(ssr, sr)
 		if not pool.banner:
-			_background.texture = _blurred(_showcase.backdrop()) if _showcase.backdrop() else _gradient(accent)
+			_background.texture = _gradient(accent)
 	for i in _plates.size():
 		_plates[i].visible = i < _featured.size()
 		if _plates[i].visible:
@@ -362,7 +362,9 @@ func _layout() -> void:
 		initial.position = Vector2(center_x - w / 2.0, 0)
 	_effects.center = Vector2(size.x * (0.5 if _duo else SOLO_CENTER_X), h * 0.38)
 	_back_row.start_x = 0.0 if _duo else size.x * 0.36
-	_showcase.start_x = size.x * 0.34
+	_showcase.start_x = size.x * 0.36
+	_showcase.lineup_width = size.x * 0.36 - EDGE - 18.0
+	_showcase.lineup_top_min = _column.position.y + _column.get_combined_minimum_size().y + 8.0
 	if _common:
 		_effects.center = Vector2(size.x * 0.67, h * 0.4)
 	_shade.duo = _duo
@@ -556,182 +558,266 @@ class BackRow extends Control:
 			var fade := smoothstep(start_x, start_x + w, center) * (1.0 - smoothstep(size.x - w * 0.2, size.x + w * 0.5, center))
 			rect.modulate = Color(TINT, 0.85 * fade)
 
-## The Common layout's art (pools with nothing featured): every SSR stands large across the back, slowly swaying,
-## and in front the SRs take turns two at a time: every SLIDE_SECONDS the pair fades out and the next slides in
-## from the right, each with a small "SR · name" tag over its head. Everything sits right of start_x (the texts
-## are on the left).
+## The Common layout's art (pools with nothing featured), modern standard-banner style:
+## - The hero: the top rarity's friends (SSRs; SRs if the pool has none) each in a tall slanted panel side by side.
+##   The spotlight moves along every CYCLE seconds: that panel widens to full colour with a gold frame and a name
+##   plate (rarity, stars, name, class); the rest sit narrower and dimmed.
+## - The lineup: the next rarity down (SRs) as small framed cards in a strip at the bottom left, under "LINEUP",
+##   scrolling slowly when they don't all fit.
+## Panels clip their picture to the slanted shape (draw_polygon with UVs), so there are no hard rectangle edges.
 class Showcase extends Control:
-	const SSR_HEIGHT := 1.04  # share of the banner's height (overflows a little, so it's cropped)
-	const SSR_ASPECT := 0.62
-	const SSR_TINT := Color(0.72, 0.72, 0.84)  # the back row is dimmer, so the SRs in front stand out
-	const SR_HEIGHT := 0.8
-	const SR_ASPECT := 0.66
-	const SR_SPOTS := [0.3, 0.72]  # where the two SRs stand, as shares of the art area
-	const SLIDE_SECONDS := 3.2
+	const CYCLE := 4.0  # seconds per spotlight
+	const ACTIVE_SHARE := 0.4  # the spotlit panel's share of the hero width (with 3+ panels)
+	const SKEW := 0.2  # how far a panel leans, as a share of the banner height
+	const GAP := 6.0
+	const GOLD := Color("#ffd75e")
+	const DIM_ALPHA := 0.68  # how dark the panels outside the spotlight are (bright art needs a strong veil)
+	const CARD := Vector2(60, 80)
+	const CARD_GAP := 8.0
+	const SCROLL_SPEED := 18.0
 
-	var start_x := 0.0
-	var _ssr: Array[TextureRect] = []
-	var _ssr_material: ShaderMaterial
-	var _sr: Array[Dictionary] = []  # {"texture", "name"} for every SR with art
-	var _slots: Array[Dictionary] = []  # the two front spots: {"rect", "tag", "label"}
-	var _sr_material: ShaderMaterial
-	var _next := 0  # index in _sr of the next one to show
+	var start_x := 0.0  # the hero starts here (the texts are on the left)
+	var lineup_width := 300.0  # set by the banner: room for the lineup strip
+	var lineup_top_min := 0.0  # the lineup hides if it would climb above this (small windows)
+	var _heroes: Array[Dictionary] = []  # {"texture", "name", "cls", "rarity"}
+	var _widths: Array[float] = []  # current panel widths, eased toward their targets
+	var _active := 0
 	var _timer := 0.0
-	var _t := 0.0
-	var _sliding: Tween
+	var _plate: VBoxContainer
+	var _plate_rarity: Label
+	var _plate_stars: StarRow
+	var _plate_name: Label
+	var _plate_class: Label
+	var _lineup: Control
+	var _lineup_title: Label
+	var _cards: Array[Control] = []
+	var _scroll := 0.0
 
 	func _init() -> void:
-		_ssr_material = ShaderMaterial.new()
-		_ssr_material.shader = ART_SHADER
-		_ssr_material.set_shader_parameter("fade_left", 0.22)
-		_ssr_material.set_shader_parameter("fade_right", 0.22)
-		_ssr_material.set_shader_parameter("fade_bottom", 0.3)
-		_sr_material = ShaderMaterial.new()
-		_sr_material.shader = ART_SHADER
-		_sr_material.set_shader_parameter("fade_left", 0.18)
-		_sr_material.set_shader_parameter("fade_right", 0.18)
-		_sr_material.set_shader_parameter("fade_bottom", 0.12)
-		for i in SR_SPOTS.size():
-			var rect := TextureRect.new()
-			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			rect.material = _sr_material
-			var tag := PanelContainer.new()
-			var style := UITheme.box(Color(0.03, 0.04, 0.09, 0.8), CharArt.RARITY_COLORS[CharacterData.Rarity.SR], 1, 6, 4)
-			style.content_margin_left = 8
-			style.content_margin_right = 8
-			tag.add_theme_stylebox_override("panel", style)
-			tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var label := GachaBanner._label("", 15, Color.WHITE)
-			tag.add_child(label)
-			_slots.append({"rect": rect, "tag": tag, "label": label})
+		_plate = VBoxContainer.new()
+		_plate.add_theme_constant_override("separation", 0)
+		_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var top := HBoxContainer.new()
+		top.add_theme_constant_override("separation", 6)
+		top.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_plate.add_child(top)
+		_plate_rarity = GachaBanner._label("", 18, GOLD)
+		top.add_child(_plate_rarity)
+		_plate_stars = StarRow.new(15.0, GOLD)
+		top.add_child(_plate_stars)
+		_plate_name = GachaBanner._label("", 34, Color.WHITE)
+		_plate_name.add_theme_constant_override("outline_size", 10)
+		_plate.add_child(_plate_name)
+		_plate_class = GachaBanner._label("", 14, Color("#e2e8f0"))
+		_plate.add_child(_plate_class)
+		add_child(_plate)
+		_lineup = Control.new()
+		_lineup.clip_contents = true
+		_lineup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_lineup)
+		_lineup_title = GachaBanner._label(Terms.t("gacha_lineup"), 14, Color("#d8b4fe"))
+		add_child(_lineup_title)
 		set_process(false)
 
-	## A picture for the blurred backdrop: the first SSR with art, else the first SR, else null
-	func backdrop() -> Texture2D:
-		for rect in _ssr:
-			if rect.texture:
-				return rect.texture
-		return _sr[0].texture if not _sr.is_empty() else null
-
+	## `top`: the hero panels (SSRs); `lineup`: the strip (SRs). Friends without art are left out.
 	func set_characters(ssr: Array[CharacterData], sr: Array[CharacterData]) -> void:
-		for rect in _ssr:
-			rect.queue_free()
-		_ssr.clear()
-		for slot in _slots:
-			if slot.rect.get_parent():
-				remove_child(slot.rect)
-				remove_child(slot.tag)
-		for c in ssr:
-			var texture := c.get_cutin()  # full size: these stand tall
+		var top := ssr if not ssr.is_empty() else sr
+		var strip: Array[CharacterData] = sr if not ssr.is_empty() else []
+		_heroes.clear()
+		for c in top:
+			var texture := c.get_portrait()
 			if texture == null:
-				continue
-			var rect := TextureRect.new()
-			rect.texture = texture
-			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			rect.material = _ssr_material
-			rect.modulate = SSR_TINT
-			add_child(rect)
-			_ssr.append(rect)
-		_sr.clear()
-		for c in sr:
+				texture = c.get_cutin()
+			if texture:
+				_heroes.append({"texture": texture, "name": c.display_name, "cls": Terms.class_label(c.char_class), "rarity": c.rarity})
+		_widths.clear()
+		for card in _cards:
+			card.queue_free()
+		_cards.clear()
+		for c in strip:
 			var thumb := BackRow.thumbnail(c)
 			if thumb:
-				_sr.append({"texture": thumb, "name": "%s · %s" % [Terms.rarity_name(c.rarity), c.display_name]})
-		for slot in _slots:  # the front pair goes on top of the SSRs
-			add_child(slot.rect)
-			add_child(slot.tag)
-		_next = 0
+				_cards.append(_make_card(c, thumb))
+		_lineup_title.visible = not _cards.is_empty()
+		_active = 0
 		_timer = 0.0
-		_show_pair(false)
-		set_process(not _ssr.is_empty() or _sr.size() > SR_SPOTS.size())
-		_place()
+		_scroll = 0.0
+		_show_plate()
+		set_process(true)
+		queue_redraw()
 
-	func _notification(what: int) -> void:
-		if what == NOTIFICATION_RESIZED:
-			_place()
+	func _make_card(c: CharacterData, thumb: Texture2D) -> Control:
+		var color: Color = CharArt.RARITY_COLORS[c.rarity]
+		var card := PanelContainer.new()
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := UITheme.box(Color(0.05, 0.05, 0.1, 0.9), color, 2, 6, 0)
+		style.shadow_color = Color(color, 0.35)
+		style.shadow_size = 4
+		card.add_theme_stylebox_override("panel", style)
+		card.custom_minimum_size = CARD
+		card.size = CARD
+		var art := TextureRect.new()
+		art.texture = thumb
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(art)
+		var tag := PanelContainer.new()
+		var chip := UITheme.box(color.darkened(0.25), Color.TRANSPARENT, 0, 4, 0)
+		chip.content_margin_left = 5
+		chip.content_margin_right = 5
+		tag.add_theme_stylebox_override("panel", chip)
+		tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var tag_text := GachaBanner._label(Terms.rarity_name(c.rarity), 11, Color.WHITE)
+		tag_text.add_theme_constant_override("outline_size", 0)
+		tag.add_child(tag_text)
+		tag.position = Vector2(4, CARD.y - 20)
+		art.add_child(tag)
+		card.tooltip_text = c.display_name
+		_lineup.add_child(card)
+		return card
+
+	func _show_plate() -> void:
+		_plate.visible = not _heroes.is_empty()
+		if _heroes.is_empty():
+			return
+		var hero: Dictionary = _heroes[_active]
+		_plate_rarity.text = Terms.rarity_name(hero.rarity)
+		_plate_stars.count = STAR_COUNTS.get(hero.rarity, 3)
+		_plate_name.text = hero.name
+		_plate_class.text = hero.cls
+		_plate.reset_size()
+		_plate.modulate.a = 0.0
+		var t := _plate.create_tween().set_parallel()
+		t.tween_property(_plate, "modulate:a", 1.0, 0.35)
+		_plate.set_meta("rise", 14.0)
+		t.tween_method(_set_rise, 14.0, 0.0, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	func _set_rise(value: float) -> void:
+		_plate.set_meta("rise", value)
 
 	func _process(delta: float) -> void:
 		if not is_visible_in_tree():
 			return
-		_t += delta
 		_timer += delta
-		if _timer >= SLIDE_SECONDS and _sr.size() > SR_SPOTS.size():
+		if _timer >= CYCLE and _heroes.size() > 1:
 			_timer = 0.0
-			_show_pair(true)
-		_place()
+			_active = (_active + 1) % _heroes.size()
+			_show_plate()
+		# Panels ease toward their widths, so the spotlight glides from one to the next
+		var targets := _target_widths()
+		if _widths.size() != targets.size():
+			_widths = targets.duplicate()
+		for i in _widths.size():
+			_widths[i] = lerpf(_widths[i], targets[i], minf(delta * 5.0, 1.0))
+		_scroll += delta * SCROLL_SPEED
+		_place_lineup()
+		_place_plate()
+		queue_redraw()
 
-	## Puts the next SRs in the front spots; animated: the old pair fades out, the new one slides in
-	func _show_pair(animated: bool) -> void:
-		if _sliding:
-			_sliding.kill()
-		var picks: Array[Dictionary] = []
-		for i in mini(SR_SPOTS.size(), _sr.size()):
-			picks.append(_sr[(_next + i) % _sr.size()])
-		if not _sr.is_empty():
-			_next = (_next + SR_SPOTS.size()) % _sr.size()
-		if not animated:
-			_fill_slots(picks)
-			return
-		_sliding = create_tween()
-		for slot in _slots:
-			_sliding.parallel().tween_property(slot.rect, "modulate:a", 0.0, 0.3)
-			_sliding.parallel().tween_property(slot.tag, "modulate:a", 0.0, 0.3)
-		_sliding.tween_callback(_fill_slots.bind(picks))
-		for i in _slots.size():
-			var slot: Dictionary = _slots[i]
-			slot.rect.set_meta("slide", 60.0)
-			var slide := _sliding.parallel().tween_method(_set_slide.bind(slot.rect), 60.0, 0.0, 0.45).set_delay(0.1 * i)
-			slide.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-			_sliding.parallel().tween_property(slot.rect, "modulate:a", 1.0, 0.35).set_delay(0.1 * i)
-			_sliding.parallel().tween_property(slot.tag, "modulate:a", 1.0, 0.35).set_delay(0.15 + 0.1 * i)
-
-	func _set_slide(value: float, rect: TextureRect) -> void:
-		rect.set_meta("slide", value)
-
-	func _fill_slots(picks: Array[Dictionary]) -> void:
-		for i in _slots.size():
-			var slot: Dictionary = _slots[i]
-			var on := i < picks.size()
-			slot.rect.visible = on
-			slot.tag.visible = on
-			if on:
-				slot.rect.texture = picks[i].texture
-				slot.label.text = picks[i].name
-				slot.tag.reset_size()
-		_place()
-
-	func _place() -> void:
-		if size.y <= 0.0:
-			return
-		var area := maxf(size.x - start_x, 1.0)
-		# SSRs: evenly spread across the art area, overlapping, alternating a little in height, swaying gently
-		var h := size.y * SSR_HEIGHT
-		var w := h * SSR_ASPECT
-		_ssr_material.set_shader_parameter("rect_size", Vector2(w, h))
-		var n := _ssr.size()
-		var step := 0.0 if n <= 1 else minf((area - w) / (n - 1), w * 0.85)
-		var group := w + step * maxi(n - 1, 0)
-		var left := start_x + (area - group) * 0.5
+	func _target_widths() -> Array[float]:
+		var out: Array[float] = []
+		var n := _heroes.size()
+		var area := maxf(size.x - start_x - size.y * SKEW, 1.0)
+		if n == 0:
+			return out
+		if n <= 2:
+			for i in n:
+				out.append(area / n)
+			return out
+		var active := area * ACTIVE_SHARE
+		var rest := (area - active) / (n - 1)
 		for i in n:
-			var sway := sin(_t * 0.6 + i * 1.3) * 4.0
-			_ssr[i].size = Vector2(w, h)
-			_ssr[i].position = Vector2(left + i * step + sway, -size.y * (0.02 if i % 2 == 0 else -0.04))
-		# The SR pair in front, feet on the bottom edge
-		var sh := size.y * SR_HEIGHT
-		var sw := sh * SR_ASPECT
-		_sr_material.set_shader_parameter("rect_size", Vector2(sw, sh))
-		for i in _slots.size():
-			var slot: Dictionary = _slots[i]
-			var slide := float(slot.rect.get_meta("slide", 0.0))
-			var cx: float = start_x + area * SR_SPOTS[i] + slide
-			slot.rect.size = Vector2(sw, sh)
-			slot.rect.position = Vector2(cx - sw * 0.5, size.y - sh + size.y * 0.02)
-			var tag: Control = slot.tag
-			tag.position = Vector2(cx - tag.size.x * 0.5, slot.rect.position.y + sh * 0.06)
+			out.append(active if i == _active else rest)
+		return out
+
+	## The four corners of panel i (leaning right: the top is shifted by SKEW x height)
+	func _panel(i: int) -> PackedVector2Array:
+		var lean := size.y * SKEW
+		var x := start_x
+		for k in i:
+			x += _widths[k]
+		var w: float = _widths[i]
+		var l := x + GAP * 0.5
+		var r := x + w - GAP * 0.5
+		return PackedVector2Array([Vector2(l + lean, 0), Vector2(r + lean, 0), Vector2(r, size.y), Vector2(l, size.y)])
+
+	## Drawn in passes, so overlays never sit under a neighbour's picture: pictures, then veils and fades, then the
+	## spotlight's sheen, then the outlines on top
+	func _draw() -> void:
+		if _heroes.is_empty() or _widths.size() != _heroes.size():
+			return
+		var panels: Array[PackedVector2Array] = []
+		for i in _heroes.size():
+			panels.append(_panel(i))
+		var white := Color.WHITE
+		var clear := Color(0, 0, 0, 0)
+		# 1. The pictures, cropped to cover each panel's bounding box (faces sit high in portraits: crop near the top)
+		for i in _heroes.size():
+			var pts := panels[i]
+			var texture: Texture2D = _heroes[i].texture
+			var box := Rect2(pts[3].x, 0, pts[1].x - pts[3].x, size.y)
+			var tex := texture.get_size()
+			var zoom := maxf(box.size.x / tex.x, box.size.y / tex.y)
+			var src := box.size / zoom
+			var origin := Vector2((tex.x - src.x) * 0.5, (tex.y - src.y) * 0.12)
+			var uvs := PackedVector2Array()
+			for p in pts:
+				uvs.append((origin + (p - box.position) / zoom) / tex)
+			draw_polygon(pts, PackedColorArray([white, white, white, white]), uvs, texture)
+		# 2. A dark veil over the panels outside the spotlight, a fade along every bottom, a sheen on the spotlit one
+		for i in _heroes.size():
+			var pts := panels[i]
+			if i != _active:
+				var veil := Color(0.02, 0.03, 0.08, DIM_ALPHA)
+				draw_polygon(pts, PackedColorArray([veil, veil, veil, veil]))
+			var low := PackedVector2Array([pts[0].lerp(pts[3], 0.55), pts[1].lerp(pts[2], 0.55), pts[2], pts[3]])
+			draw_polygon(low, PackedColorArray([clear, clear, Color(0, 0, 0, 0.7), Color(0, 0, 0, 0.7)]))
+		# 3. A sheen down the spotlit panel's left edge
+		var lit := panels[_active]
+		draw_polygon(PackedVector2Array([lit[0], lit[0].lerp(lit[1], 0.35), lit[3].lerp(lit[2], 0.35), lit[3]]),
+			PackedColorArray([Color(1, 1, 1, 0.12), clear, clear, Color(1, 1, 1, 0.05)]))
+		# 4. Outlines: faint for the rest, a gold frame with a glow for the spotlight (drawn last, on top)
+		for i in _heroes.size():
+			if i == _active:
+				continue
+			var outline := panels[i].duplicate()
+			outline.append(panels[i][0])
+			draw_polyline(outline, Color(1, 1, 1, 0.18), 1.5, true)
+		var frame := panels[_active].duplicate()
+		frame.append(panels[_active][0])
+		draw_polyline(frame, Color(GOLD, 0.25), 8.0, true)
+		draw_polyline(frame, GOLD, 2.5, true)
+
+	## The name plate sits at the top of the spotlit panel
+	func _place_plate() -> void:
+		if _heroes.is_empty() or _widths.size() != _heroes.size():
+			return
+		var pts := _panel(_active)
+		var rise := float(_plate.get_meta("rise", 0.0))
+		_plate.position = Vector2(pts[0].x + 10.0, 16.0 + rise)
+		GachaBanner._fit(_plate_name, 34, 18, maxf(pts[1].x - pts[0].x - 16.0, 60.0))
+
+	## The lineup strip along the bottom left; it loops sideways when the cards don't all fit
+	func _place_lineup() -> void:
+		var top := size.y - CARD.y - 22.0
+		var fits := not _cards.is_empty() and top - 18.0 >= lineup_top_min
+		_lineup.visible = fits
+		_lineup_title.visible = fits
+		if not fits:
+			return
+		_lineup_title.position = Vector2(EDGE, top - 18.0)
+		_lineup.position = Vector2(EDGE, top)
+		_lineup.size = Vector2(lineup_width, CARD.y + 6.0)
+		var step := CARD.x + CARD_GAP
+		var total := _cards.size() * step
+		var loop := total > lineup_width
+		var period := maxf(total, lineup_width + step)
+		for i in _cards.size():
+			var x := i * step
+			if loop:
+				x = fposmod(i * step - _scroll, period) - step
+			_cards[i].position = Vector2(x, 2.0)
 
 ## Progress towards the guaranteed SSR: a pink-to-gold fill with a shine; it pulses once the guarantee is close
 class PityBar extends Control:
