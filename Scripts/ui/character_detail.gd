@@ -538,7 +538,7 @@ func _fill_equipment_options(option: OptionButton, slot_key: String) -> void:
 	option.set_item_metadata(0, 0)
 	var current := int(GameState.get_owned(_uid).equips[slot_key])
 	for entry in GameState.list_equipment(slot_key):
-		var text := "%s %s" % [entry.data.display_name, _mods_text(entry.data)]
+		var text := "%s %s" % [gear_name(entry.data, entry.plus), mods_text(entry.data.modifiers(entry.plus))]
 		var wearer := GameState.equipped_by(entry.uid)
 		if wearer != 0 and wearer != _uid:
 			text = Terms.t("equip_worn_by", {"item": text, "owner": GameState.get_character(wearer).display_name})
@@ -549,9 +549,14 @@ func _fill_equipment_options(option: OptionButton, slot_key: String) -> void:
 	if current == 0:
 		option.selected = 0
 
-static func _mods_text(e: EquipmentData) -> String:
+## "SR Frying Pan +2" (no "+0")
+static func gear_name(e: EquipmentData, plus: int) -> String:
+	var text := "%s %s" % [Terms.rarity_name(e.rarity), e.display_name]
+	return text + (" +%d" % plus if plus > 0 else "")
+
+## "(ATK +18, SPD -6)" for a modifiers dictionary ("" when empty)
+static func mods_text(mods: Dictionary) -> String:
 	var parts: PackedStringArray = []
-	var mods := e.modifiers()
 	for stat in mods:
 		parts.append("%s %+d" % [Terms.stat_short(stat), mods[stat]])
 	return "(%s)" % ", ".join(parts) if not parts.is_empty() else ""

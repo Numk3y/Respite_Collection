@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"wet_floor_mop"
+display_name = "Wet Floor Mop"
+slot = 0
+rarity = 2
+description = "Caution: the floor isn't the only thing getting hit."
+attack = 16
+accuracy = 4

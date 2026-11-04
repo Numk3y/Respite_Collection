@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"party_shades"
+display_name = "Party Shades"
+slot = 2
+rarity = 2
+description = "Can't hit what you can't make eye contact with."
+evasion = 10
+speed = 3

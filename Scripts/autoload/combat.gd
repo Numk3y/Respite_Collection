@@ -81,6 +81,26 @@ func world_boss_fight(event: EventData, seed: int) -> Dictionary:
 	result.report = {"world_boss": true, "damage": damage}
 	return result
 
+## Which piece a map drops: first a rarity (GameState.GEAR_DROP_WEIGHTS, between the rarities on the list), then
+## an even pick among the list's pieces of that rarity
+func _roll_drop(list: Array[EquipmentData]) -> EquipmentData:
+	var by_rarity := {}
+	for e in list:
+		if e:
+			by_rarity.get_or_add(e.rarity, []).append(e)
+	var total := 0
+	for rarity in by_rarity:
+		total += int(GameState.GEAR_DROP_WEIGHTS.get(rarity, 1))
+	if total <= 0:
+		return null
+	var roll := _rng.randi_range(1, total)
+	for rarity in by_rarity:
+		roll -= int(GameState.GEAR_DROP_WEIGHTS.get(rarity, 1))
+		if roll <= 0:
+			var pieces: Array = by_rarity[rarity]
+			return pieces[_rng.randi_range(0, pieces.size() - 1)]
+	return null
+
 ## EXP after this battle's share (Auto Run pays half); anything above 0 stays at least 1
 func _scaled_exp(amount: int) -> int:
 	return 0 if amount <= 0 else maxi(roundi(amount * _live_exp_mult), 1)
@@ -131,9 +151,10 @@ func _grant_rewards(stage: StageData, result: Dictionary) -> Dictionary:
 		var range_v: Vector2i = stage.reward_materials[key]
 		report.materials[key] = _rng.randi_range(range_v.x, range_v.y)
 	if not stage.equipment_drops.is_empty() and _rng.randf() < stage.drop_chance:
-		var drop: EquipmentData = stage.equipment_drops[_rng.randi_range(0, stage.equipment_drops.size() - 1)]
-		GameState.add_equipment(drop)
-		report.drops.append(drop.display_name)
+		var drop := _roll_drop(stage.equipment_drops)
+		if drop:
+			GameState.add_equipment(drop)
+			report.drops.append(Terms.t("gear_drop_name", {"rarity": Terms.rarity_name(drop.rarity), "name": drop.display_name}))
 	# Credit Cards: a bonus for the first win on each map (the animatronic wave's card is granted in finish_sortie)
 	if GameState.mark_stage_cleared(stage.id):
 		report.first_clear_cards = GameState.FIRST_CLEAR_CREDIT_CARDS

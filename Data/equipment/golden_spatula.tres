@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"golden_spatula"
+display_name = "Golden Spatula"
+slot = 0
+rarity = 3
+description = "Flips burgers. Flips enemies. Flips the whole fight."
+attack = 28
+accuracy = 6

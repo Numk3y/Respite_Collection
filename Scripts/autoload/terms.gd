@@ -32,6 +32,8 @@ const TERMS := {
 	"tab_event": "Event",
 	"tab_commission": "Commissions",
 	"tab_casino": "Casino",
+	"tab_workshop": "Workshop",
+	"parts": "Parts",
 	"dealer_name": "Bogsy",
 	"roulette_host": "Nilla",
 
@@ -100,6 +102,41 @@ const TEXT := {
 	# Pieces of the battle result line
 	"report_material": ", {material} ×{amount}",
 	"report_drop": ", found {item}",
+	"gear_drop_name": "{rarity} {name}",
+
+	# Workshop (Scripts/ui/workshop_tab.gd) and its crafting reel (Scripts/ui/craft_reel.gd)
+	"workshop_banner": "WORKSHOP",
+	"workshop_parts": "{parts}: {amount}",
+	"workshop_intro": "Scrap {equipment} you don't need into {parts}, then spend {parts} and {money} to upgrade your favourites or craft exactly the piece you want. A piece can be crafted once you've cleared a {stage} that drops it.",
+	"workshop_tab_bag": "{equipment} Bag",
+	"workshop_tab_craft": "Craft",
+	"workshop_filter_all": "All",
+	"workshop_empty": "No {equipment} here yet. Win {stages} to find some.",
+	"workshop_worn": "On {name}",
+	"workshop_spare": "Spare",
+	"workshop_upgrade": "Upgrade to +{next}\n{p} {parts} · {m} {money}",
+	"workshop_maxed": "Max +{max}",
+	"workshop_scrap": "Scrap\n+{p} {parts}",
+	"workshop_scrap_worn": "Take it off {name} before scrapping it.",
+	"workshop_scrap_title": "Scrap this {equipment}?",
+	"workshop_scrap_text": "{item} will be broken down into {p} {parts}. This can't be undone.",
+	"workshop_scrap_ok": "Scrap it",
+	"workshop_scrap_spare": "Scrap spare R +0 (+{p} {parts})",
+	"workshop_scrap_spare_title": "Scrap spare R {equipment}?",
+	"workshop_scrap_spare_text": "Every R piece at +0 that nobody is wearing ({count}) will be broken down into {p} {parts}. This can't be undone.",
+	"workshop_owned": "Owned: {count}",
+	"workshop_craft": "Craft\n{p} {parts} · {m} {money}",
+	"workshop_locked": "Clear {map} to unlock",
+	"workshop_locked_none": "Not dropped on any {stage} yet",
+	"reel_title": "Forging {item}",
+	"reel_hint": "Feeling lucky? Strike and see where the reel stops! FINE gives the new piece a free +1, MASTERWORK a free +2.",
+	"reel_stop": "STRIKE!",
+	"reel_quality_0": "STANDARD",
+	"reel_quality_1": "FINE",
+	"reel_quality_2": "MASTERWORK",
+	"reel_close": "So close!",
+	"reel_result": "Crafted {item}!",
+	"reel_continue": "Nice!",
 
 	# Save backups
 	"storage_warning": "This browser isn't keeping saved data (private window or blocked storage). Your progress will be lost when you close the tab, so download a backup before you leave.",
@@ -127,6 +164,7 @@ const TEXT := {
 	"test_money": "+10,000 {money}",
 	"test_cards": "+10 {credit_cards}",
 	"test_animatronics": "Animatronics next {sortie}",
+	"test_parts": "+100 {parts}",
 
 	# Map selection
 	"map_title": "Choose a {stage}",
@@ -142,7 +180,7 @@ const TEXT := {
 	"map_locked": "Locked: clear {previous} first.",
 	"map_chapter_locked": "Locked: defeat the {chapter} {previous} boss ({code}) to open this {chapter}.",
 	"map_coming_soon": "{code}  Coming soon",
-	"map_banner": "SORTIE",
+	"map_banner": "{sortie}",
 	"map_tab_locked": "{chapter} {number} (Locked)",
 	"map_next": "NEXT",
 	"map_battles": "{count} {sortie}s",
@@ -151,7 +189,7 @@ const TEXT := {
 	"map_reward_money": "{amount} {money}",
 	"map_reward_material": "{material} {min}-{max}",
 	"map_reward_exp": "{amount} {exp} each",
-	"map_reward_gear": "{chance}% gear drop",
+	"map_reward_gear": "{chance}% gear drop ({rarities})",
 	"map_reward_first": "First clear: +{amount} {credit_cards}",
 
 	# Commissions (part-time jobs)

@@ -11,13 +11,19 @@
 [ext_resource type="Resource" path="res://Data/enemies/eboy.tres" id="9"]
 [ext_resource type="Resource" path="res://Data/enemies/screaming_kid.tres" id="10"]
 [ext_resource type="Resource" path="res://Data/enemies/dollar_mic_kid.tres" id="11"]
-[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="12"]
-[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="13"]
-[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="14"]
-[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="15"]
-[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="16"]
-[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="17"]
 [ext_resource type="Texture2D" path="res://Art/backgrounds/Mcdonald.png" id="18"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="gear_frying_pan"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="gear_heavy_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="gear_energy_drink"]
+[ext_resource type="Resource" path="res://Data/equipment/broken_bottle.tres" id="gear_broken_bottle"]
+[ext_resource type="Resource" path="res://Data/equipment/leather_jacket.tres" id="gear_leather_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/party_shades.tres" id="gear_party_shades"]
+[ext_resource type="Resource" path="res://Data/equipment/wet_floor_mop.tres" id="gear_wet_floor_mop"]
+[ext_resource type="Resource" path="res://Data/equipment/grease_apron.tres" id="gear_grease_apron"]
+[ext_resource type="Resource" path="res://Data/equipment/employee_badge.tres" id="gear_employee_badge"]
+[ext_resource type="Resource" path="res://Data/equipment/golden_spatula.tres" id="gear_golden_spatula"]
+[ext_resource type="Resource" path="res://Data/equipment/mascot_costume.tres" id="gear_mascot_costume"]
+[ext_resource type="Resource" path="res://Data/equipment/mystery_toy.tres" id="gear_mystery_toy"]
 [sub_resource type="Resource" id="wave_1"]
 script = ExtResource("4")
 enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5")])
@@ -47,7 +53,7 @@ waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), S
 reward_money = 380
 exp_reward = 110
 reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(2, 3), "snack": Vector2i(3, 5)})
-equipment_drops = Array[ExtResource("3")]([ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17")])
-drop_chance = 0.1
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_frying_pan"), ExtResource("gear_heavy_jacket"), ExtResource("gear_energy_drink"), ExtResource("gear_broken_bottle"), ExtResource("gear_leather_jacket"), ExtResource("gear_party_shades"), ExtResource("gear_wet_floor_mop"), ExtResource("gear_grease_apron"), ExtResource("gear_employee_badge"), ExtResource("gear_golden_spatula"), ExtResource("gear_mascot_costume"), ExtResource("gear_mystery_toy")])
+drop_chance = 0.14
 star_goal = 1
 star_goal_value = 30

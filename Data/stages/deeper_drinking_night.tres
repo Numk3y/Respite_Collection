@@ -11,12 +11,18 @@
 [ext_resource type="Resource" path="res://Data/enemies/sigma_male.tres" id="9"]
 [ext_resource type="Resource" path="res://Data/enemies/unemployed_racist.tres" id="10"]
 [ext_resource type="Resource" path="res://Data/enemies/rizz_lord.tres" id="11"]
-[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="12"]
-[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="13"]
-[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="14"]
-[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="15"]
-[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="16"]
-[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="17"]
+[ext_resource type="Resource" path="res://Data/equipment/foam_bat.tres" id="gear_foam_bat"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="gear_water_gun"]
+[ext_resource type="Resource" path="res://Data/equipment/hoodie.tres" id="gear_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="gear_raincoat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_charm.tres" id="gear_lucky_charm"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="gear_smartwatch"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="gear_frying_pan"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="gear_heavy_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="gear_energy_drink"]
+[ext_resource type="Resource" path="res://Data/equipment/broken_bottle.tres" id="gear_broken_bottle"]
+[ext_resource type="Resource" path="res://Data/equipment/leather_jacket.tres" id="gear_leather_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/party_shades.tres" id="gear_party_shades"]
 
 [sub_resource type="Resource" id="wave_1"]
 script = ExtResource("4")
@@ -47,7 +53,7 @@ waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), S
 reward_money = 170
 exp_reward = 54
 reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(1, 3), "gossip": Vector2i(0, 1), "snack": Vector2i(3, 5)})
-equipment_drops = Array[ExtResource("3")]([ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17")])
-drop_chance = 0.09
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_foam_bat"), ExtResource("gear_water_gun"), ExtResource("gear_hoodie"), ExtResource("gear_raincoat"), ExtResource("gear_lucky_charm"), ExtResource("gear_smartwatch"), ExtResource("gear_frying_pan"), ExtResource("gear_heavy_jacket"), ExtResource("gear_energy_drink"), ExtResource("gear_broken_bottle"), ExtResource("gear_leather_jacket"), ExtResource("gear_party_shades")])
+drop_chance = 0.14
 star_goal = 2
 star_goal_value = 4

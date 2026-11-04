@@ -11,10 +11,15 @@
 [ext_resource type="Resource" path="res://Data/enemies/drunk_uncle.tres" id="9"]
 [ext_resource type="Resource" path="res://Data/enemies/karaoke_rival.tres" id="10"]
 [ext_resource type="Resource" path="res://Data/enemies/uncle_bourbon.tres" id="11"]
-[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="12"]
-[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="13"]
-[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="14"]
-[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/equipment/foam_bat.tres" id="gear_foam_bat"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="gear_water_gun"]
+[ext_resource type="Resource" path="res://Data/equipment/hoodie.tres" id="gear_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="gear_raincoat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_charm.tres" id="gear_lucky_charm"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="gear_smartwatch"]
+[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="gear_frying_pan"]
+[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="gear_heavy_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="gear_energy_drink"]
 
 [sub_resource type="Resource" id="wave_1"]
 script = ExtResource("4")
@@ -50,7 +55,7 @@ waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), S
 reward_money = 200
 exp_reward = 60
 reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(2, 3), "gossip": Vector2i(1, 2), "snack": Vector2i(3, 6)})
-equipment_drops = Array[ExtResource("3")]([ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])
-drop_chance = 0.15
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_foam_bat"), ExtResource("gear_water_gun"), ExtResource("gear_hoodie"), ExtResource("gear_raincoat"), ExtResource("gear_lucky_charm"), ExtResource("gear_smartwatch"), ExtResource("gear_frying_pan"), ExtResource("gear_heavy_jacket"), ExtResource("gear_energy_drink")])
+drop_chance = 0.22
 star_goal = 0
 star_goal_value = 40

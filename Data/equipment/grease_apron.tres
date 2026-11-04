@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"grease_apron"
+display_name = "Grease Apron"
+slot = 1
+rarity = 2
+description = "Fryer-tested. Hits just slide off."
+defense = 14
+evasion = 3

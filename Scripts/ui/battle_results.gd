@@ -56,15 +56,23 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	for side in ["left", "right"]:
 		margin.add_theme_constant_override("margin_" + side, 40)
 	for side in ["top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 18)
+		margin.add_theme_constant_override("margin_" + side, 10)
 	add_child(margin)
+	# Scrolls when a short window can't fit everything (long reward lines on a first clear, six friends),
+	# so the buttons at the bottom can always be reached
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.clip_contents = false  # the title's scale-in pop would otherwise get cut off at the edges
+	margin.add_child(scroll)
 	_content = VBoxContainer.new()
 	_content.alignment = BoxContainer.ALIGNMENT_CENTER
-	_content.add_theme_constant_override("separation", 10)
-	margin.add_child(_content)
+	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_content.add_theme_constant_override("separation", 6)
+	scroll.add_child(_content)
 
 	var title_key := "results_world_boss" if boss else ("results_victory" if win else "results_defeat")
-	var title := _label(Terms.t(title_key), 64, GOLD if win else DEFEAT_RED)
+	var title := _label(Terms.t(title_key), 52, GOLD if win else DEFEAT_RED)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_constant_override("outline_size", 18)
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
@@ -167,7 +175,7 @@ func _award_card(title: String, color: Color, winner: Dictionary, key: String) -
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	var art := CharArt.new()
-	art.custom_minimum_size = Vector2(70, 86)
+	art.custom_minimum_size = Vector2(58, 72)
 	if not winner.is_empty() and winner.data:
 		art.set_character(winner.data)
 	else:
@@ -194,7 +202,7 @@ func _breakdown(friends: Array[Dictionary], best: Dictionary) -> Control:
 	var grid := GridContainer.new()
 	grid.columns = 4
 	grid.add_theme_constant_override("h_separation", 18)
-	grid.add_theme_constant_override("v_separation", 5)
+	grid.add_theme_constant_override("v_separation", 2)
 	panel.add_child(grid)
 	grid.add_child(_label(Terms.t("results_friend"), 13, UITheme.TEXT_DIM))
 	var heads := {"dealt": "results_dealt", "taken": "results_taken", "healed": "results_healed"}
@@ -353,7 +361,7 @@ class StatBar extends Control:
 
 	func _init(color: Color) -> void:
 		_color = color
-		custom_minimum_size = Vector2(150, 22)
+		custom_minimum_size = Vector2(150, 20)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func set_amount(value: float) -> void:
@@ -364,10 +372,10 @@ class StatBar extends Control:
 		var font := ThemeDB.fallback_font
 		var text := CurrencyChip._group(_amount)
 		var text_w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
-		var bar := Rect2(0, 7, size.x - text_w - 10, 9)
+		var bar := Rect2(0, 6, size.x - text_w - 10, 9)
 		draw_rect(bar, Color(1, 1, 1, 0.07))
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fill, bar.size.y)), _color)
 		if top and fill > 0.0:
 			draw_rect(Rect2(bar.position, Vector2(bar.size.x * fill, bar.size.y)), Color(1, 1, 1, 0.8), false, 1.5)
-		draw_string(font, Vector2(size.x - text_w, 17), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
+		draw_string(font, Vector2(size.x - text_w, 16), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15,
 			Color.WHITE if _amount > 0 else UITheme.TEXT_DIM)

@@ -94,7 +94,7 @@ func _build_header() -> Control:
 	style.shadow_color = Color("#ff6b4a", 0.4)
 	style.shadow_size = 10
 	plate.add_theme_stylebox_override("panel", style)
-	_banner_label = _label(Terms.t("map_banner"), 24, Color.WHITE)
+	_banner_label = _label(Terms.t("map_banner").to_upper(), 24, Color.WHITE)
 	plate.add_child(_banner_label)
 	header.add_child(plate)
 	_hint_label = _label(Terms.t("map_title"), 15, UITheme.TEXT_DIM)
@@ -368,7 +368,14 @@ func _select_stage(stage: StageData) -> void:
 	if stage.exp_reward > 0:
 		_rewards.add_child(_reward_line(Terms.t("map_reward_exp", {"amount": stage.exp_reward}), Color("#93c5fd")))
 	if not stage.equipment_drops.is_empty():
-		_rewards.add_child(_reward_line(Terms.t("map_reward_gear", {"chance": roundi(stage.drop_chance * 100)}), Color("#c4b5fd")))
+		var rarities: Array[int] = []
+		for e in stage.equipment_drops:
+			if e and not rarities.has(int(e.rarity)):
+				rarities.append(int(e.rarity))
+		rarities.sort()
+		var names := PackedStringArray(rarities.map(func(r): return Terms.rarity_name(r)))
+		_rewards.add_child(_reward_line(Terms.t("map_reward_gear", {"chance": roundi(stage.drop_chance * 100),
+			"rarities": "/".join(names)}), Color("#c4b5fd")))
 	if not cleared:
 		_rewards.add_child(_reward_line(Terms.t("map_reward_first", {"amount": GameState.FIRST_CLEAR_CREDIT_CARDS}), Color("#ffe259")))
 	if (bits & 6) != 6:  # a 2nd or 3rd star still to earn

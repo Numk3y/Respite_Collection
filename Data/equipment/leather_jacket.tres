@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"leather_jacket"
+display_name = "Leather Jacket"
+slot = 1
+rarity = 2
+description = "Looks cool, smells like the bar, stops a punch."
+defense = 12
+evasion = 4

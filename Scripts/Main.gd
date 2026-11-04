@@ -1,5 +1,5 @@
 extends Control
-## Screen flow: starter pick -> Home (tabs: Home / Team / Recruit / Commissions / Casino / Friends / Event) -> Battle -> Map selection -> Battle screen.
+## Screen flow: starter pick -> Home (tabs: Home / Team / Workshop / Recruit / Commissions / Casino / Friends / Event) -> Battle -> Map selection -> Battle screen.
 ## Event tab -> event missions (Map selection in event mode) or the World Boss fight -> Battle screen.
 ## All text comes from Terms (Scripts/autoload/terms.gd).
 
@@ -242,6 +242,9 @@ func _show_main(tab: int = 0) -> void:
 	root.add_child(tabs)
 	tabs.add_child(_build_home_tab())
 	tabs.add_child(_build_team_tab())
+	var workshop := WorkshopTab.new()
+	workshop.name = Terms.term("tab_workshop")
+	tabs.add_child(workshop)
 	tabs.add_child(_build_gacha_tab())
 	var commissions := CommissionTab.new()
 	commissions.name = Terms.term("tab_commission")
@@ -304,6 +307,7 @@ func _refresh_roster() -> void:
 	_refresh_team()
 	if is_instance_valid(_home_hint):
 		_home_hint.text = _team_problem()
+		_home_hint.visible = _home_hint.text != ""
 	_refresh_featured()
 
 ## Gacha-style lobby: the featured friend standing in the Mirror Room on the left, big action buttons on the right
@@ -327,26 +331,33 @@ func _build_home_tab() -> Control:
 	welcome.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	_mirror_room.add_child(welcome)
 
+	# The side column scrolls if a short window can't fit it all (otherwise the bottom rows get cut off)
+	var side_scroll := ScrollContainer.new()
+	side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	side_scroll.custom_minimum_size.x = 300
+	tab.add_child(side_scroll)
 	var side := VBoxContainer.new()
-	side.custom_minimum_size.x = 300
-	side.add_theme_constant_override("separation", 10)
-	tab.add_child(side)
+	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 8)
+	side_scroll.add_child(side)
 	var battle := _button(Terms.t("sortie_button"), _show_map_select, 30)
 	_sortie_button = battle
 	battle.theme_type_variation = &"PrimaryButton"
-	battle.custom_minimum_size.y = 92
+	battle.custom_minimum_size.y = 76
 	side.add_child(battle)
 	_home_hint = _wrapped_label("")
 	_home_hint.add_theme_color_override("font_color", Color("#fca5a5"))
+	_home_hint.visible = false
 	side.add_child(_home_hint)
 	# Beginner Missions: shows how many are ready to claim; gone once everything (and the free SSR) is claimed
 	_beginner_button = _button(Terms.t("beginner_button"), _open_beginner, 18)
-	_beginner_button.custom_minimum_size.y = 48
+	_beginner_button.custom_minimum_size.y = 44
 	_beginner_button.add_theme_color_override("font_color", UITheme.GOLD)
 	side.add_child(_beginner_button)
 	for key in ["tab_team", "tab_gacha", "tab_commission", "tab_casino"]:
 		var go := _button(Terms.term(key), _go_to_tab.bind(Terms.term(key)), 20)
-		go.custom_minimum_size.y = 52
+		go.custom_minimum_size.y = 46
 		side.add_child(go)
 		if key == "tab_gacha":
 			_recruit_button = go
@@ -572,6 +583,7 @@ func _open_test_mode() -> void:
 	box.add_child(currency_row)
 	currency_row.add_child(_button(Terms.t("test_money"), GameState.add_money.bind(10000)))
 	currency_row.add_child(_button(Terms.t("test_cards"), GameState.add_credit_cards.bind(10)))
+	currency_row.add_child(_button(Terms.t("test_parts"), GameState.add_parts.bind(100)))
 	currency_row.add_child(_button(Terms.t("test_animatronics"), func(): Combat.force_animatronics = true))
 
 	var scroll := ScrollContainer.new()

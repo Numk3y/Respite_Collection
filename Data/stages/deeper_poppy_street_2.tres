@@ -10,11 +10,12 @@
 [ext_resource type="Resource" path="res://Data/enemies/tipsy_bartender.tres" id="8"]
 [ext_resource type="Resource" path="res://Data/enemies/drunk_uncle.tres" id="9"]
 [ext_resource type="Resource" path="res://Data/enemies/karaoke_rival.tres" id="10"]
-[ext_resource type="Resource" path="res://Data/equipment/frying_pan.tres" id="11"]
-[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="12"]
-[ext_resource type="Resource" path="res://Data/equipment/heavy_jacket.tres" id="13"]
-[ext_resource type="Resource" path="res://Data/equipment/energy_drink.tres" id="14"]
-[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/equipment/foam_bat.tres" id="gear_foam_bat"]
+[ext_resource type="Resource" path="res://Data/equipment/water_gun.tres" id="gear_water_gun"]
+[ext_resource type="Resource" path="res://Data/equipment/hoodie.tres" id="gear_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/raincoat.tres" id="gear_raincoat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_charm.tres" id="gear_lucky_charm"]
+[ext_resource type="Resource" path="res://Data/equipment/smartwatch.tres" id="gear_smartwatch"]
 
 [sub_resource type="Resource" id="wave_1"]
 script = ExtResource("4")
@@ -45,7 +46,7 @@ waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), S
 reward_money = 100
 exp_reward = 34
 reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(1, 2), "gossip": Vector2i(0, 1), "snack": Vector2i(2, 5)})
-equipment_drops = Array[ExtResource("3")]([ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])
-drop_chance = 0.07
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_foam_bat"), ExtResource("gear_water_gun"), ExtResource("gear_hoodie"), ExtResource("gear_raincoat"), ExtResource("gear_lucky_charm"), ExtResource("gear_smartwatch")])
+drop_chance = 0.13
 star_goal = 3
 star_goal_value = 1

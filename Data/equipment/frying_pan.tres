@@ -7,6 +7,7 @@ script = ExtResource("1")
 id = &"frying_pan"
 display_name = "Frying Pan"
 slot = 0
+rarity = 2
 description = "Heavy hitter, slow swing."
 attack = 18
 speed = -6

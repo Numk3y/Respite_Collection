@@ -182,8 +182,8 @@ const PASSIVE_EFFECTS := {
 	# included (a taunt still pulls them). Without a tank holding a taunt, the back row gets picked off.
 	# Enrage: Attack x(1 + `enrage`) for every action it has taken, compounding, so a long fight needs real sustain.
 	&"full_metal_kit": {"damage_reduction": 0.25, "enrage": 0.04},
-	# Taking down an enemy: `speed` Speed and +`damage` damage for its next N own actions, and each single-target
-	# hit that lands splashes onto another living enemy for `splash` of the damage (can't miss). Then it can't
+	# Taking down an enemy: `speed` Speed and +`damage` damage for its next N own actions, and each hit that
+	# lands (every target of an area attack too) splashes onto another living enemy for `splash` of the damage (can't miss). Then it can't
 	# trigger again until `cooldown` own actions after the takedown.
 	&"until_next_time": {"speed": -0.3, "damage": 0.65, "splash": 0.5, "turns": 3, "cooldown": 5},
 }
@@ -1216,15 +1216,17 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 		cleaved = units.filter(func(u): return u.side == enemy_side and _alive(u) and u.vanguard == main.vanguard and u.index != main.index)
 		if not cleaved.is_empty() and record:
 			event.lines.append(Terms.t("log_cleave", {"attacker": actor.name, "skill": actor.passive.name}))
-	var landed := false
+	var landed_on: Array = []
 	for target in targets:
 		var hit := _attack(actor, target, rng, record, event, mult)
 		event.hits.append(hit)
-		landed = hit.hit
-	# Passive Until Next Time: a single-target hit that lands splashes onto another enemy
+		if hit.hit:
+			landed_on.append(target)
+	# Passive Until Next Time: every hit that lands splashes onto another enemy (each target of an area attack too)
 	var splash := _flag_buff(actor, "splash")
-	if targets.size() == 1 and all_enemies.is_empty() and not splash.is_empty() and landed:
-		_splash(actor, targets[0], float(splash.splash) * mult, rng, record, event)
+	if all_enemies.is_empty() and not splash.is_empty():
+		for target in landed_on:
+			_splash(actor, target, float(splash.splash) * mult, rng, record, event)
 	for target in cleaved:
 		if _alive(target):
 			event.hits.append(_attack(actor, target, rng, record, event, mult * float(unfazed.cleave_mult)))

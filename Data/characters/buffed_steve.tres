@@ -33,6 +33,7 @@ evasion = 0
 accuracy = 65
 speed = 50
 portrait_path = "res://Art/characters/Steve.png"
+cutin_path = "res://Art/cutins/Steve.png"
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 ultimate_max = 50

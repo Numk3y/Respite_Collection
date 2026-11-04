@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mystery_toy"
+display_name = "Mystery Toy Prize"
+slot = 2
+rarity = 3
+description = "The rarest toy from the kids' meal. Lucky to have it."
+evasion = 10
+accuracy = 6
+speed = 8

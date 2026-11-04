@@ -4,6 +4,7 @@ extends Node
 signal money_changed(value: int)
 signal materials_changed
 signal roster_changed  # owned friends, team or gear changed
+signal gear_changed  # gear crafted, upgraded or scrapped, or Parts changed (gear that's gained also fires roster_changed)
 signal credit_cards_changed(value: int)
 signal account_changed  # account level or account EXP changed
 signal stats_changed  # a lifetime counter (data.stats) or beginner mission state changed
@@ -22,6 +23,19 @@ const TEAM_COUNT := 4
 const TEAM_SLOTS := 6
 const VANGUARD_SLOTS := 3  # slots 0-2 are vanguard, 3-5 rearguard
 const STARTER_EQUIPMENT := [&"foam_bat", &"hoodie", &"lucky_charm"]
+# Gear (the Workshop tab): scrap unwanted gear into Parts, spend Parts + Money to craft a chosen piece (any piece a
+# cleared map drops) or to upgrade one, +1 at a time up to GEAR_MAX_PLUS. Crafting costs about 4 scraps of the same
+# rarity, so farming a drop stays the quicker way and crafting is the way past bad luck.
+const GEAR_MAX_PLUS := 5
+const GEAR_SCRAP_PARTS := {CharacterData.Rarity.R: 1, CharacterData.Rarity.SR: 5, CharacterData.Rarity.SSR: 20}
+const GEAR_CRAFT_PARTS := {CharacterData.Rarity.R: 4, CharacterData.Rarity.SR: 20, CharacterData.Rarity.SSR: 80}
+const GEAR_CRAFT_MONEY := {CharacterData.Rarity.R: 200, CharacterData.Rarity.SR: 1000, CharacterData.Rarity.SSR: 4000}
+# Going from +(n-1) to +n costs n times these
+const GEAR_UPGRADE_PARTS := {CharacterData.Rarity.R: 1, CharacterData.Rarity.SR: 3, CharacterData.Rarity.SSR: 10}
+const GEAR_UPGRADE_MONEY := {CharacterData.Rarity.R: 100, CharacterData.Rarity.SR: 400, CharacterData.Rarity.SSR: 1500}
+const GEAR_SCRAP_REFUND := 0.5  # share of the Parts spent on upgrades that scrapping gives back
+# Which rarity a battle drop is: weights between the rarities on the map's drop list (see Combat._roll_drop)
+const GEAR_DROP_WEIGHTS := {CharacterData.Rarity.R: 70, CharacterData.Rarity.SR: 26, CharacterData.Rarity.SSR: 4}
 const FREE_FRIENDS := [&"coconutbird_caster"]  # everyone owns these: new accounts with their starter, older saves on load
 const MAX_LEVEL := 50
 # Friends can't go more than this many levels above the account level (and never past MAX_LEVEL), so Money and
@@ -86,6 +100,7 @@ func _ready() -> void:
 	money_changed.connect(func(_value): request_save())
 	materials_changed.connect(request_save)
 	roster_changed.connect(request_save)
+	gear_changed.connect(request_save)
 	credit_cards_changed.connect(func(_value): request_save())
 	account_changed.connect(request_save)
 	_grant_free_friends()
@@ -126,8 +141,9 @@ func _new_save() -> Dictionary:
 		"materials": {},
 		"owned": [],  # [{uid, char_id, level, exp, affection, locked, obtained_at, equips}]
 		"next_uid": 1,
-		"equipment": [],  # [{uid, equip_id}]
+		"equipment": [],  # [{uid, equip_id, plus}]; older saves have no "plus" (= +0)
 		"next_equip_uid": 1,
+		"gear_parts": 0,  # from scrapping gear; spent in the Workshop
 		"teams": teams,  # each team is 6 uids, 0 = empty slot
 		"pity": {},  # pool_id -> pulls since the last SSR
 		"pull_history": [],  # newest last, at most PULL_HISTORY_MAX: {char_id, rarity, pool, time}
@@ -588,10 +604,7 @@ func get_unit_stats(uid: int, with_equipment: bool = true) -> Dictionary:
 			stats[stat] = roundi(stats[stat] * bond_mult)
 	if with_equipment:
 		for slot_key in o.equips:
-			var e := get_equipment(int(o.equips[slot_key]))
-			if e == null:
-				continue
-			var mods := e.modifiers()
+			var mods := equipment_mods(int(o.equips[slot_key]))
 			for stat in mods:
 				stats[stat] += mods[stat]
 	stats.hp = maxi(stats.hp, 1)
@@ -875,29 +888,148 @@ func get_battle_team(index: int = 0) -> Dictionary:
 
 # ───────── Gear ─────────
 
-func add_equipment(e: EquipmentData) -> Dictionary:
-	var entry := {"uid": int(data.next_equip_uid), "equip_id": String(e.id)}
+func add_equipment(e: EquipmentData, plus: int = 0) -> Dictionary:
+	var entry := {"uid": int(data.next_equip_uid), "equip_id": String(e.id), "plus": clampi(plus, 0, GEAR_MAX_PLUS)}
 	data.next_equip_uid = entry.uid + 1
 	data.equipment.append(entry)
 	roster_changed.emit()
+	gear_changed.emit()
 	return entry
 
-func get_equipment(equip_uid: int) -> EquipmentData:
+func _equipment_entry(equip_uid: int) -> Dictionary:
 	if equip_uid == 0:
-		return null
+		return {}
 	for entry in data.equipment:
 		if int(entry.uid) == equip_uid:
-			return DB.equipment.get(StringName(entry.equip_id))
-	return null
+			return entry
+	return {}
 
-## All owned gear that fits a slot: [{uid, data}]
-func list_equipment(slot_key: String) -> Array[Dictionary]:
+func get_equipment(equip_uid: int) -> EquipmentData:
+	var entry := _equipment_entry(equip_uid)
+	return DB.equipment.get(StringName(entry.equip_id)) if not entry.is_empty() else null
+
+## A piece of gear's upgrade level (+0 .. GEAR_MAX_PLUS)
+func get_plus(equip_uid: int) -> int:
+	return int(_equipment_entry(equip_uid).get("plus", 0))
+
+## The stats a piece of gear adds at its upgrade level ({} for none)
+func equipment_mods(equip_uid: int) -> Dictionary:
+	var e := get_equipment(equip_uid)
+	return e.modifiers(get_plus(equip_uid)) if e else {}
+
+## All owned gear that fits a slot ("" = every slot): [{uid, data, plus}], best first (rarity, then +, then name)
+func list_equipment(slot_key: String = "") -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for entry in data.equipment:
 		var e: EquipmentData = DB.equipment.get(StringName(entry.equip_id))
-		if e and e.slot_key() == slot_key:
-			out.append({"uid": int(entry.uid), "data": e})
+		if e and (slot_key.is_empty() or e.slot_key() == slot_key):
+			out.append({"uid": int(entry.uid), "data": e, "plus": int(entry.get("plus", 0))})
+	out.sort_custom(func(a, b):
+		if a.data.rarity != b.data.rarity:
+			return a.data.rarity > b.data.rarity
+		if a.plus != b.plus:
+			return a.plus > b.plus
+		return a.data.display_name < b.data.display_name)
 	return out
+
+## How many copies of a piece of gear are owned
+func count_equipment(equip_id: StringName) -> int:
+	return data.equipment.filter(func(entry): return entry.equip_id == String(equip_id)).size()
+
+func get_parts() -> int:
+	return int(data.get("gear_parts", 0))
+
+func add_parts(amount: int) -> void:
+	data.gear_parts = maxi(get_parts() + amount, 0)
+	gear_changed.emit()
+
+## Parts a piece gives when scrapped: its rarity's share plus GEAR_SCRAP_REFUND of what its upgrades cost
+func scrap_value(equip_uid: int) -> int:
+	var e := get_equipment(equip_uid)
+	if e == null:
+		return 0
+	var spent := 0
+	for level in range(1, get_plus(equip_uid) + 1):
+		spent += int(GEAR_UPGRADE_PARTS.get(e.rarity, 1)) * level
+	return int(GEAR_SCRAP_PARTS.get(e.rarity, 1)) + floori(spent * GEAR_SCRAP_REFUND)
+
+## Breaks gear down into Parts. Gear someone is wearing can't be scrapped. Returns the Parts gained, or -1.
+func scrap_equipment(equip_uid: int) -> int:
+	var entry := _equipment_entry(equip_uid)
+	if entry.is_empty() or equipped_by(equip_uid) != 0:
+		return -1
+	var parts := scrap_value(equip_uid)
+	data.equipment.erase(entry)
+	add_parts(parts)
+	roster_changed.emit()
+	return parts
+
+## Parts and Money to go from the current upgrade level to the next ({} once at the max)
+func upgrade_cost(equip_uid: int) -> Dictionary:
+	var e := get_equipment(equip_uid)
+	var next := get_plus(equip_uid) + 1
+	if e == null or next > GEAR_MAX_PLUS:
+		return {}
+	return {"parts": int(GEAR_UPGRADE_PARTS.get(e.rarity, 1)) * next, "money": int(GEAR_UPGRADE_MONEY.get(e.rarity, 100)) * next}
+
+func can_upgrade(equip_uid: int) -> bool:
+	var cost := upgrade_cost(equip_uid)
+	return not cost.is_empty() and get_parts() >= cost.parts and get_money() >= cost.money
+
+## +1 to a piece of gear for its upgrade_cost. Returns false if it can't be done.
+func upgrade_equipment(equip_uid: int) -> bool:
+	if not can_upgrade(equip_uid):
+		return false
+	var cost := upgrade_cost(equip_uid)
+	add_money(-int(cost.money))
+	add_parts(-int(cost.parts))
+	var entry := _equipment_entry(equip_uid)
+	entry.plus = get_plus(equip_uid) + 1
+	roster_changed.emit()  # the wearer's stats changed
+	return true
+
+## A piece can be crafted once any cleared map drops it (the starter gear always can)
+func can_craft_unlocked(e: EquipmentData) -> bool:
+	if STARTER_EQUIPMENT.has(e.id):
+		return true
+	for stage in DB.stages:
+		if is_stage_cleared(stage.id) and stage.equipment_drops.has(e):
+			return true
+	return false
+
+## The first map that drops a piece (to tell the player where to unlock it), or null
+func first_map_dropping(e: EquipmentData) -> StageData:
+	for stage in DB.stages:
+		if stage.is_story() and stage.equipment_drops.has(e):
+			return stage
+	return null
+
+func craft_cost(e: EquipmentData) -> Dictionary:
+	return {"parts": int(GEAR_CRAFT_PARTS.get(e.rarity, 4)), "money": int(GEAR_CRAFT_MONEY.get(e.rarity, 200))}
+
+func can_craft(e: EquipmentData) -> bool:
+	var cost := craft_cost(e)
+	return can_craft_unlocked(e) and get_parts() >= cost.parts and get_money() >= cost.money
+
+## Pays for and makes a piece at +0 (the crafting minigame's bonus is added after with apply_craft_bonus, so
+## closing the game mid-minigame never loses what was paid). Returns the new entry, or {} if it can't be done.
+func craft_equipment(e: EquipmentData) -> Dictionary:
+	if not can_craft(e):
+		return {}
+	var cost := craft_cost(e)
+	add_money(-int(cost.money))
+	add_parts(-int(cost.parts))
+	add_stat("crafts")
+	return add_equipment(e)
+
+## The crafting minigame's result: free upgrade levels on the piece just made (capped at GEAR_MAX_PLUS)
+func apply_craft_bonus(equip_uid: int, bonus: int) -> void:
+	var entry := _equipment_entry(equip_uid)
+	if entry.is_empty() or bonus <= 0:
+		return
+	entry.plus = clampi(get_plus(equip_uid) + bonus, 0, GEAR_MAX_PLUS)
+	roster_changed.emit()
+	gear_changed.emit()
 
 ## uid of the friend wearing this gear, or 0
 func equipped_by(equip_uid: int) -> int:
