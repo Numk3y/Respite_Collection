@@ -691,8 +691,8 @@ func _apply_state(event: Dictionary) -> void:
 			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
 			view.energy_full = s.energy >= view.energy_bar.max_value
 			_refresh_ultimate(i)
-	_update_guide()
 		view.buffs.text = ", ".join(s.buffs)
+	_update_guide()
 
 ## A transformation starts or ends (e.g. Roki's horse form): the card flashes and bursts and its picture swaps to
 ## the character's alt form, or back
