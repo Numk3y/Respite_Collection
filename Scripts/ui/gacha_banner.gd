@@ -8,8 +8,10 @@ extends Control
 ##   the pull buttons (GachaTab puts them in `button_row`) at the bottom centre.
 ## - One featured friend ("solo"): the friend on the right, the texts and name plate on the left, buttons at the
 ##   bottom right.
+## - Nothing featured ("common", e.g. the Common Pool): every SSR stands large across the back, and the SRs take
+##   turns in front as a slideshow, two at a time (Showcase); the texts on the left, buttons at the bottom right.
 ## Featured friends without art yet get a big glowing initial in their place; others without art are left out
-## of the back row.
+## of the back row and the showcase.
 
 const ART_SHADER := preload("res://Shaders/banner_art.gdshader")
 const BG_SMALL_PX := 40.0  # the backdrop copy's longest side; smaller = blurrier once stretched
@@ -38,6 +40,10 @@ var _featured: Array[CharacterData] = []
 var _background: TextureRect
 var _effects: Effects
 var _back_row: BackRow
+var _showcase: Showcase
+var _common := false  # nothing featured: the showcase layout
+var _ribbon_text: Label
+var _rate_header: Label
 var _arts: Array[Dictionary] = []  # {"rect": TextureRect, "initial": Label, "texture": Texture2D}, lead first
 var _sparkles: CPUParticles2D
 var _shade: ShadeLayer
@@ -69,6 +75,7 @@ func _init() -> void:
 	_full(_background)
 	_effects = _full(Effects.new()) as Effects
 	_back_row = _full(BackRow.new()) as BackRow
+	_showcase = _full(Showcase.new()) as Showcase
 	for i in 2:  # the second friend is added first so the lead draws on top
 		var rect := TextureRect.new()
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -152,6 +159,7 @@ func _build_column() -> void:
 	var ribbon_text := GachaBanner._label(Terms.t("gacha_pick_up"), 20, Color.WHITE)
 	ribbon_text.add_theme_constant_override("outline_size", 0)
 	_ribbon.add_child(ribbon_text)
+	_ribbon_text = ribbon_text
 	_column.add_child(_ribbon)
 
 	_title = GachaBanner._label("", TITLE_FONT_SIZE, Color.WHITE)
@@ -174,7 +182,8 @@ func _build_column() -> void:
 	var rate_lines := VBoxContainer.new()
 	rate_lines.add_theme_constant_override("separation", 2)
 	_rate_box.add_child(rate_lines)
-	rate_lines.add_child(GachaBanner._label(Terms.t("gacha_featured"), 17, UITheme.GOLD))
+	_rate_header = GachaBanner._label(Terms.t("gacha_featured"), 17, UITheme.GOLD)
+	rate_lines.add_child(_rate_header)
 	_rates_label = GachaBanner._label("", 14, UITheme.TEXT)
 	rate_lines.add_child(_rates_label)
 	pity_label = GachaBanner._label("", 14, Color("#fda4af"))
@@ -274,6 +283,24 @@ func set_pool(pool: GachaPool, rates_text: String) -> void:
 		_background.texture = _gradient(accent)
 
 	_duo = _featured.size() >= 2
+	_common = _featured.is_empty()
+	_ribbon_text.text = Terms.t("gacha_beginner_ribbon" if pool.beginner else ("gacha_common_ribbon" if _common else "gacha_pick_up"))
+	(_ribbon.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = accent.darkened(0.1) if _common else Color("#ff4f8b")
+	_rate_header.text = Terms.t("gacha_beginner_header" if pool.beginner else ("gacha_common_header" if _common else "gacha_featured"))
+	_back_row.visible = not _common
+	_showcase.visible = _common
+	if _common:
+		var ssr: Array[CharacterData] = []
+		var sr: Array[CharacterData] = []
+		for entry in pool.entries:
+			var c: CharacterData = entry.character
+			if c and c.enabled and c.rarity == CharacterData.Rarity.SSR and not ssr.has(c):
+				ssr.append(c)
+			elif c and c.enabled and c.rarity == CharacterData.Rarity.SR and not sr.has(c):
+				sr.append(c)
+		_showcase.set_characters(ssr, sr)
+		if not pool.banner:
+			_background.texture = _blurred(_showcase.backdrop()) if _showcase.backdrop() else _gradient(accent)
 	for i in _plates.size():
 		_plates[i].visible = i < _featured.size()
 		if _plates[i].visible:
@@ -335,6 +362,9 @@ func _layout() -> void:
 		initial.position = Vector2(center_x - w / 2.0, 0)
 	_effects.center = Vector2(size.x * (0.5 if _duo else SOLO_CENTER_X), h * 0.38)
 	_back_row.start_x = 0.0 if _duo else size.x * 0.36
+	_showcase.start_x = size.x * 0.34
+	if _common:
+		_effects.center = Vector2(size.x * 0.67, h * 0.4)
 	_shade.duo = _duo
 	_effects.queue_redraw()
 	_shade.queue_redraw()
@@ -382,6 +412,8 @@ func _animate_in() -> void:
 			node.modulate.a = 0.0
 			node.scale = Vector2.ONE
 			t.tween_property(node, "modulate:a", 1.0, 0.4).set_delay(0.12 * i)
+	_showcase.modulate.a = 0.0
+	t.tween_property(_showcase, "modulate:a", 1.0, 0.5)
 	var items: Array[Control] = [_ribbon, _title, _rate_box]
 	items.append_array(_plates)
 	for i in items.size():
@@ -523,6 +555,183 @@ class BackRow extends Control:
 			var center := x + w * 0.5
 			var fade := smoothstep(start_x, start_x + w, center) * (1.0 - smoothstep(size.x - w * 0.2, size.x + w * 0.5, center))
 			rect.modulate = Color(TINT, 0.85 * fade)
+
+## The Common layout's art (pools with nothing featured): every SSR stands large across the back, slowly swaying,
+## and in front the SRs take turns two at a time: every SLIDE_SECONDS the pair fades out and the next slides in
+## from the right, each with a small "SR · name" tag over its head. Everything sits right of start_x (the texts
+## are on the left).
+class Showcase extends Control:
+	const SSR_HEIGHT := 1.04  # share of the banner's height (overflows a little, so it's cropped)
+	const SSR_ASPECT := 0.62
+	const SSR_TINT := Color(0.72, 0.72, 0.84)  # the back row is dimmer, so the SRs in front stand out
+	const SR_HEIGHT := 0.8
+	const SR_ASPECT := 0.66
+	const SR_SPOTS := [0.3, 0.72]  # where the two SRs stand, as shares of the art area
+	const SLIDE_SECONDS := 3.2
+
+	var start_x := 0.0
+	var _ssr: Array[TextureRect] = []
+	var _ssr_material: ShaderMaterial
+	var _sr: Array[Dictionary] = []  # {"texture", "name"} for every SR with art
+	var _slots: Array[Dictionary] = []  # the two front spots: {"rect", "tag", "label"}
+	var _sr_material: ShaderMaterial
+	var _next := 0  # index in _sr of the next one to show
+	var _timer := 0.0
+	var _t := 0.0
+	var _sliding: Tween
+
+	func _init() -> void:
+		_ssr_material = ShaderMaterial.new()
+		_ssr_material.shader = ART_SHADER
+		_ssr_material.set_shader_parameter("fade_left", 0.22)
+		_ssr_material.set_shader_parameter("fade_right", 0.22)
+		_ssr_material.set_shader_parameter("fade_bottom", 0.3)
+		_sr_material = ShaderMaterial.new()
+		_sr_material.shader = ART_SHADER
+		_sr_material.set_shader_parameter("fade_left", 0.18)
+		_sr_material.set_shader_parameter("fade_right", 0.18)
+		_sr_material.set_shader_parameter("fade_bottom", 0.12)
+		for i in SR_SPOTS.size():
+			var rect := TextureRect.new()
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rect.material = _sr_material
+			var tag := PanelContainer.new()
+			var style := UITheme.box(Color(0.03, 0.04, 0.09, 0.8), CharArt.RARITY_COLORS[CharacterData.Rarity.SR], 1, 6, 4)
+			style.content_margin_left = 8
+			style.content_margin_right = 8
+			tag.add_theme_stylebox_override("panel", style)
+			tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var label := GachaBanner._label("", 15, Color.WHITE)
+			tag.add_child(label)
+			_slots.append({"rect": rect, "tag": tag, "label": label})
+		set_process(false)
+
+	## A picture for the blurred backdrop: the first SSR with art, else the first SR, else null
+	func backdrop() -> Texture2D:
+		for rect in _ssr:
+			if rect.texture:
+				return rect.texture
+		return _sr[0].texture if not _sr.is_empty() else null
+
+	func set_characters(ssr: Array[CharacterData], sr: Array[CharacterData]) -> void:
+		for rect in _ssr:
+			rect.queue_free()
+		_ssr.clear()
+		for slot in _slots:
+			if slot.rect.get_parent():
+				remove_child(slot.rect)
+				remove_child(slot.tag)
+		for c in ssr:
+			var texture := c.get_cutin()  # full size: these stand tall
+			if texture == null:
+				continue
+			var rect := TextureRect.new()
+			rect.texture = texture
+			rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rect.material = _ssr_material
+			rect.modulate = SSR_TINT
+			add_child(rect)
+			_ssr.append(rect)
+		_sr.clear()
+		for c in sr:
+			var thumb := BackRow.thumbnail(c)
+			if thumb:
+				_sr.append({"texture": thumb, "name": "%s · %s" % [Terms.rarity_name(c.rarity), c.display_name]})
+		for slot in _slots:  # the front pair goes on top of the SSRs
+			add_child(slot.rect)
+			add_child(slot.tag)
+		_next = 0
+		_timer = 0.0
+		_show_pair(false)
+		set_process(not _ssr.is_empty() or _sr.size() > SR_SPOTS.size())
+		_place()
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			_place()
+
+	func _process(delta: float) -> void:
+		if not is_visible_in_tree():
+			return
+		_t += delta
+		_timer += delta
+		if _timer >= SLIDE_SECONDS and _sr.size() > SR_SPOTS.size():
+			_timer = 0.0
+			_show_pair(true)
+		_place()
+
+	## Puts the next SRs in the front spots; animated: the old pair fades out, the new one slides in
+	func _show_pair(animated: bool) -> void:
+		if _sliding:
+			_sliding.kill()
+		var picks: Array[Dictionary] = []
+		for i in mini(SR_SPOTS.size(), _sr.size()):
+			picks.append(_sr[(_next + i) % _sr.size()])
+		if not _sr.is_empty():
+			_next = (_next + SR_SPOTS.size()) % _sr.size()
+		if not animated:
+			_fill_slots(picks)
+			return
+		_sliding = create_tween()
+		for slot in _slots:
+			_sliding.parallel().tween_property(slot.rect, "modulate:a", 0.0, 0.3)
+			_sliding.parallel().tween_property(slot.tag, "modulate:a", 0.0, 0.3)
+		_sliding.tween_callback(_fill_slots.bind(picks))
+		for i in _slots.size():
+			var slot: Dictionary = _slots[i]
+			slot.rect.set_meta("slide", 60.0)
+			var slide := _sliding.parallel().tween_method(_set_slide.bind(slot.rect), 60.0, 0.0, 0.45).set_delay(0.1 * i)
+			slide.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+			_sliding.parallel().tween_property(slot.rect, "modulate:a", 1.0, 0.35).set_delay(0.1 * i)
+			_sliding.parallel().tween_property(slot.tag, "modulate:a", 1.0, 0.35).set_delay(0.15 + 0.1 * i)
+
+	func _set_slide(value: float, rect: TextureRect) -> void:
+		rect.set_meta("slide", value)
+
+	func _fill_slots(picks: Array[Dictionary]) -> void:
+		for i in _slots.size():
+			var slot: Dictionary = _slots[i]
+			var on := i < picks.size()
+			slot.rect.visible = on
+			slot.tag.visible = on
+			if on:
+				slot.rect.texture = picks[i].texture
+				slot.label.text = picks[i].name
+				slot.tag.reset_size()
+		_place()
+
+	func _place() -> void:
+		if size.y <= 0.0:
+			return
+		var area := maxf(size.x - start_x, 1.0)
+		# SSRs: evenly spread across the art area, overlapping, alternating a little in height, swaying gently
+		var h := size.y * SSR_HEIGHT
+		var w := h * SSR_ASPECT
+		_ssr_material.set_shader_parameter("rect_size", Vector2(w, h))
+		var n := _ssr.size()
+		var step := 0.0 if n <= 1 else minf((area - w) / (n - 1), w * 0.85)
+		var group := w + step * maxi(n - 1, 0)
+		var left := start_x + (area - group) * 0.5
+		for i in n:
+			var sway := sin(_t * 0.6 + i * 1.3) * 4.0
+			_ssr[i].size = Vector2(w, h)
+			_ssr[i].position = Vector2(left + i * step + sway, -size.y * (0.02 if i % 2 == 0 else -0.04))
+		# The SR pair in front, feet on the bottom edge
+		var sh := size.y * SR_HEIGHT
+		var sw := sh * SR_ASPECT
+		_sr_material.set_shader_parameter("rect_size", Vector2(sw, sh))
+		for i in _slots.size():
+			var slot: Dictionary = _slots[i]
+			var slide := float(slot.rect.get_meta("slide", 0.0))
+			var cx: float = start_x + area * SR_SPOTS[i] + slide
+			slot.rect.size = Vector2(sw, sh)
+			slot.rect.position = Vector2(cx - sw * 0.5, size.y - sh + size.y * 0.02)
+			var tag: Control = slot.tag
+			tag.position = Vector2(cx - tag.size.x * 0.5, slot.rect.position.y + sh * 0.06)
 
 ## Progress towards the guaranteed SSR: a pink-to-gold fill with a shine; it pulses once the guarantee is close
 class PityBar extends Control:

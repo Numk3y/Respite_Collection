@@ -8,6 +8,9 @@ extends Resource
 @export var theme_color: Color = Color("#7c3aed")
 @export var cost: int = 150
 @export var pity_threshold: int = 80  # pull that guarantees an SSR; 0 = no pity
+## A new player's one free pull (Gacha.beginner_pull): free, shown only until it's used, and it skips friends the
+## player already owns (so it never hands back the starter)
+@export var beginner: bool = false
 @export_group("Rarity Weights")  # shares of each pull; R 82 / SR 14 / SSR 4 reads as percentages
 @export var weight_r: int = 82
 @export var weight_sr: int = 14

@@ -34,4 +34,4 @@ portrait_path = "res://Art/characters/BaldGordonRamsay.png"
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 description = "He shaved his head so nobody could ever complain about finding a hair in their food. If your combat performance is raw, prepare for an earful that deals genuine emotional damage."
-is_starter = true
+is_starter = false

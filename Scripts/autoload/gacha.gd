@@ -37,6 +37,7 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 
 	if not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
 		return results
+	GameState.add_stat("pulls", count)  # beginner missions
 
 	var top := CharacterData.Rarity.SSR
 	var since_top := GameState.get_pity(pool.id)
@@ -67,6 +68,34 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 
 	GameState.data.pity[String(pool.id)] = since_top
 	GameState.save_game()  # save right away so closing the game can't reroll a pull
+	pulled.emit(results)
+	return results
+
+## The new player's free Beginner pool pull is still waiting
+func beginner_available() -> bool:
+	return GameState.data.starter_chosen and not bool(GameState.data.beginner.get("pool_pulled", false))
+
+## The one free pull from a Beginner pool: no cost, no pity, and it picks among the pool's friends the player
+## doesn't own yet (any of them if they own them all). The friend joins the first team if their row has room.
+## Returns the same result shape as pull(), or [] if it's used up.
+func beginner_pull(pool: GachaPool) -> Array[Dictionary]:
+	var results: Array[Dictionary] = []
+	if not pool.beginner or not beginner_available():
+		return results
+	var entries := pool.entries.filter(func(e): return e.character and e.character.enabled and e.weight > 0)
+	if entries.is_empty():
+		return results
+	var fresh := entries.filter(func(e): return not GameState.owns(e.character.id))
+	var pick: PoolEntry = _weighted_pick(fresh if not fresh.is_empty() else entries, func(e): return e.weight)
+	GameState.data.beginner.pool_pulled = true
+	GameState.add_pull_history(pick.character, pick.character.rarity, pool.id)
+	var received := GameState.receive_character(pick.character)
+	received.character = pick.character
+	received.rarity = pick.character.rarity
+	received.is_new = received.result == "new"
+	received.joined_team = GameState.place_in_team(int(received.uid))
+	results.append(received)
+	GameState.save_game()
 	pulled.emit(results)
 	return results
 

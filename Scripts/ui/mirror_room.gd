@@ -32,9 +32,7 @@ var _backdrop: Texture2D  # Art/backgrounds/home.* (or HomeBg.*) replaces the dr
 func _init() -> void:
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_backdrop = UITheme.background("home")
-	if _backdrop == null:
-		_backdrop = UITheme.background("homebg")
+	_backdrop = UITheme.home_background()
 	_fx = RoomFx.new()
 	_fx.room = self
 	_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -71,6 +69,7 @@ func _init() -> void:
 	lines.add_child(_sub_label)
 	add_child(_plate)
 	resized.connect(_layout)
+	item_rect_changed.connect(queue_redraw)  # the picture is pinned to the window, so a move shifts it
 	visibility_changed.connect(_update_processing)
 
 func _ready() -> void:
@@ -193,11 +192,17 @@ func _draw() -> void:
 	# Holographic HUD brackets around the character
 	_brackets(art.grow(10), Color(UITheme.CYAN_BRIGHT, 0.8), 22.0)
 
-## With a home background picture: the picture fills the stage, a shade at the bottom grounds the character,
-## and the holo pedestal and HUD brackets are drawn over it as usual
+## With a home background picture: the picture is laid out to cover the whole window (the same way Main draws
+## its full-screen blurred, darkened copy behind the menus), so this stage reads as a sharp, full-colour window
+## onto that same picture. A shade at the bottom grounds the character, and the holo pedestal and HUD brackets
+## are drawn over it as usual.
 func _draw_picture_room() -> void:
 	var rect := Rect2(Vector2.ZERO, size)
-	UITheme.draw_texture_cover(self, _backdrop, rect)
+	var screen := Rect2(-get_global_rect().position, get_viewport_rect().size)
+	var tex_size := _backdrop.get_size()
+	var scale := maxf(screen.size.x / tex_size.x, screen.size.y / tex_size.y)
+	var src := Rect2((tex_size - screen.size / scale) * 0.5 - screen.position / scale, size / scale)
+	draw_texture_rect_region(_backdrop, rect, src)
 	UITheme.draw_vertical_gradient(self, Rect2(0, size.y * 0.6, size.x, size.y * 0.4), Color(0, 0, 0, 0), Color(0, 0, 0, 0.45))
 	var art := _art_rect()
 	var feet := Vector2(art.get_center().x, art.end.y)

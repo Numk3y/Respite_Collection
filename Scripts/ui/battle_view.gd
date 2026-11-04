@@ -3,13 +3,18 @@ extends VBoxContainer
 ## Kancolle-style battle playback. Your team stands on the left (rearguard behind the vanguard), the enemies on
 ## the right. Each action: the actor bumps forward and flashes, its targets shake and show damage numbers, then
 ## HP bars, Ultimate gauges and buffs update from the engine's recorded state. Ultimates open with a Kancolle-style
-## cut-in (Scripts/ui/cut_in_overlay.gd). Every battle plays out in full; players pick 1x/2x/3x speed instead of skipping.
+## cut-in (Scripts/ui/cut_in_overlay.gd). Every battle plays out in full; players pick 1x/2x speed instead of skipping (3x in test mode).
+## Map battles are live (start_live): each action is worked out just before it plays, so with Auto Ultimate off
+## the player clicks a friend whose gauge is full to fire their Ultimate on that friend's next turn.
+## World boss fights are recorded in advance from the server's seed (start) and always fire automatically.
 
 signal again_pressed
 signal home_pressed
 signal next_pressed
+signal battle_finished(report: Dictionary)  # the last action has played (the results screen is about to open)
 
-const SPEEDS := [1, 2, 3]
+const SPEEDS := [1, 2]
+const TEST_SPEEDS := [1, 2, 3]  # 3x only in test mode (GameState.is_test_mode)
 const CARD_SIZE := Vector2(236, 118)
 const ART_SIZE := Vector2(92, 108)
 const BUMP_DISTANCE := 44.0
@@ -19,6 +24,7 @@ const ENEMY_COLOR := Color("#ef4444")
 const DOWNED_ALPHA := 0.3
 const NAME_FONT_SIZE := 15
 const NAME_MIN_FONT_SIZE := 11
+const AUTO_NEXT_SECONDS := 4  # Auto Run: the pause on the results screen before the next run starts
 
 var _battle: Dictionary
 var _speed := 1
@@ -37,12 +43,30 @@ var _note := ""
 var _wave_label: Label
 var _wave_count := 1
 var _log: RichTextLabel
+var _live := false  # actions come from Combat.next_event() as the battle goes (start_live)
+var _manual := false  # Auto Ultimate off: full gauges wait for a click
+var coach: Coach  # set by Main for the tutorial's guided first fight: it walks the player through an Ultimate
+var _auto_button: CheckButton
+var _guide_fired := false  # the guided fight's first hand-fired Ultimate has gone off
+var auto_label := ""  # set by Main for an Auto Run battle: "AUTO RUN 1/3" in the header (no Auto Ultimate switch)
+var auto_next := false  # Auto Run: after a win the results screen counts down, then presses Next by itself
 var next_text := ""  # set by Main when a mission follows this one; shown as Next Mission after a win
 
+## A battle recorded in advance (the world boss)
 func start(stage: StageData, battle: Dictionary) -> void:
 	_battle = battle
 	_stage_name = stage.display_name
-	_speed = clampi(int(GameState.get_setting("battle_speed", 1)), 1, SPEEDS.back())
+	_speed = clampi(int(GameState.get_setting("battle_speed", 1)), 1, _speeds().back())
+	_build(stage)
+	_play()
+
+## A live map battle that Combat.start_sortie() has set up; `units` is the snapshot it returned
+func start_live(stage: StageData, units: Array, manual: bool) -> void:
+	_live = true
+	_manual = manual
+	_battle = {"units": units}
+	_stage_name = stage.display_name
+	_speed = clampi(int(GameState.get_setting("battle_speed", 1)), 1, _speeds().back())
 	_build(stage)
 	_play()
 
@@ -68,8 +92,20 @@ func _build(stage: StageData) -> void:
 	_wave_label.text = Terms.t("battle_wave", {"current": 1, "total": _wave_count})
 	_wave_label.visible = _wave_count > 1
 	header.add_child(_wave_label)
+	if not auto_label.is_empty():
+		var tag := UITheme.tag(auto_label, UITheme.GOLD)
+		header.add_child(tag)
+	elif _live:
+		var auto := CheckButton.new()
+		auto.text = Terms.t("battle_auto_ult")
+		auto.tooltip_text = Terms.t("battle_auto_ult_tip")
+		auto.button_pressed = not _manual
+		auto.focus_mode = Control.FOCUS_NONE
+		auto.toggled.connect(_set_auto_ultimate)
+		header.add_child(auto)
+		_auto_button = auto
 	var group := ButtonGroup.new()
-	for s in SPEEDS:
+	for s in _speeds():
 		var button := Button.new()
 		button.text = Terms.t("battle_speed", {"speed": s})
 		button.toggle_mode = true
@@ -102,7 +138,7 @@ func _build(stage: StageData) -> void:
 		sides.add_child(column)
 		columns[key] = column
 	for u in _battle.units:
-		var view := _unit_view(u)
+		var view := _unit_view(u, _views.size())
 		var key := ("ally_" if u.side == 0 else "enemy_") + ("van" if u.vanguard else "rear")
 		columns[key].add_child(view.slot)
 		view.slot.visible = u.side == 0 or int(u.wave) == 0  # later waves' enemies wait off the field
@@ -160,7 +196,7 @@ func _build(stage: StageData) -> void:
 	_log_names.sort_custom(func(a, b): return a.name.length() > b.name.length())
 
 ## A unit card. The slot holds the place in the column; the body inside it is what slides and shakes.
-func _unit_view(u: Dictionary) -> Dictionary:
+func _unit_view(u: Dictionary, index: int) -> Dictionary:
 	var slot := Control.new()
 	slot.custom_minimum_size = CARD_SIZE
 	var body := PanelContainer.new()
@@ -205,21 +241,31 @@ func _unit_view(u: Dictionary) -> Dictionary:
 	name_label.add_theme_font_size_override("font_size", _fit_font_size(u.name, info.custom_minimum_size.x))
 	info.add_child(name_label)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
-		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "buffs": null,
-		"art": art, "data": u.data, "horse": false}
+		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "ult_label": null, "energy_full": false,
+		"buffs": null, "art": art, "data": u.data, "horse": false, "style": style}
 	# Everyone has HP now; the rearguard is only hit once its vanguard is down
 	view.hp_bar = HpBar.new(u.max_hp)
 	info.add_child(view.hp_bar)
 	view.hp_label = _small_label("%d / %d" % [u.max_hp, u.max_hp])
 	info.add_child(view.hp_label)
 	if u.has_ultimate:
-		info.add_child(_small_label(Terms.t("battle_energy")))
+		view.ult_label = _small_label(Terms.t("battle_energy"))
+		info.add_child(view.ult_label)
+		if u.side == 0:
+			body.gui_input.connect(_on_card_input.bind(index))
 		view.energy_bar = _bar(u.energy_max, 0, Color("#facc15"), 8)
 		info.add_child(view.energy_bar)
 	view.buffs = _small_label("", true)
 	view.buffs.add_theme_color_override("font_color", Color("#93c5fd"))
 	info.add_child(view.buffs)
+	_pass_clicks(body)  # a click anywhere on the card reaches it (manual Ultimates)
 	return view
+
+func _pass_clicks(node: Node) -> void:
+	for child in node.get_children():
+		if child is Control and child.mouse_filter == Control.MOUSE_FILTER_STOP:
+			child.mouse_filter = Control.MOUSE_FILTER_PASS
+		_pass_clicks(child)
 
 func _bar(max_value: float, value: float, color: Color, height: float) -> ProgressBar:
 	var bar := ProgressBar.new()
@@ -256,6 +302,10 @@ func _small_label(text: String, wrap: bool = false) -> Label:
 
 # ───────── Playback ─────────
 
+## The speed buttons on offer: 1x and 2x, plus 3x in test mode
+func _speeds() -> Array:
+	return TEST_SPEEDS if GameState.is_test_mode() else SPEEDS
+
 func _set_speed(s: int) -> void:
 	_speed = s
 	if _fx:
@@ -274,9 +324,91 @@ func _wait(steps: float) -> void:
 
 func _play() -> void:
 	await _wait(2)
-	for event in _battle.events:
-		await _animate(event)
+	_update_guide()
+	if _live:
+		# Each action is worked out right before it plays, so a click during this one counts for the next
+		while true:
+			var event := Combat.next_event()
+			if event.is_empty():
+				break
+			await _animate(event)
+		_battle = Combat.finish_sortie()
+	else:
+		for event in _battle.events:
+			await _animate(event)
 	_finish()
+
+# ───────── Manual Ultimates ─────────
+
+func _set_auto_ultimate(on: bool) -> void:
+	_manual = not on
+	GameState.set_setting("auto_ultimate", on)
+	Combat.engine.set_manual(_manual)
+	for i in _views.size():
+		_refresh_ultimate(i)
+	_update_guide()
+
+## Clicking a friend whose gauge is full asks for their Ultimate on their next turn; clicking again cancels
+func _on_card_input(event: InputEvent, index: int) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	if not (_live and _manual and _ultimate_ready(index)):
+		return
+	Combat.engine.queue_ultimate(index, not Combat.engine.is_ultimate_queued(index))
+	_refresh_ultimate(index)
+	_update_guide()
+	_flash(_views[index].body, Color(1.7, 1.5, 0.6), 1)
+
+func _ultimate_ready(index: int) -> bool:
+	var view: Dictionary = _views[index]
+	return view.side == 0 and view.energy_full and view.hp > 0
+
+## The tutorial's guided first fight: explain the gauge, point at the first friend whose Ultimate is ready, say it's
+## coming once clicked, and after it fires point at the Auto switch. Stops if the tutorial is skipped.
+func _update_guide() -> void:
+	if coach == null:
+		return
+	if GameState.tutorial_step() >= GameState.Tutorial.RECRUIT or not _manual:
+		coach.clear()
+		return
+	var ready_i := -1
+	var queued := -1
+	for i in _views.size():
+		if _views[i].side == 0 and _ultimate_ready(i):
+			if Combat.engine.is_ultimate_queued(i):
+				queued = i if queued < 0 else queued
+			elif ready_i < 0:
+				ready_i = i
+	if queued >= 0:
+		coach.point(_views[queued].body, Terms.t("tutorial_ult_queued", {"name": _battle.units[queued].name}))
+	elif ready_i >= 0 and not _guide_fired:
+		coach.point(_views[ready_i].body, Terms.t("tutorial_click_ult", {"name": _battle.units[ready_i].name}))
+	elif _guide_fired:
+		if not coach.is_pointing_at(_auto_button):
+			coach.point(_auto_button, Terms.t("tutorial_ult_done"))
+	else:
+		coach.point(null, Terms.t("tutorial_gauge"))
+
+## The line over a friend's gauge: "Ultimate" normally; in a manual battle with a full gauge it asks for a
+## click (amber border) or says the Ultimate is coming (thicker gold border)
+func _refresh_ultimate(index: int) -> void:
+	var view: Dictionary = _views[index]
+	if view.ult_label == null or view.side != 0:
+		return
+	var style: StyleBoxFlat = view.style
+	var waiting := _live and _manual and _ultimate_ready(index)
+	view.body.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if waiting else Control.CURSOR_ARROW
+	if not waiting:
+		view.ult_label.text = Terms.t("battle_energy")
+		view.ult_label.remove_theme_color_override("font_color")
+		style.border_color = ALLY_COLOR
+		style.set_border_width_all(2)
+		return
+	var queued: bool = Combat.engine.is_ultimate_queued(index)
+	view.ult_label.text = Terms.t("battle_ult_queued" if queued else "battle_ult_ready")
+	view.ult_label.add_theme_color_override("font_color", Color("#fde047") if queued else Color("#facc15"))
+	style.border_color = Color("#fde047") if queued else Color("#f59e0b")
+	style.set_border_width_all(4 if queued else 3)
 
 ## Between waves: the cleared enemies leave, a "Battle 2/3" banner (or the boss banner) shows,
 ## and the next wave's enemies slide in from the right. A wave with its own banner (the animatronics) gets a
@@ -350,6 +482,8 @@ func _animate(event: Dictionary) -> void:
 	var fx_color := BattleFX.ALLY_FX if actor.side == 0 else BattleFX.ENEMY_FX
 	# A pulsing outline marks whoever is acting
 	_fx.set_marker(actor.body, CARD_SIZE, fx_color)
+	if event.kind == "ultimate" and actor.side == 0 and coach and _manual:
+		_guide_fired = true
 	if event.kind == "ultimate":
 		# Everything waits for the cut-in, then the caster's card flashes gold and the skill lands
 		var caster: Dictionary = _battle.units[event.actor]
@@ -432,6 +566,13 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[rat], Terms.t("battle_lured"), Color("#fde047"), 60)
 	for rat in event.get("rat_blocked", []):
 		_float_text(_views[rat], Terms.t("battle_rat_block"), Color("#93c5fd"), 34)
+	for target in event.get("hatted", []):
+		_float_text(_views[target], Terms.t("battle_hat"), Color("#c4b5fd"), 60)
+	for target in event.get("hat_trick", []):
+		_float_text(_views[target], Terms.t("battle_hat_trick"), Color("#f0abfc"), 60, 30)
+		_fx.shake(_arena, 8.0, 0.3)
+	for quinn in event.get("until_next_time", []):
+		_float_text(_views[quinn], Terms.t("battle_until_next_time"), Color("#fde68a"), 60)
 	for horse in event.get("horse", []):
 		_float_text(_views[horse], Terms.t("battle_horse"), Color("#f0abfc"), 60, 30)
 	if attacking:
@@ -548,6 +689,9 @@ func _apply_state(event: Dictionary) -> void:
 		if view.energy_bar:
 			view.energy_bar.value = s.energy
 			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
+			view.energy_full = s.energy >= view.energy_bar.max_value
+			_refresh_ultimate(i)
+	_update_guide()
 		view.buffs.text = ", ".join(s.buffs)
 
 ## A transformation starts or ends (e.g. Roki's horse form): the card flashes and bursts and its picture swaps to
@@ -602,6 +746,7 @@ func _expand_names(text: String) -> String:
 ## the Again / Home buttons
 func _finish() -> void:
 	_fx.set_marker(null, Vector2.ZERO)
+	battle_finished.emit(_battle.get("report", {}))
 	var win: bool = _battle.win
 	_log.append_text("[center][b][font_size=18][color=%s]%s[/color][/font_size][/b][/center]" % [
 		"#fde047" if win else "#f87171", "\n".join(_battle.end_lines).replace("[", "[lb]")])
@@ -622,8 +767,16 @@ func _finish() -> void:
 			lines.append(Terms.t("battle_exp", {"amount": report.exp}))
 		for up in report.level_ups:
 			lines.append(Terms.t("battle_level_up", {"name": up.name, "lv": up.level}))
+		if report.get("account_exp", 0) > 0:
+			lines.append(Terms.t("battle_account_exp_first" if report.get("account_first_clear", false) else "battle_account_exp",
+				{"amount": report.account_exp}))
+		if report.get("account_level_up", 0) > 0:
+			lines.append(Terms.t("battle_account_level_up", {"lv": report.account_level_up,
+				"limit": GameState.team_cost_limit_at(report.account_level_up)}))
 		if report.first_clear_cards > 0:
 			lines.append(Terms.t("battle_first_clear", {"amount": report.first_clear_cards}))
+		if report.get("star_cards", 0) > 0:
+			lines.append(Terms.t("battle_new_stars", {"amount": report.star_cards, "card_word": Terms.credit_card_word(report.star_cards)}))
 		if report.card_drops > 0:
 			lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
 	elif report.card_drops > 0:  # beat the animatronics, then lost a later wave: their card still counts
@@ -644,6 +797,12 @@ func _finish() -> void:
 	_results.open(_battle, _stage_name, lines)
 	if not _note.is_empty():
 		_results.set_note(_note)
+	# Auto Run: after a win, the next run starts by itself (Return Home stops the series)
+	if auto_next and win and not next_text.is_empty():
+		_results.set_note(Terms.t("auto_run_next_in", {"seconds": AUTO_NEXT_SECONDS}))
+		var t := create_tween()
+		t.tween_interval(AUTO_NEXT_SECONDS)
+		t.tween_callback(next_pressed.emit)
 
 ## A line under the results, e.g. the world boss server's answer, which can arrive before or after the battle ends
 func set_note(text: String) -> void:

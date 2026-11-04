@@ -132,7 +132,15 @@ func refresh() -> void:
 		total_hp += stats_of[uid].hp
 		total_atk += stats_of[uid].attack
 		levels += int(GameState.get_owned(uid).level)
+	var cost := GameState.team_cost()
+	var limit := GameState.team_cost_limit()
+	_summary.add_theme_color_override("font_color", Color("#fca5a5") if cost > limit else UITheme.TEXT)
+	_summary.mouse_filter = Control.MOUSE_FILTER_STOP  # so the cost tooltip shows
+	_summary.tooltip_text = Terms.t("team_cost_tip", {"r": GameState.rarity_cost(CharacterData.Rarity.R),
+		"sr": GameState.rarity_cost(CharacterData.Rarity.SR), "ssr": GameState.rarity_cost(CharacterData.Rarity.SSR),
+		"limit": limit, "cap": GameState.TEAM_COST_CAP})
 	_summary.text = Terms.t("team_summary", {"members": stats_of.size(), "slots": GameState.TEAM_SLOTS,
+		"cost": cost, "limit": limit,
 		"hp": CurrencyChip._group(total_hp), "atk": CurrencyChip._group(total_atk),
 		"lv": roundi(float(levels) / stats_of.size()) if not stats_of.is_empty() else 0})
 

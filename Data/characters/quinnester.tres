@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"quinnester_passive"
+display_name = "Until Next Time"
+description = "When Quinn takes down an enemy: -30% Speed and +65% damage for his next 3 turns, and every shot that lands splashes onto another enemy for 50% of the damage. 5-turn cooldown from the takedown."
+effect_id = &"until_next_time"
+params = {"speed": -0.3, "damage": 0.65, "splash": 0.5, "turns": 3, "cooldown": 5}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"quinnester_active"
+display_name = "Hat Trick"
+kind = 1
+description = "Locks onto an enemy and shoots it. For his next 3 turns every shot goes to that enemy, and each hit leaves a Hat. At 3 Hats they explode for 30% of the enemy's max HP (ignores Defense, at most 300% of Quinn's Attack)."
+effect_id = &"hat_trick"
+params = {"damage_mult": 1.0, "turns": 3, "marks": 3, "explode_pct": 0.3, "cap_mult": 3.0}
+
+[resource]
+script = ExtResource("1")
+id = &"quinnester"
+display_name = "Quinnester"
+char_class = 3
+rarity = 3
+hp = 85
+attack = 115
+defense = 35
+evasion = 15
+accuracy = 95
+speed = 60
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+description = "A gentleman marksman. Tips his hat, picks a target, and doesn't stop until it's gone."
+is_starter = false

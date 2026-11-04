@@ -1,7 +1,7 @@
 class_name BattleResults
 extends Control
 ## End-of-battle screen over the whole window: a big VICTORY / DEFEAT title (gold rays and confetti on a win),
-## the rewards, three award cards (Most Damage, Tanked the Most, Most Healing), a breakdown of every friend's
+## the map's stars, the rewards, three award cards (Most Damage, Tanked the Most, Most Healing), a breakdown of every friend's
 ## damage dealt, damage taken and healing with bars that fill and numbers that count up, and every friend's
 ## remaining HP along the bottom. Battle Again / Return Home are the way out, plus Next Mission after a win when
 ## `next_text` is set (event missions with another one after them).
@@ -75,6 +75,13 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	var sub := _label(sub_text, 16, UITheme.TEXT_DIM)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_content.add_child(sub)
+	# The map's 3 stars; ones earned for the first time pop in
+	if not boss and battle.report.has("stars"):
+		var star_row := CenterContainer.new()
+		_content.add_child(star_row)
+		var meter := StarMeter.new(34.0, battle.report.stars)
+		star_row.add_child(meter)
+		meter.pop.call_deferred(battle.report.get("new_stars", []))
 	if not lines.is_empty():
 		var rewards := _label(" · ".join(lines), 22 if boss else 14, GOLD if boss else UITheme.TEXT)
 		rewards.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

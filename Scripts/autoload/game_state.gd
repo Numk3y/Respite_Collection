@@ -5,6 +5,8 @@ signal money_changed(value: int)
 signal materials_changed
 signal roster_changed  # owned friends, team or gear changed
 signal credit_cards_changed(value: int)
+signal account_changed  # account level or account EXP changed
+signal stats_changed  # a lifetime counter (data.stats) or beginner mission state changed
 
 # On the web, user:// is an IndexedDB-backed folder that every Godot game on the same site shares
 # (all GitHub Pages projects of one account are the same site), so keep the save in our own subfolder.
@@ -22,6 +24,10 @@ const VANGUARD_SLOTS := 3  # slots 0-2 are vanguard, 3-5 rearguard
 const STARTER_EQUIPMENT := [&"foam_bat", &"hoodie", &"lucky_charm"]
 const FREE_FRIENDS := [&"coconutbird_caster"]  # everyone owns these: new accounts with their starter, older saves on load
 const MAX_LEVEL := 50
+# Friends can't go more than this many levels above the account level (and never past MAX_LEVEL), so Money and
+# materials can't push the team far ahead of the story: about Lv.15 / 20 / 26 at the end of Chapters 1 / 2 / 3,
+# and the full Lv.50 from account Lv.40
+const LEVEL_CAP_ABOVE_ACCOUNT := 10
 const GROWTH_PER_LEVEL := 0.04  # each level adds 4% of the level-1 base stats
 const GOLD_PER_EXP := 2  # Money cost of 1 EXP when levelling up with Money
 const MATERIAL_EXP := {"snack": 60, "coffee": 200, "gossip": 500}  # EXP one of each material gives when fed
@@ -38,9 +44,35 @@ const ASCENSION_BONUS := 0.05  # +5% per rank to the stats below
 const ASCENSION_STATS := ["hp", "attack", "defense", "speed"]
 const ASCENSION_OVERFLOW_MONEY := 100  # a copy pulled after max Ascension turns into this much Money
 const CREDIT_CARDS_PER_PULL := 1  # every pull costs this many Credit Cards on top of the Money cost
-const FIRST_CLEAR_CREDIT_CARDS := 2  # for winning on a map for the first time
-const ANIMATRONIC_WAVE_CHANCE := 0.015  # 1.5% chance per sortie that the animatronics replace wave 2
+const FIRST_CLEAR_CREDIT_CARDS := 2  # for winning on a map for the first time (that's also its ★1)
+const STAR_CREDIT_CARDS := 1  # for each ★2 / ★3 earned on a map for the first time
+const STAR_COUNT := 3
+# Tutorial steps (data.tutorial): point at Battle on Home, then at Battle on the map screen, then the guided first
+# fight (manual Ultimates), then the free Beginner recruit, then at Beginner Missions on Home; DONE once finished
+# or skipped
+enum Tutorial { HOME_BATTLE, MAP_GO, FIRST_FIGHT, RECRUIT, MISSIONS, DONE }
+const ANIMATRONIC_WAVE_CHANCE := 0.03  # 3% chance per sortie that the animatronics replace wave 2
 const ANIMATRONIC_CREDIT_CARDS := 1  # for clearing the animatronic wave
+# Account level: raised by account EXP from battle wins; it raises the team cost limit.
+# Planned for a 7-chapter story: first clears alone reach about Lv.5 / 10 / 16 / 24 / 32 / 41 / 50 at the end of
+# Chapters 1-7 (if each chapter's maps give ~600-700 more total EXP than the one before: Ch4 ~1300, Ch5 ~1900,
+# Ch6 ~2600, Ch7 ~3400); Lv.50-60 is endgame grinding.
+const ACCOUNT_MAX_LEVEL := 60
+# Account EXP for a win, from the map's exp_reward: the first win on a map gives a lot, every repeat only a
+# tiny share (at least 1)
+const ACCOUNT_FIRST_CLEAR_MULT := 3
+const ACCOUNT_REPEAT_SHARE := 0.1
+# Team cost: every friend costs points by rarity and a team's total can't go over the limit.
+# The limit starts at TEAM_COST_BASE and gains 1 at each account level in TEAM_COST_STEPS: quickly at first
+# (every 2 levels up to 38 at Lv.16, the end of Chapter 3), then slower and slower up to TEAM_COST_CAP at Lv.60.
+#   Lv.1  30: 4 SR + 2 R, or 1 SSR + 1 SR + 4 R        Lv.10 35: 2 SSR + 1 SR + 3 R
+#   Lv.16 38: 2 SSR + 2 SR + 2 R                         Lv.21 39: 3 SSR + 3 R
+#   Lv.38 42: 3 SSR + 1 SR + 2 R                         Lv.51 44: 2 SSR + 4 SR
+#   Lv.60 45: 3 SSR + 2 SR + 1 R, the best team there is (3 SSR + 3 SR = 48 and 4 SSR + 2 R = 46 never fit)
+const TEAM_COST := {CharacterData.Rarity.N: 3, CharacterData.Rarity.R: 3, CharacterData.Rarity.SR: 6, CharacterData.Rarity.SSR: 10}
+const TEAM_COST_BASE := 30
+const TEAM_COST_STEPS := [2, 4, 6, 8, 10, 12, 14, 16, 21, 26, 32, 38, 44, 51, 60]  # gaps: 2 x8, then 5 5 6 6 6 7 9
+const TEAM_COST_CAP := TEAM_COST_BASE + 15  # one point per entry in TEAM_COST_STEPS
 
 var data: Dictionary = {}
 var _save_queued := false
@@ -55,6 +87,7 @@ func _ready() -> void:
 	materials_changed.connect(request_save)
 	roster_changed.connect(request_save)
 	credit_cards_changed.connect(func(_value): request_save())
+	account_changed.connect(request_save)
 	_grant_free_friends()
 	var autosave := Timer.new()
 	autosave.wait_time = 30.0
@@ -86,7 +119,10 @@ func _new_save() -> Dictionary:
 		"version": SAVE_VERSION,
 		"money": 2500,
 		"credit_cards": 0,
+		"account_level": 1,
+		"account_exp": 0,
 		"cleared_stages": {},  # stage_id -> true once won there (first-clear bonus already given)
+		"stage_stars": {},  # stage_id -> stars earned as bits (1 = ★1 win, 2 = ★2 nobody down, 4 = ★3 the map's goal)
 		"materials": {},
 		"owned": [],  # [{uid, char_id, level, exp, affection, locked, obtained_at, equips}]
 		"next_uid": 1,
@@ -100,6 +136,10 @@ func _new_save() -> Dictionary:
 		# World boss: the server account, fights not yet reported, results whose event isn't in this build; see WorldBoss
 		"world_boss": {"player_id": "", "token": "", "name": "", "pending": [], "unclaimed": []},
 		"settings": {},
+		"stats": {},  # lifetime counters: "pulls", "manual_ultimates", "commissions"
+		"tutorial": Tutorial.HOME_BATTLE,
+		# See BeginnerMissions; pool_pulled = the one free Beginner pool pull is used (Gacha.beginner_pull)
+		"beginner": {"claimed": {}, "ssr_claimed": false, "pool_pulled": false},
 	}
 
 func _empty_team() -> Array:
@@ -166,6 +206,7 @@ func import_text(text: String) -> String:
 	money_changed.emit(get_money())
 	materials_changed.emit()
 	credit_cards_changed.emit(get_credit_cards())
+	account_changed.emit()
 	return ""
 
 ## Starts over from a brand-new save. The old save is kept as the backup file until the next save overwrites it.
@@ -176,6 +217,7 @@ func reset_save() -> void:
 	money_changed.emit(get_money())
 	materials_changed.emit()
 	credit_cards_changed.emit(get_credit_cards())
+	account_changed.emit()
 
 # Upgrade older save formats here whenever the format changes
 func _migrate(d: Dictionary) -> Dictionary:
@@ -199,6 +241,19 @@ func _migrate(d: Dictionary) -> Dictionary:
 				team[i] = int(old[i])
 			teams.append(team)
 		d.teams = teams
+	# Saves from before the tutorial: anyone who already picked a starter has seen the game
+	# (and the Beginner pool is for new players only)
+	if not d.has("tutorial") and d.get("starter_chosen", false):
+		d.tutorial = Tutorial.DONE
+		d.beginner = {"claimed": {}, "ssr_claimed": false, "pool_pulled": true}
+	# The Testing Pool became the Common Pool: keep its pity count and history
+	var pity: Dictionary = d.get("pity", {})
+	if pity.has("friend_pool"):
+		pity["common_pool"] = int(pity.get("common_pool", 0)) + int(pity["friend_pool"])
+		pity.erase("friend_pool")
+	for pull in d.get("pull_history", []):
+		if pull.get("pool", "") == "friend_pool":
+			pull.pool = "common_pool"
 	var fresh := _new_save()
 	for key in fresh:
 		if not d.has(key):
@@ -290,6 +345,56 @@ func mark_stage_cleared(stage_id: StringName) -> bool:
 # ───────── Story progress ─────────
 
 ## Chapter 1 is always open; each later chapter opens once the previous chapter's boss (X-5) is cleared
+## The stars earned on a map as bits (see STAR_COUNT); a map won before stars existed has ★1
+func get_star_bits(stage_id: StringName) -> int:
+	var bits := int(data.stage_stars.get(String(stage_id), 0))
+	if is_stage_cleared(stage_id):
+		bits |= 1
+	return bits
+
+func star_count(stage_id: StringName) -> int:
+	var bits := get_star_bits(stage_id)
+	var count := 0
+	for i in STAR_COUNT:
+		if bits & (1 << i):
+			count += 1
+	return count
+
+## Records stars from a win; returns the bits that are new
+func add_stars(stage_id: StringName, bits: int) -> int:
+	var new_bits := bits & ~get_star_bits(stage_id)
+	data.stage_stars[String(stage_id)] = get_star_bits(stage_id) | bits
+	return new_bits
+
+## Which stars a finished battle earned, as [★1, ★2, ★3]. All three need a win. `result` is the engine's
+## recorded result; the team is read as it is now (it can't change during a battle).
+func stars_for(stage: StageData, result: Dictionary) -> Array[bool]:
+	var out: Array[bool] = [false, false, false]
+	if not result.win:
+		return out
+	out[0] = true
+	var knocked_out := false
+	var members := 0
+	for i in result.units.size():
+		if result.units[i].side == 0:
+			members += 1
+			knocked_out = knocked_out or int(result.stats[i].hp) <= 0
+	out[1] = not knocked_out
+	match stage.star_goal:
+		StageData.StarGoal.HP_LEFT:
+			out[2] = result.ally_hp * 100.0 >= stage.star_goal_value - 0.001
+		StageData.StarGoal.MAX_COST:
+			out[2] = team_cost() <= stage.star_goal_value
+		StageData.StarGoal.MAX_MEMBERS:
+			out[2] = members <= stage.star_goal_value
+		StageData.StarGoal.MAX_ULTIMATES:
+			var fired := 0
+			for event in result.events:
+				if event.kind == "ultimate" and result.units[event.actor].side == 0:
+					fired += 1
+			out[2] = fired <= stage.star_goal_value
+	return out
+
 func is_chapter_unlocked(chapter: int) -> bool:
 	if chapter <= 1:
 		return true
@@ -453,13 +558,21 @@ func _grant_free_friends() -> void:
 		var c: CharacterData = DB.characters.get(id)
 		if c == null or not find_owned(id).is_empty():
 			continue
-		var entry := add_character(c)
-		var team: Array = data.teams[0]
-		var slots := range(VANGUARD_SLOTS) if c.is_vanguard() else range(VANGUARD_SLOTS, TEAM_SLOTS)
-		for slot in slots:
-			if int(team[slot]) == 0:
-				team[slot] = entry.uid
-				break
+		place_in_team(int(add_character(c).uid))
+
+## Puts a friend into the first empty slot of their row in the first team; false if that row is full
+func place_in_team(uid: int) -> bool:
+	var c := get_character(uid)
+	if c == null or team_slot_of(uid) >= 0:
+		return false
+	var team: Array = data.teams[0]
+	var slots := range(VANGUARD_SLOTS) if c.is_vanguard() else range(VANGUARD_SLOTS, TEAM_SLOTS)
+	for slot in slots:
+		if int(team[slot]) == 0:
+			team[slot] = uid
+			roster_changed.emit()
+			return true
+	return false
 
 ## Final stats: base stats scaled by level, plus gear modifiers (unless with_equipment is false)
 func get_unit_stats(uid: int, with_equipment: bool = true) -> Dictionary:
@@ -502,18 +615,26 @@ func add_exp(uid: int, amount: int) -> int:
 	var level := int(o.level)
 	var xp := int(o.exp) + amount
 	var gained := 0
-	while level < MAX_LEVEL and xp >= exp_to_next(level):
+	var cap := level_cap()
+	while level < cap and xp >= exp_to_next(level):
 		xp -= exp_to_next(level)
 		level += 1
 		gained += 1
 	if level >= MAX_LEVEL:
 		xp = 0
+	elif level >= cap:
+		xp = mini(xp, exp_to_next(level) - 1)  # held just short of the next level until the account catches up
 	o.level = level
 	o.exp = xp
 	roster_changed.emit()
 	return gained
 
-## Money needed to raise a friend by `levels` levels right now; 0 if they're already at max level
+## The highest level friends can reach right now: LEVEL_CAP_ABOVE_ACCOUNT above the account level, at most
+## MAX_LEVEL. Friends already above it (older saves) keep their level but gain no more until the account catches up.
+func level_cap() -> int:
+	return mini(get_account_level() + LEVEL_CAP_ABOVE_ACCOUNT, MAX_LEVEL)
+
+## Money needed to raise a friend by `levels` levels right now; 0 if they're already at the level cap
 func level_up_cost(uid: int, levels: int = 1) -> int:
 	var o := get_owned(uid)
 	if o.is_empty():
@@ -521,19 +642,19 @@ func level_up_cost(uid: int, levels: int = 1) -> int:
 	var level := int(o.level)
 	var needed := -int(o.exp)  # EXP they already have toward the next level counts
 	for i in levels:
-		if level >= MAX_LEVEL:
+		if level >= level_cap():
 			break
 		needed += exp_to_next(level)
 		level += 1
 	return maxi(needed, 0) * GOLD_PER_EXP
 
-## EXP still needed to reach MAX_LEVEL
+## EXP still needed to reach the level cap (feeding stops there)
 func exp_to_max(uid: int) -> int:
 	var o := get_owned(uid)
 	if o.is_empty():
 		return 0
 	var needed := -int(o.exp)
-	for level in range(int(o.level), MAX_LEVEL):
+	for level in range(int(o.level), level_cap()):
 		needed += exp_to_next(level)
 	return maxi(needed, 0)
 
@@ -552,13 +673,124 @@ func feed_material(uid: int, key: String, count: int) -> int:
 	add_material(key, -count)
 	return add_exp(uid, count * int(MATERIAL_EXP[key]))
 
-## Spend Money to instantly gain levels (capped at MAX_LEVEL). Returns false if they can't afford it.
+## Spend Money to instantly gain levels (up to the level cap). Returns false if they can't afford it.
 func buy_levels(uid: int, levels: int = 1) -> bool:
 	var cost := level_up_cost(uid, levels)
 	if cost <= 0 or not try_spend(cost):
 		return false
 	add_exp(uid, cost / GOLD_PER_EXP)
 	return true
+
+# ───────── Test mode ─────────
+
+var _test_mode = null  # worked out once: null until asked
+
+## Test mode: debug builds (running from the editor), or the web build opened with "test" in the URL
+## (e.g. index.html?test). Unlocks the Test Mode window and 3x battle speed.
+func is_test_mode() -> bool:
+	if _test_mode == null:
+		_test_mode = OS.is_debug_build() or (OS.has_feature("web")
+			and str(JavaScriptBridge.eval("window.location.search", true)).contains("test"))
+	return _test_mode
+
+# ───────── Lifetime counters & tutorial ─────────
+
+func get_stat(key: String) -> int:
+	return int(data.stats.get(key, 0))
+
+func add_stat(key: String, amount: int = 1) -> void:
+	if amount <= 0:
+		return
+	data.stats[key] = get_stat(key) + amount
+	stats_changed.emit()
+	request_save()
+
+func tutorial_step() -> int:
+	return int(data.tutorial)
+
+## Moves the tutorial on to `step`, never backwards
+func advance_tutorial(step: int) -> void:
+	if step > tutorial_step():
+		data.tutorial = step
+		request_save()
+
+# ───────── Account level ─────────
+
+func get_account_level() -> int:
+	return int(data.account_level)
+
+func get_account_exp() -> int:
+	return int(data.account_exp)
+
+## Half a friend's curve: the account only earns EXP from battle wins, while friends also level from
+## materials and Money, so this keeps account level close to the maps' recommended levels
+static func account_exp_to_next(level: int) -> int:
+	return 25 * level + 25
+
+## Account EXP for winning on a map with this exp_reward, the first time or again
+static func account_exp_for(map_exp: int, first_clear: bool) -> int:
+	if map_exp <= 0:
+		return 0
+	if first_clear:
+		return map_exp * ACCOUNT_FIRST_CLEAR_MULT
+	return maxi(roundi(map_exp * ACCOUNT_REPEAT_SHARE), 1)
+
+## Adds account EXP and levels up at each threshold. Returns how many account levels were gained.
+func add_account_exp(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var level := get_account_level()
+	var xp := get_account_exp() + amount
+	var gained := 0
+	while level < ACCOUNT_MAX_LEVEL and xp >= account_exp_to_next(level):
+		xp -= account_exp_to_next(level)
+		level += 1
+		gained += 1
+	if level >= ACCOUNT_MAX_LEVEL:
+		xp = 0
+	data.account_level = level
+	data.account_exp = xp
+	account_changed.emit()
+	return gained
+
+## The most team cost allowed at an account level (the current one by default)
+static func team_cost_limit_at(level: int) -> int:
+	var limit := TEAM_COST_BASE
+	for step: int in TEAM_COST_STEPS:
+		if level >= step:
+			limit += 1
+	return limit
+
+func team_cost_limit() -> int:
+	return team_cost_limit_at(get_account_level())
+
+static func rarity_cost(rarity: int) -> int:
+	return int(TEAM_COST.get(rarity, 3))
+
+## What one friend costs in a team (0 for an empty slot)
+func unit_cost(uid: int) -> int:
+	var c := get_character(uid)
+	return rarity_cost(c.rarity) if c else 0
+
+func team_cost(index: int = 0) -> int:
+	var total := 0
+	for uid in team_members(index):
+		total += unit_cost(uid)
+	return total
+
+func is_team_over_cost(index: int = 0) -> bool:
+	return team_cost(index) > team_cost_limit()
+
+## Whether putting this friend into the slot keeps the team within the cost limit
+## (moving someone already in the team only swaps places, so the total doesn't change)
+func fits_cost(uid: int, slot: int, index: int = 0) -> bool:
+	if team_slot_of(uid, index) >= 0:
+		return true
+	return team_cost(index) - unit_cost(team_uid(slot, index)) + unit_cost(uid) <= team_cost_limit()
+
+## A team can head out when it has anyone in it and is within the cost limit
+func can_battle(index: int = 0) -> bool:
+	return has_team(index) and not is_team_over_cost(index)
 
 # ───────── Teams ─────────
 
@@ -581,8 +813,9 @@ func can_place(uid: int, slot: int) -> bool:
 
 ## Put a friend into a slot. If they're already elsewhere in the team, the two slots swap.
 ## Returns false (and changes nothing) if either friend would end up in a row their class can't use.
+## Also returns false if the team would go over the cost limit.
 func set_team_slot(slot: int, uid: int, index: int = 0) -> bool:
-	if not can_place(uid, slot):
+	if not can_place(uid, slot) or not fits_cost(uid, slot, index):
 		return false
 	var team: Array = data.teams[index]
 	var previous_slot := team_slot_of(uid, index)

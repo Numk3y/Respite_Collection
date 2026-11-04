@@ -234,12 +234,52 @@ static func background(bg_name: String) -> Texture2D:
 	var path := CharacterData.find_art(BACKGROUND_DIR, bg_name)
 	return load(path) as Texture2D if not path.is_empty() else null
 
+## The Home lobby picture: Art/backgrounds/home.* or HomeBg.*, or null if neither exists
+static func home_background() -> Texture2D:
+	var tex := background("home")
+	return tex if tex else background("homebg")
+
+static var _blur_cache := {}  # Texture2D -> blurred ImageTexture
+
+## A soft, blurred copy of a texture (made once and cached): shrunk to a small size, then scaled back up smoothly
+static func blurred(texture: Texture2D, strength: float = 14.0) -> Texture2D:
+	if texture == null:
+		return null
+	var key := [texture, strength]
+	if _blur_cache.has(key):
+		return _blur_cache[key]
+	var image := texture.get_image()
+	if image == null:
+		return texture
+	if image.is_compressed():
+		image.decompress()
+	var full := image.get_size()
+	image.resize(maxi(int(full.x / strength), 8), maxi(int(full.y / strength), 8), Image.INTERPOLATE_LANCZOS)
+	image.resize(maxi(int(full.x / 3.0), 8), maxi(int(full.y / 3.0), 8), Image.INTERPOLATE_CUBIC)  # smooth, no blocky upscale
+	var result := ImageTexture.create_from_image(image)
+	_blur_cache[key] = result
+	return result
+
 ## Draws a texture scaled to cover the rect (cropping the overflow, centred), like a CSS "cover" background
 static func draw_texture_cover(ci: CanvasItem, texture: Texture2D, rect: Rect2, modulate: Color = Color.WHITE) -> void:
 	var tex_size := texture.get_size()
 	var scale := maxf(rect.size.x / tex_size.x, rect.size.y / tex_size.y)
 	var src_size := rect.size / scale
 	ci.draw_texture_rect_region(texture, rect, Rect2((tex_size - src_size) * 0.5, src_size), modulate)
+
+## A five-pointed star drawn as a shape (the web build's font has no star glyph): filled in `color`, or just
+## a dim outline when not earned
+static func draw_star(ci: CanvasItem, center: Vector2, radius: float, color: Color, filled: bool = true) -> void:
+	var points := PackedVector2Array()
+	for p in 10:
+		var r := radius if p % 2 == 0 else radius * 0.45
+		points.append(center + Vector2.from_angle(-PI / 2.0 + p * PI / 5.0) * r)
+	if filled:
+		ci.draw_colored_polygon(points, color)
+	else:
+		ci.draw_colored_polygon(points, Color(0, 0, 0, 0.45))
+	points.append(points[0])
+	ci.draw_polyline(points, Color(0, 0, 0, 0.6) if filled else Color(color, 0.55), 1.5, true)
 
 ## A soft radial glow: stacked translucent circles fading outward
 static func draw_glow(ci: CanvasItem, center: Vector2, radius: float, color: Color, steps: int = 8) -> void:

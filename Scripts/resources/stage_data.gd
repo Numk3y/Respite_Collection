@@ -7,6 +7,9 @@ extends Resource
 
 const MAPS_PER_CHAPTER := 4
 const BOSS_NUMBER := 5
+## The third star's goal (the first two are always "win" and "win with nobody knocked out")
+enum StarGoal { HP_LEFT, MAX_COST, MAX_MEMBERS, MAX_ULTIMATES }
+
 const ENEMY_GROWTH_PER_LEVEL := 0.09  # per enemy level; a bit over twice friends' growth (GameState.GROWTH_PER_LEVEL = 0.04)
 
 @export var id: StringName
@@ -32,6 +35,12 @@ const ENEMY_GROWTH_PER_LEVEL := 0.09  # per enemy level; a bit over twice friend
 @export var reward_materials: Dictionary[String, Vector2i] = {}  # material key -> (min, max)
 @export var equipment_drops: Array[EquipmentData] = []
 @export_range(0.0, 1.0) var drop_chance: float = 0.05
+@export_group("Stars")
+## ★1 = win, ★2 = win with no friend knocked out, ★3 = win while meeting this goal:
+## HP Left = at least Value % of the team's total HP left; Max Cost = team cost Value or less;
+## Max Members = Value friends or fewer; Max Ultimates = the team fires Value Ultimates or fewer (0 = none)
+@export var star_goal: StarGoal = StarGoal.HP_LEFT
+@export var star_goal_value: int = 50
 
 func is_story() -> bool:
 	return chapter > 0

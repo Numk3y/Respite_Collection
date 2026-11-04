@@ -3,9 +3,12 @@ extends VBoxContainer
 ## Recruit screen: banner selector and balance on top, then the banner itself (GachaBanner: the Pick Up
 ## friends' art, the pool's title and rates, with the pull buttons and their costs at its bottom right).
 ## Results play as a full-screen summon animation (GachaSummon).
+## A new player's Beginner pool (GachaPool.beginner) comes first with a single free pull, then goes away for good.
+
+signal beginner_pulled(result: Dictionary)  # the free Beginner pull is done (the tutorial moves on)
 
 var _pool: GachaPool
-var _pool_buttons: Array[Button] = []
+var _pool_buttons: Dictionary = {}  # index in DB.pools -> Button (a used-up Beginner pool has none)
 var _balance_label: Label
 var _banner: GachaBanner
 var _pull_buttons: Dictionary = {}  # count -> Button
@@ -19,8 +22,7 @@ func _ready() -> void:
 	_build_pull_buttons()
 	GameState.money_changed.connect(func(_value): _refresh_money())
 	GameState.credit_cards_changed.connect(func(_value): _refresh_money())
-	if not DB.pools.is_empty():
-		_select_pool(0)
+	_select_first_pool()
 
 func _build_top_bar() -> void:
 	var bar := HBoxContainer.new()
@@ -28,13 +30,15 @@ func _build_top_bar() -> void:
 	add_child(bar)
 	var group := ButtonGroup.new()
 	for i in DB.pools.size():
+		if DB.pools[i].beginner and not Gacha.beginner_available():
+			continue
 		var button := Button.new()
 		button.text = DB.pools[i].display_name
 		button.toggle_mode = true
 		button.button_group = group
 		button.pressed.connect(_select_pool.bind(i))
 		bar.add_child(button)
-		_pool_buttons.append(button)
+		_pool_buttons[i] = button
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(spacer)
@@ -66,10 +70,26 @@ func _centered_label(text: String, font_size: int) -> Label:
 	label.add_theme_font_size_override("font_size", font_size)
 	return label
 
+## The Beginner pool while it's on offer, else the first regular pool
+func _select_first_pool() -> void:
+	for i in DB.pools.size():
+		if DB.pools[i].beginner and _pool_buttons.has(i):
+			_select_pool(i)
+			return
+	for i in DB.pools.size():
+		if _pool_buttons.has(i):
+			_select_pool(i)
+			return
+
+## The free pull button while the Beginner pool is shown (the tutorial points at it), else null
+func free_pull_button() -> Button:
+	return _pull_buttons[1] if _pool and _pool.beginner else null
+
 func _select_pool(index: int) -> void:
 	_pool = DB.pools[index]
 	_pool_buttons[index].button_pressed = true
-	_banner.set_pool(_pool, Terms.t("gacha_rates", {"rates": _rate_text(_pool)}))
+	var rates := Terms.t("gacha_beginner_rates") if _pool.beginner else Terms.t("gacha_rates", {"rates": _rate_text(_pool)})
+	_banner.set_pool(_pool, rates)
 	_message.text = ""
 	_refresh_money()
 
@@ -77,6 +97,14 @@ func _refresh_money() -> void:
 	_balance_label.text = Terms.t("gacha_balance", {"amount": GameState.get_money(), "cards": GameState.get_credit_cards()})
 	if _pool == null:
 		return
+	if _pool.beginner:
+		_pull_buttons[10].visible = false
+		_pull_buttons[1].text = Terms.t("gacha_beginner_pull")
+		_pull_buttons[1].disabled = not Gacha.beginner_available()
+		_banner.pity_label.text = ""
+		_banner.pity_bar.set_progress(0, 0)
+		return
+	_pull_buttons[10].visible = true
 	for count in _pull_buttons:
 		var cost := Gacha.money_cost(_pool, count)
 		var cards := Gacha.card_cost(count)
@@ -174,6 +202,19 @@ func _rate_text(pool: GachaPool) -> String:
 	return " · ".join(parts)
 
 func _on_pull(count: int) -> void:
+	if _pool.beginner:
+		var free := Gacha.beginner_pull(_pool)
+		if free.is_empty():
+			return
+		# The Beginner pool is used up: take its button away and move on to the regular pool
+		for i in _pool_buttons.keys():
+			if DB.pools[i] == _pool:
+				_pool_buttons[i].queue_free()
+				_pool_buttons.erase(i)
+		_select_first_pool()
+		var summon := _show_results(free)
+		summon.finished.connect(func(): beginner_pulled.emit(free[0]))
+		return
 	if GameState.get_credit_cards() < Gacha.card_cost(count):
 		_message.text = Terms.t("gacha_no_cards", {"amount": Gacha.card_cost(count),
 			"bonus": "%d %s" % [GameState.FIRST_CLEAR_CREDIT_CARDS, Terms.credit_card_word(GameState.FIRST_CLEAR_CREDIT_CARDS)]})
@@ -190,18 +231,19 @@ func _on_pull(count: int) -> void:
 	_show_results(results)
 
 ## The full-screen summon animation (Scripts/ui/gacha_summon.gd), one reveal per result
-func _show_results(results: Array[Dictionary]) -> void:
+func _show_results(results: Array[Dictionary]) -> GachaSummon:
 	var notes: Array[String] = []
 	for r in results:
 		notes.append(_result_text(r))
 	var summon := GachaSummon.new()
 	add_child(summon)
 	summon.open(results, notes)
+	return summon
 
 func _result_text(r: Dictionary) -> String:
 	match r.result:
 		"new":
-			return Terms.t("new_badge")
+			return Terms.t("new_badge") + (Terms.t("gacha_joined_team") if r.get("joined_team", false) else "")
 		"ascend":
 			return Terms.t("gacha_ascend", {"rank": r.rank, "max": GameState.MAX_ASCENSION})
 		_:
