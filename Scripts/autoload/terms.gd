@@ -492,6 +492,7 @@ const TEXT := {
 	"gacha_featured": "Featured {characters} are in this pool!",  # featured only means shown; no rate-up
 	"gacha_up": "UP!",
 	"gacha_common_ribbon": "ALWAYS OPEN",
+	"gacha_lineup": "SR LINEUP",
 	"gacha_common_header": "Every regular {character} is in this pool!",
 	"gacha_beginner_ribbon": "NEW PLAYERS",
 	"gacha_beginner_header": "A free SR {character} to start your {team}!",
