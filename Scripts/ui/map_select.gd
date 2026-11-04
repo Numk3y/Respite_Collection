@@ -9,6 +9,7 @@ extends Control
 ## Main listens to battle_pressed / back_pressed.
 
 signal battle_pressed(stage: StageData)
+signal auto_run_pressed(stage: StageData)  # Auto Run on a 3-star map (Main asks how many runs)
 signal back_pressed
 
 const PRACTICE := 0  # "chapter" of the maps outside the story
@@ -26,7 +27,9 @@ var _detail_text: Label
 var _chips: HBoxContainer
 var _enemies: HBoxContainer
 var _rewards: VBoxContainer
+var _stars: VBoxContainer  # the map's three star goals, earned ones lit
 var _battle: Button
+var _auto: Button  # Auto Run: unlocked by 3 stars on the map
 var _battle_note: Label
 var _chapter := -1
 var _stage: StageData
@@ -152,6 +155,9 @@ func _build_detail() -> Control:
 	_detail_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail_text.custom_minimum_size.x = 200
 	info.add_child(_detail_text)
+	_stars = VBoxContainer.new()
+	_stars.add_theme_constant_override("separation", 2)
+	info.add_child(_stars)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	info.add_child(spacer)
@@ -180,6 +186,13 @@ func _build_detail() -> Control:
 	_battle.pressed.connect(func():
 		if _stage:
 			battle_pressed.emit(_stage))
+	_auto = Button.new()
+	_auto.text = Terms.t("auto_run_button", {"max": Combat.AUTO_RUN_MAX})
+	_auto.custom_minimum_size = Vector2(220, 40)
+	_auto.pressed.connect(func():
+		if _stage:
+			auto_run_pressed.emit(_stage))
+	side.add_child(_auto)
 	side.add_child(_battle)
 	# The Battle button breathes so it's the obvious next step
 	var pulse := _battle.create_tween().set_loops()
@@ -187,10 +200,25 @@ func _build_detail() -> Control:
 	pulse.tween_property(_battle, "modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
 	return panel
 
+## Shows the selected map again (after an Auto Run changed what's earned there)
+func refresh_stage() -> void:
+	if _stage:
+		_select_stage(_stage)
+
+## The big Battle button (the tutorial points at it)
+func battle_button() -> Button:
+	return _battle
+
+## Why the Battle button is off: an empty team, or one over the cost limit
+func _need_team_text() -> String:
+	if GameState.has_team() and GameState.is_team_over_cost():
+		return Terms.t("team_over_cost", {"cost": GameState.team_cost(), "limit": GameState.team_cost_limit()})
+	return Terms.t("map_need_team")
+
 ## Fills the screen; opens on the chapter (and map) the player is up to
 func open(can_battle: bool) -> void:
 	_can_battle = can_battle
-	_battle_note.text = "" if can_battle else Terms.t("map_need_team")
+	_battle_note.text = "" if can_battle else _need_team_text()
 	_battle_note.visible = not can_battle
 	var group := ButtonGroup.new()
 	var chapters: Array[int] = []
@@ -226,7 +254,7 @@ func open_event(event: EventData, can_battle: bool) -> void:
 	_banner_label.text = event.display_name.to_upper()
 	_hint_label.text = Terms.t("event_map_hint")
 	_can_battle = can_battle
-	_battle_note.text = "" if can_battle else Terms.t("map_need_team")
+	_battle_note.text = "" if can_battle else _need_team_text()
 	_battle_note.visible = not can_battle
 	var group := ButtonGroup.new()
 	var current := -1
@@ -305,6 +333,22 @@ func _select_stage(stage: StageData) -> void:
 	if cleared:
 		_chips.add_child(UITheme.tag(Terms.t("map_cleared"), Color("#4ade80")))
 
+	# Star goals: a lit star for each one already earned here
+	for child in _stars.get_children():
+		child.queue_free()
+	var bits := GameState.get_star_bits(stage.id)
+	for i in GameState.STAR_COUNT:
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 6)
+		var earned := (bits & (1 << i)) != 0
+		line.add_child(StarMeter.new(15.0, [earned]))
+		line.add_child(_label(Terms.star_goal(stage, i), 13, UITheme.TEXT if earned else UITheme.TEXT_DIM))
+		_stars.add_child(line)
+	if stage.star_goal == StageData.StarGoal.MAX_ULTIMATES and (bits & 4) == 0:
+		var tip := _label(Terms.t("star_manual_hint"), 12, UITheme.CYAN)
+		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_stars.add_child(tip)
+
 	for child in _enemies.get_children():
 		child.queue_free()
 	for c in _enemy_list(stage).slice(0, MAX_ENEMIES):
@@ -327,8 +371,12 @@ func _select_stage(stage: StageData) -> void:
 		_rewards.add_child(_reward_line(Terms.t("map_reward_gear", {"chance": roundi(stage.drop_chance * 100)}), Color("#c4b5fd")))
 	if not cleared:
 		_rewards.add_child(_reward_line(Terms.t("map_reward_first", {"amount": GameState.FIRST_CLEAR_CREDIT_CARDS}), Color("#ffe259")))
+	if (bits & 6) != 6:  # a 2nd or 3rd star still to earn
+		_rewards.add_child(_reward_line(Terms.t("map_reward_star", {"amount": GameState.STAR_CREDIT_CARDS}), Color("#ffe259")))
 
 	_battle.disabled = not _can_battle or not unlocked
+	_auto.disabled = not Combat.can_auto_run(stage)
+	_auto.tooltip_text = Terms.t("auto_run_tip" if not _auto.disabled else "auto_run_locked", {"max": Combat.AUTO_RUN_MAX})
 	var previous := "%d-%d" % [stage.chapter, stage.number - 1]
 	if _event and _event.missions.find(stage) > 0:
 		previous = _event.missions[_event.missions.find(stage) - 1].code()
@@ -496,6 +544,15 @@ class StageNode extends Button:
 				Color.WHITE if stage else Color(1, 1, 1, 0.3))
 		if cleared:
 			_check(c + Vector2(r * 0.62, -r * 0.62))
+		# The map's stars along the bottom of the node
+		if unlocked:
+			var bits := GameState.get_star_bits(stage.id)
+			var star_r := 7.0
+			var base := Vector2(c.x - (star_r * 2.0 + 2.0), size.y - 2.0)
+			draw_rect(Rect2(base + Vector2(-star_r - 4.0, -star_r - 3.0), Vector2((star_r * 2.0 + 2.0) * 2.0 + star_r * 2.0 + 8.0, star_r * 2.0 + 6.0)),
+				Color(0.02, 0.03, 0.06, 0.85))
+			for i in GameState.STAR_COUNT:
+				UITheme.draw_star(self, base + Vector2(i * (star_r * 2.0 + 2.0), 0), star_r, StarMeter.GOLD, (bits & (1 << i)) != 0)
 		# Little tags above: BOSS, and NEXT bouncing on the map to play next
 		var tag := ""
 		var tag_color := Color.WHITE

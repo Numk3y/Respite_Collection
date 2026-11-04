@@ -311,6 +311,8 @@ func _fill(info: Dictionary) -> void:
 		note = Terms.t("event_boss_locked")
 	elif not GameState.has_team():
 		note = Terms.t("map_need_team")
+	elif GameState.is_team_over_cost():
+		note = Terms.t("team_over_cost", {"cost": GameState.team_cost(), "limit": GameState.team_cost_limit()})
 	elif registered and int(me.attempts_left) <= 0:
 		note = Terms.t("event_no_attempts")
 	_challenge.disabled = not note.is_empty() or not registered

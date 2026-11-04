@@ -105,6 +105,11 @@ const ULTIMATE_EFFECTS := {
 	# Fires `shots` times, each at a random attackable enemy (a taunt pulls every shot), for `damage_mult` x Attack.
 	# With `any_row` the shots spray both rows, back row included.
 	&"full_auto": {"shots": 5, "damage_mult": 0.6, "any_row": false},
+	# Locks onto one enemy (picked like a normal single-target attack) and fires at it for `damage_mult` x Attack.
+	# For the caster's next N actions every attack goes to that enemy (ignoring taunts) while it stands, and every
+	# hit that lands on it (this shot too) leaves a Hat. At `marks` Hats they explode for `explode_pct` of the
+	# enemy's max HP, ignoring Defense, but at most `cap_mult` x the caster's Attack; the Hats then start over.
+	&"hat_trick": {"damage_mult": 1.0, "turns": 3, "marks": 3, "explode_pct": 0.3, "cap_mult": 3.0},
 }
 
 ## Passive effects a passive SkillData.effect_id can use, with their default params
@@ -177,64 +182,98 @@ const PASSIVE_EFFECTS := {
 	# included (a taunt still pulls them). Without a tank holding a taunt, the back row gets picked off.
 	# Enrage: Attack x(1 + `enrage`) for every action it has taken, compounding, so a long fight needs real sustain.
 	&"full_metal_kit": {"damage_reduction": 0.25, "enrage": 0.04},
+	# Taking down an enemy: `speed` Speed and +`damage` damage for its next N own actions, and each single-target
+	# hit that lands splashes onto another living enemy for `splash` of the damage (can't miss). Then it can't
+	# trigger again until `cooldown` own actions after the takedown.
+	&"until_next_time": {"speed": -0.3, "damage": 0.65, "splash": 0.5, "turns": 3, "cooldown": 5},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
 var _units: Array[Dictionary] = []  # everyone in the current battle, for effects that reach past the action
 var _countering := false  # a counterattack is resolving; counters never chain into more counters
+var _run := {}  # the battle in progress: see begin()
 
 ## `enemies` is either one team or {"waves": [team, ...]}. Waves are fought back to back (FGO-style): the
 ## allies keep their HP, energy and buffs, fallen allies stay down, and every wave starts with fresh turn order.
 ## The battle is won when the last wave is cleared and lost when every ally is down.
+## Runs the whole battle at once (always automatic Ultimates); see begin() / step() for a live battle.
 func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerator, record: bool = false) -> Dictionary:
+	begin(allies, enemies, rng, record, false)
+	while not is_done():
+		step()
+	return result()
+
+## Sets up a battle to be played one action at a time with step(). With `manual` on, allies with a full
+## Ultimate gauge hold it (attacking normally) until queue_ultimate() asks for it; it then fires on their next
+## action. Returns the unit snapshot (see BattleEngine) when recording, else [].
+func begin(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerator, record: bool = true, manual: bool = false) -> Array:
 	_acting_index = -1
 	_countering = false
-	var waves: Array = enemies.get("waves", [enemies])
-	var lines := PackedStringArray()
-	var events: Array[Dictionary] = []
 	var units: Array[Dictionary] = []
 	_units = units
+	var waves: Array = enemies.get("waves", [enemies])
 	_add_side(units, allies, 0, -1)
 	for w in waves.size():
 		_add_side(units, waves[w], 1, w)
-	var snapshot := _snapshot(units) if record else []
+	var events: Array[Dictionary] = []
+	_run = {"units": units, "waves": waves, "rng": rng, "record": record, "manual": manual,
+		"lines": PackedStringArray(), "events": events, "snapshot": _snapshot(units) if record else [],
+		"win": false, "done": false, "end_key": "log_timeout", "actions": 0, "wave_actions": 0, "wave": 0,
+		"manual_fired": 0,  # Ultimates the player fired by hand
+		"max_actions": int(enemies.get("max_actions", MAX_ACTIONS)),  # world boss fights are short on purpose
+		"timeout_key": enemies.get("timeout_key", "log_timeout")}
+	return _run.snapshot
 
-	var win := false
-	var actions := 0
-	var wave_actions := 0
-	var max_actions: int = enemies.get("max_actions", MAX_ACTIONS)  # world boss fights are short on purpose
-	var wave := 0
-	var end_key := "log_timeout"
-	while true:
-		if not _side_standing(units, 0):
-			end_key = "log_lose"
-			break
-		if not _side_standing(units, 1):
-			if wave + 1 >= waves.size():
-				win = true
-				end_key = "log_win"
-				break
-			wave += 1
-			wave_actions = 0
-			_start_wave(units, wave)
-			if record:
-				var wave_event := {"actor": -1, "kind": "wave", "wave": wave, "wave_count": waves.size(),
-					"boss": waves[wave].get("boss", false), "banner": waves[wave].get("banner", ""), "hits": [], "heals": [], "off_balance": [], "assists": [],
-					"guard_charges": [], "lines": PackedStringArray([Terms.t("log_wave", {"current": wave + 1, "total": waves.size()})]),
-					"state": _state(units)}
-				events.append(wave_event)
-				lines.append_array(wave_event.lines)
-			continue
-		if wave_actions >= max_actions:
-			end_key = enemies.get("timeout_key", end_key)
-			break  # stalemate: counts as a loss
-		actions += 1
-		wave_actions += 1
-		var event := _take_turn(_next_actor(units), units, rng, record)
-		if record:
-			events.append(event)
-			lines.append_array(event.lines)
+func is_done() -> bool:
+	return _run.is_empty() or _run.done
 
+## Plays the next action (or brings in the next wave) and returns its event; {} once the battle is over.
+## Without recording the event is still returned but carries no log lines or state.
+func step() -> Dictionary:
+	if is_done():
+		return {}
+	var units: Array[Dictionary] = _run.units
+	if not _side_standing(units, 0):
+		_end(false, "log_lose")
+		return {}
+	if not _side_standing(units, 1):
+		var waves: Array = _run.waves
+		if _run.wave + 1 >= waves.size():
+			_end(true, "log_win")
+			return {}
+		_run.wave += 1
+		_run.wave_actions = 0
+		var wave: int = _run.wave
+		_start_wave(units, wave)
+		var wave_event := {"actor": -1, "kind": "wave", "wave": wave, "wave_count": waves.size(),
+			"boss": waves[wave].get("boss", false), "banner": waves[wave].get("banner", ""), "hits": [], "heals": [], "off_balance": [], "assists": [],
+			"guard_charges": [], "lines": PackedStringArray()}
+		if _run.record:
+			wave_event.lines.append(Terms.t("log_wave", {"current": wave + 1, "total": waves.size()}))
+			wave_event.state = _state(units)
+			_run.events.append(wave_event)
+			_run.lines.append_array(wave_event.lines)
+		return wave_event
+	if _run.wave_actions >= _run.max_actions:
+		_end(false, _run.timeout_key)  # stalemate: counts as a loss
+		return {}
+	_run.actions += 1
+	_run.wave_actions += 1
+	var event := _take_turn(_next_actor(units), units, _run.rng, _run.record)
+	if _run.record:
+		_run.events.append(event)
+		_run.lines.append_array(event.lines)
+	return event
+
+func _end(win: bool, end_key: String) -> void:
+	_run.done = true
+	_run.win = win
+	_run.end_key = end_key
+
+## The finished battle's result (see BattleEngine for the keys)
+func result() -> Dictionary:
+	var units: Array[Dictionary] = _run.units
+	var win: bool = _run.win
 	# Share of the allies' total HP left at the end (balance testing tells close wins from easy ones)
 	var hp_left := 0.0
 	var hp_max := 0.0
@@ -242,19 +281,45 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 		if u.side == 0:
 			hp_left += maxf(u.hp, 0.0)
 			hp_max += u.max_hp
-	var result := {"win": win, "actions": actions, "log": lines, "waves_cleared": wave + (1 if win else 0), "wave_count": waves.size(),
-		"ally_hp": hp_left / hp_max if hp_max > 0.0 else 0.0,
+	var lines: PackedStringArray = _run.lines
+	var out := {"win": win, "actions": _run.actions, "manual_ultimates": _run.manual_fired, "log": lines, "waves_cleared": _run.wave + (1 if win else 0),
+		"wave_count": _run.waves.size(), "ally_hp": hp_left / hp_max if hp_max > 0.0 else 0.0,
 		# Per unit, same order as `units`: HP removed from enemies, HP lost, HP restored (to anyone), HP left at the end
 		"stats": units.map(func(u): return {"dealt": u.dealt, "taken": u.taken, "healed": u.healed,
 			"hp": maxi(u.hp, 0), "max_hp": u.max_hp})}
-	if record:
-		var end_lines := PackedStringArray([Terms.t(end_key)])
+	if _run.record:
+		var end_lines := PackedStringArray([Terms.t(_run.end_key)])
 		lines.append_array(end_lines)
-		result.log = lines
-		result.units = snapshot
-		result.events = events
-		result.end_lines = end_lines
-	return result
+		out.log = lines
+		out.units = _run.snapshot
+		out.events = _run.events
+		out.end_lines = end_lines
+	return out
+
+## Manual Ultimates: switch them on or off, also in the middle of a battle
+func set_manual(on: bool) -> void:
+	if not _run.is_empty():
+		_run.manual = on
+
+## Manual Ultimates: ask an ally (by unit index) to fire their Ultimate on their next action once the gauge
+## is full, or take the request back
+func queue_ultimate(index: int, on: bool = true) -> void:
+	if not _run.is_empty() and index >= 0 and index < _run.units.size():
+		_run.units[index].ult_queued = on
+
+func is_ultimate_queued(index: int) -> bool:
+	return not _run.is_empty() and index >= 0 and index < _run.units.size() and _run.units[index].get("ult_queued", false)
+
+## Whether a unit with a full gauge fires now: always for enemies and in automatic battles; in a manual
+## battle an ally only when the player asked for it (the request is used up)
+func _may_fire_ultimate(u: Dictionary) -> bool:
+	if u.side != 0 or not _run.get("manual", false):
+		return true
+	if u.get("ult_queued", false):
+		u.ult_queued = false
+		_run.manual_fired += 1
+		return true
+	return false
 
 ## Brings in the enemies of `wave` and gives everyone a fresh start on turn order
 func _start_wave(units: Array[Dictionary], wave: int) -> void:
@@ -560,7 +625,7 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 				actor.sleep_immune = int(sleep.get("immune_after", 0))
 				if record:
 					event.lines.append(Terms.t(sleep.get("wake_log", "log_wake_plain"), {"name": actor.name}))
-	elif not actor.ultimate.is_empty() and actor.energy >= actor.energy_max:
+	elif not actor.ultimate.is_empty() and actor.energy >= actor.energy_max and _may_fire_ultimate(actor):
 		event.kind = "ultimate"
 		event.skill = actor.ultimate.name
 		_cast_ultimate(actor, rng, event, record)
@@ -596,6 +661,7 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	_chill_regen(actor, event, record)
 	_horse_tick(actor, event, record)
 	_tick_buffs(actor, "actions", event, record, rng)
+	_clear_stale_hats(actor)
 	_cancer_drain(actor, event, record)
 	_check_swig(actor, event, record)
 	if event.kind != "sleep":
@@ -762,6 +828,18 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 					_add_buff(target, {"id": &"deafened", "name": Terms.t("buff_deafened"), "remaining": int(p.turns),
 						"counts": "actions", "mods": {"accuracy": float(p.accuracy), "speed": float(p.speed)}})
 					event.get_or_add("deafened", []).append(target.index)
+		&"hat_trick":
+			var foes := _targetable(_units, 1 - actor.side)
+			if foes.is_empty():
+				return
+			var taunting := foes.filter(func(t): return _has_flag(t, "taunt"))
+			var pool := taunting if not taunting.is_empty() else foes
+			var mark: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
+			_add_buff(actor, {"id": &"hat_trick", "name": skill_name, "locked": true, "lock": mark.index, "remaining": int(p.turns),
+				"counts": "actions", "marks": int(p.marks), "explode_pct": float(p.explode_pct), "cap_mult": float(p.cap_mult)})
+			if record:
+				event.lines.append(Terms.t("log_hat_lock", {"name": actor.name, "target": mark.name}))
+			event.hits.append(_attack(actor, mark, rng, record, event, float(p.damage_mult)))
 		&"full_auto":
 			if record:
 				event.lines.append(Terms.t("log_full_auto", {"name": actor.name}))
@@ -960,6 +1038,7 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	if record:
 		event.lines.append(Terms.t("log_down", {"target": target.name}))
+	_check_until_next_time(attacker, event, record)
 	# e.g. SelfDecaying: killing an enemy while the buff is active heals
 	for b in attacker.buffs:
 		if b.get("kill_heal_pct", 0.0) > 0.0:
@@ -1094,6 +1173,8 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 		mult = float(all_enemies.get("damage_mult", 1.0))
 		if record:
 			event.lines.append(Terms.t("log_all_enemies", {"attacker": actor.name}))
+	elif not _locked_target(actor).is_empty():
+		targets = [_locked_target(actor)]  # Hat Trick: every shot goes to the locked enemy
 	else:
 		var foes := _targetable(units, enemy_side, _has_flag(actor, "back_row"))
 		if not _passive_params(actor, &"full_metal_kit").is_empty():
@@ -1135,8 +1216,15 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 		cleaved = units.filter(func(u): return u.side == enemy_side and _alive(u) and u.vanguard == main.vanguard and u.index != main.index)
 		if not cleaved.is_empty() and record:
 			event.lines.append(Terms.t("log_cleave", {"attacker": actor.name, "skill": actor.passive.name}))
+	var landed := false
 	for target in targets:
-		event.hits.append(_attack(actor, target, rng, record, event, mult))
+		var hit := _attack(actor, target, rng, record, event, mult)
+		event.hits.append(hit)
+		landed = hit.hit
+	# Passive Until Next Time: a single-target hit that lands splashes onto another enemy
+	var splash := _flag_buff(actor, "splash")
+	if targets.size() == 1 and all_enemies.is_empty() and not splash.is_empty() and landed:
+		_splash(actor, targets[0], float(splash.splash) * mult, rng, record, event)
 	for target in cleaved:
 		if _alive(target):
 			event.hits.append(_attack(actor, target, rng, record, event, mult * float(unfazed.cleave_mult)))
@@ -1195,6 +1283,7 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		var key := "log_crit" if hit.crit else "log_hit"
 		event.lines.append(Terms.t(key, {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
+	_add_hat(actor, target, event, record, rng)
 	# Passive Bow Wow: the hit opens a bleed (one per attacker; a new hit refreshes it)
 	var bow_wow := _passive_params(actor, &"bow_wow")
 	if target.hp > 0 and not bow_wow.is_empty():
@@ -1234,6 +1323,80 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		if record:
 			event.lines.append(Terms.t("log_off_balance", {"target": target.name}))
 	return hit
+
+# ───────── Quinnester: Hat Trick & Until Next Time ─────────
+
+## The enemy a Hat Trick is locked onto, or {} (no lock, or the enemy is down)
+func _locked_target(actor: Dictionary) -> Dictionary:
+	var lock := _flag_buff(actor, "locked")
+	if lock.is_empty():
+		return {}
+	var target: Dictionary = _units[int(lock.lock)]
+	return target if _alive(target) else {}
+
+## Ultimate Hat Trick: a hit that lands on the locked enemy leaves a Hat; enough Hats explode
+func _add_hat(actor: Dictionary, target: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	var lock := _flag_buff(actor, "locked")
+	if lock.is_empty() or int(lock.lock) != target.index or target.hp <= 0:
+		return
+	var id := StringName("hat_%d" % actor.index)
+	var hats := int(_buff_by_id(target, id).get("hats", 0)) + 1
+	var marks := int(lock.marks)
+	if hats < marks:
+		_add_buff(target, {"id": id, "name": Terms.t("buff_hat", {"count": hats, "max": marks}), "hats": hats,
+			"remaining": 1, "counts": "never"})
+		event.get_or_add("hatted", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_hat_mark", {"target": target.name, "count": hats, "max": marks}))
+		return
+	# Hat trick: the Hats go off (ignoring Defense), capped by the caster's Attack, and start over
+	target.buffs = target.buffs.filter(func(b): return b.id != id)
+	var dealt := maxi(roundi(minf(target.max_hp * float(lock.explode_pct), _stat(actor, "attack") * float(lock.cap_mult))), 1)
+	event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+	event.get_or_add("hat_trick", []).append(target.index)
+	if record:
+		event.lines.append(Terms.t("log_hat_trick", {"name": actor.name, "target": target.name, "damage": dealt}))
+	_apply_damage(actor, target, dealt, event, record, rng)
+
+## Once a Hat Trick lock ends, the Hats it left on enemies go away
+func _clear_stale_hats(actor: Dictionary) -> void:
+	if not _flag_buff(actor, "locked").is_empty():
+		return
+	var id := StringName("hat_%d" % actor.index)
+	for u in _units:
+		if u.side != actor.side:
+			u.buffs = u.buffs.filter(func(b): return b.id != id)
+
+func _buff_by_id(u: Dictionary, id: StringName) -> Dictionary:
+	for b in u.buffs:
+		if b.id == id:
+			return b
+	return {}
+
+## Passive Until Next Time: a takedown slows the unit down but powers up and splashes its shots for a while
+func _check_until_next_time(attacker: Dictionary, event: Dictionary, record: bool) -> void:
+	var p := _passive_params(attacker, &"until_next_time")
+	if p.is_empty() or attacker.hp <= 0 or attacker.passive_cooldown > 0:
+		return
+	# The cooldown also ticks at the end of the action that triggered it, so count that one in
+	attacker.passive_cooldown = int(p.cooldown) + (1 if attacker.index == _acting_index else 0)
+	_add_buff(attacker, {"id": &"until_next_time", "name": attacker.passive.name, "mods": {"speed": float(p.speed)},
+		"damage_bonus": float(p.damage), "splash": float(p.splash), "remaining": int(p.turns), "counts": "actions"})
+	event.get_or_add("until_next_time", []).append(attacker.index)
+	if record:
+		event.lines.append(Terms.t("log_until_next_time", {"name": attacker.name, "skill": attacker.passive.name}))
+
+## Passive Until Next Time's splash: a share of a fresh hit lands on another living enemy (can't miss)
+func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumberGenerator, record: bool, event: Dictionary) -> void:
+	var others := _units.filter(func(u): return u.side != actor.side and _alive(u) and u.index != main.index)
+	if others.is_empty():
+		return
+	var target: Dictionary = others[rng.randi_range(0, others.size() - 1)]
+	var dealt := maxi(roundi(_mitigate(_raw_damage(actor, rng) * share, target)), 1)
+	event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+	if record:
+		event.lines.append(Terms.t("log_splash", {"attacker": actor.name, "target": target.name, "damage": dealt}))
+	_apply_damage(actor, target, dealt, event, record, rng)
 
 # ───────── Combat chain: assists & guard charges ─────────
 

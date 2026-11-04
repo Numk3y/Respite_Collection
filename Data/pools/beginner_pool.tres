@@ -1,0 +1,62 @@
+[gd_resource type="Resource" script_class="GachaPool" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/gacha_pool.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/pool_entry.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/characters/drowsy.tres" id="3"]
+[ext_resource type="Resource" path="res://Data/characters/gobby.tres" id="4"]
+[ext_resource type="Resource" path="res://Data/characters/justbyluck.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/characters/muni.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/characters/shadowkittay.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/characters/sillvania.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/characters/spijette.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/characters/strea.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/characters/the_greatest_xi.tres" id="11"]
+
+[sub_resource type="Resource" id="entry_drowsy"]
+script = ExtResource("2")
+character = ExtResource("3")
+
+[sub_resource type="Resource" id="entry_gobby"]
+script = ExtResource("2")
+character = ExtResource("4")
+
+[sub_resource type="Resource" id="entry_justbyluck"]
+script = ExtResource("2")
+character = ExtResource("5")
+
+[sub_resource type="Resource" id="entry_muni"]
+script = ExtResource("2")
+character = ExtResource("6")
+
+[sub_resource type="Resource" id="entry_shadowkittay"]
+script = ExtResource("2")
+character = ExtResource("7")
+
+[sub_resource type="Resource" id="entry_sillvania"]
+script = ExtResource("2")
+character = ExtResource("8")
+
+[sub_resource type="Resource" id="entry_spijette"]
+script = ExtResource("2")
+character = ExtResource("9")
+
+[sub_resource type="Resource" id="entry_strea"]
+script = ExtResource("2")
+character = ExtResource("10")
+
+[sub_resource type="Resource" id="entry_the_greatest_xi"]
+script = ExtResource("2")
+character = ExtResource("11")
+
+[resource]
+script = ExtResource("1")
+id = &"beginner_pool"
+display_name = "Beginner"
+theme_color = Color(0.0588, 0.6627, 0.5765, 1)
+cost = 0
+pity_threshold = 0
+weight_r = 0
+weight_sr = 100
+weight_ssr = 0
+beginner = true
+entries = Array[ExtResource("2")]([SubResource("entry_drowsy"), SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_muni"), SubResource("entry_shadowkittay"), SubResource("entry_sillvania"), SubResource("entry_spijette"), SubResource("entry_strea"), SubResource("entry_the_greatest_xi")])

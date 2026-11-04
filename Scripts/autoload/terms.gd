@@ -345,6 +345,82 @@ const TEXT := {
 	"battle_rewards": "+{amount} {money}{materials}{drops}",
 	"battle_exp": "Every {team} member gained {amount} {exp}.",
 	"battle_level_up": "{name} reached {level}{lv}!",
+	"battle_account_exp": "Account gained {amount} {exp}.",
+	"battle_new_stars": "New stars: +{amount} {card_word}",
+	"auto_run_button": "Auto Run (up to {max})",
+	"details_level_capped": "{level}{lv}: the cap for now. Raise your account to {level}{account} to go higher.",
+	"level_up_capped": "Account cap",
+	"details_level_cap_tip": "{characters} can go up to {above} levels above your account level, up to {level}{max}.",
+	"auto_run_tip": "Play this map up to {max} times in a row with your current {team} and automatic {ultimate}s; each run starts by itself after the last. Auto Runs give half the usual {exp}, and a lost run ends the series.",
+	"auto_run_locked": "Earn all 3 stars on this map to unlock Auto Run.",
+	"auto_run_title": "Auto Run {code} {name}",
+	"auto_run_intro": "How many runs? They play back to back with your current {team} and automatic {ultimate}s. Auto Runs give half the usual {exp} ({characters} and account); everything else is in full. A lost run ends the series.",
+	"auto_run_count": "x{count}",
+	"auto_run_stopped": "The series ended with a loss.",
+	"auto_run_progress": "AUTO RUN {current}/{runs}",
+	"auto_run_next": "Next Run ({current}/{runs})",
+	"auto_run_next_in": "The next run starts in {seconds} seconds. Return Home to stop.",
+	"auto_run_done": "Auto Run: {wins}/{runs} won",
+	"auto_run_money": "{money}: +{amount}",
+	"auto_run_drop": "{equipment}: {item}",
+	"auto_run_exp": "Every {team} member: +{amount} {exp}",
+	"auto_run_account_exp": "Account: +{amount} {exp}",
+	"auto_run_cards": "The animatronics showed up! +{amount} {card_word}",
+
+	# Tutorial (Scripts/ui/coach.gd) and Beginner Missions (Scripts/beginner_missions.gd)
+	"tutorial_skip": "Skip tutorial",
+	"tutorial_home_battle": "Welcome to {game_title}! Your {team} is ready. Press {sortie} to head out to your first map.",
+	"tutorial_map_go": "Map 1-1 is your first stop. Check who you'll fight and what you'll win, then press this button!",
+	"tutorial_gauge": "Your {characters} fight on their own. The yellow bar on each card is their {ultimate} gauge: it fills as they attack and get hit.",
+	"tutorial_click_ult": "{name}'s {ultimate} is ready! Click {name}'s card to fire it.",
+	"tutorial_ult_queued": "{name} fires it on their next turn. Watch!",
+	"tutorial_ult_done": "That's an {ultimate}! Firing them yourself lets you pick the moment. Switch Auto {ultimate} on here any time to let your {characters} do it.",
+	"tutorial_go_recruit": "Nice first fight! Now let's get you a new {character}. Open {tab_gacha}.",
+	"tutorial_free_pull": "The Beginner pool gives every new player one free recruit: a guaranteed SR {character} you don't have yet. Go on!",
+	"tutorial_after_pull": "{name} joined your {team}! Head back {home} for the last step.",
+	"gacha_beginner_rates": "One free recruit for new players · a guaranteed SR you don't own yet · no SSR",
+	"gacha_beginner_pull": "Free Recruit!\nGuaranteed SR",
+	"gacha_joined_team": " · Joined your {team}!",
+	"tutorial_missions": "Beginner Missions walk you through the rest of the game, and finishing them all gets you a free SSR of your choice.",
+	"beginner_button": "Beginner Missions",
+	"beginner_button_ready": "Beginner Missions ({count} ready!)",
+	"beginner_title": "Beginner Missions",
+	"beginner_close": "Close",
+	"beginner_intro": "Finish every mission to pick any SSR {character} for free!",
+	"beginner_first_win": "Win your first battle",
+	"beginner_manual_ult": "Fire an {ultimate} by hand (Auto {ultimate} off, then click a {character} with a full gauge)",
+	"beginner_recruit": "Recruit 10 times",
+	"beginner_team": "Have 5 {characters} in your {team}",
+	"beginner_level": "Raise a {character} to {level}10",
+	"beginner_commission": "Send a {character} on a shift in {tab_commission}",
+	"beginner_three_stars": "Earn all 3 stars on a map",
+	"beginner_chapter_boss": "Beat the {chapter} 1 boss (1-5)",
+	"beginner_reward_cards": "{amount} {card_word}",
+	"beginner_reward_money": "{amount} {money}",
+	"beginner_claim": "Claim",
+	"beginner_claimed": "Claimed",
+	"beginner_ssr_row": "Every mission claimed: pick a free SSR of your choice!",
+	"beginner_ssr_pick": "Pick SSR",
+	"beginner_ssr_title": "Pick your free SSR",
+	"beginner_ssr_take": "Take this one",
+	"beginner_ssr_owned": "(owned: +1 Ascension)",
+	"beginner_ssr_got": "{name} joins you!",
+	"battle_auto_ult": "Auto {ultimate}",
+	"battle_auto_ult_tip": "On: {ultimate}s fire as soon as the gauge is full.\nOff: a full gauge waits for you. Click the {character}'s card to fire their {ultimate} on their next turn (click again to cancel).",
+	"battle_ult_ready": "Click: {ultimate}!",
+	"battle_ult_queued": "{ultimate} next turn!",
+	"star_win": "Win",
+	"star_no_ko": "Win with no {character} knocked out",
+	"star_goal_hp": "Win with {value}% of the {team}'s HP left",
+	"star_goal_cost": "Win with {team} cost {value} or less",
+	"star_goal_members": "Win with {value} {characters} or fewer",
+	"star_goal_ultimates": "Win using {value} {ultimate}s or fewer",
+	"star_goal_no_ultimates": "Win without using an {ultimate}",
+	"star_manual_hint": "Tip: turn off Auto {ultimate} in battle to choose when they fire.",
+	"map_stars": "Stars",
+	"map_reward_star": "Each new 2nd / 3rd star: {amount} Credit Card",
+	"battle_account_exp_first": "First clear! Account gained {amount} {exp}.",
+	"battle_account_level_up": "Account reached {level}{lv}! {team} cost limit is now {limit}.",
 	"battle_first_clear": "First clear! +{amount} {credit_cards}.",
 	"battle_defeat_partial": "Defeat. No mission rewards this time.",
 	"results_victory": "VICTORY!",
@@ -379,7 +455,14 @@ const TEXT := {
 	"team_title": "{team} 1",
 	"team_hint": "{class_tank}s, {class_warrior}s and {class_berserker}s fight in the {vanguard} and take the hits. {class_mage}s, {class_shooter}s and {class_healer}s fight from the {rearguard}, which enemies only attack once the whole {vanguard} is down (unless a skill says it targets the back row). The battle is lost when every {team} member is down. {class_mage}s hit 2-3 enemies at once; {class_shooter}s hit one enemy very hard; {class_healer}s hit weakly but keep the {team} alive with their skills.",
 	"slot_empty": "Empty\n\n+ Assign\n({classes})",
-	"team_summary": "{members}/{slots} members    Total HP {hp}    Total ATK {atk}    Avg {level}{lv}",
+	"team_summary": "{members}/{slots} members    Cost {cost}/{limit}    Total HP {hp}    Total ATK {atk}    Avg {level}{lv}",
+	"team_cost_tip": "Each {character} costs {team} points by rarity: R {r}, SR {sr}, SSR {ssr}. The {team} total can't go over the limit ({limit} now). The limit grows with account level, up to {cap}.",
+	"team_over_cost": "{team} cost {cost}/{limit} is over the limit. Remove someone in the {tab_team} tab.",
+	"picker_cost": "Cost {cost}",
+	"picker_over_cost": "Over cost limit",
+	"account_level": "Account {level}{lv}",
+	"account_exp_tip": "{exp} {xp}/{next} to the next account level. Win battles to earn account {exp}.\n{team} cost limit: {limit} (max {cap})",
+	"account_exp_max": "Max account level. {team} cost limit: {limit}",
 	"team_rules_button": "How rows work",
 	"team_card_tip": "Click to swap {name} for another {character}",
 	"team_working": "Working",
@@ -408,6 +491,10 @@ const TEXT := {
 	"gacha_pick_up": "PICK UP!",
 	"gacha_featured": "Featured {characters} are in this pool!",  # featured only means shown; no rate-up
 	"gacha_up": "UP!",
+	"gacha_common_ribbon": "ALWAYS OPEN",
+	"gacha_common_header": "Every regular {character} is in this pool!",
+	"gacha_beginner_ribbon": "NEW PLAYERS",
+	"gacha_beginner_header": "A free SR {character} to start your {team}!",
 	"gacha_more_inside": "More {characters}\ninside!",
 	"gacha_rates": "Rates: {rates}",
 	"gacha_pity": "Guaranteed SSR in {count} pulls",
@@ -519,6 +606,15 @@ const TEXT := {
 	"battle_idle": "Supervising...",
 	"log_counter": "{attacker} retaliates for {skill}, hitting {target} for {damage}!",
 	"log_explode": "{name}'s mandate expires: a shockwave sweeps the enemy lines!",
+	"log_hat_lock": "{name} tips his hat at {target}: locked on!",
+	"log_hat_mark": "{target} gets a hat ({count}/{max}).",
+	"log_hat_trick": "Hat trick! {target}'s hats explode for {damage} damage!",
+	"log_until_next_time": "{name}: \"Until next time.\" ({skill}: slower, but every shot hits harder and splashes)",
+	"log_splash": "{attacker}'s shot splashes onto {target} for {damage} damage!",
+	"buff_hat": "Hat {count}/{max}",
+	"battle_hat": "HAT!",
+	"battle_hat_trick": "HAT TRICK!",
+	"battle_until_next_time": "UNTIL NEXT TIME",
 	"log_winnie": "{name}'s hamster scurries over to {target} ({skill})!",
 	"battle_winnie": "Winnie!",
 	"log_heal_turn": "{name} and Winnie patch up the team ({skill}).",
@@ -587,6 +683,22 @@ func t(key: String, args: Dictionary = {}) -> String:
 ## A single vocabulary word.
 func term(key: String) -> String:
 	return TERMS.get(key, key)
+
+## A map's star goal as a line: i = 0 (1st star), 1 (2nd) or 2 (3rd, the map's own goal)
+func star_goal(stage: StageData, i: int) -> String:
+	if i == 0:
+		return t("star_win")
+	if i == 1:
+		return t("star_no_ko")
+	var value := {"value": stage.star_goal_value}
+	match stage.star_goal:
+		StageData.StarGoal.MAX_COST:
+			return t("star_goal_cost", value)
+		StageData.StarGoal.MAX_MEMBERS:
+			return t("star_goal_members", value)
+		StageData.StarGoal.MAX_ULTIMATES:
+			return t("star_goal_no_ultimates") if stage.star_goal_value <= 0 else t("star_goal_ultimates", value)
+	return t("star_goal_hp", value)
 
 func stat_name(stat: String) -> String:
 	return term("stat_" + stat)

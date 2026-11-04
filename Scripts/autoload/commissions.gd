@@ -56,6 +56,7 @@ func start(c: CommissionData, uid: int) -> bool:
 	if not can_assign(c, uid):
 		return false
 	_jobs()[String(c.id)] = {"uid": uid, "started_at": _now()}
+	GameState.add_stat("commissions")  # beginner missions
 	GameState.request_save()
 	return true
 

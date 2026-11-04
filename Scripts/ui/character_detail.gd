@@ -377,7 +377,9 @@ func _page_level() -> Control:
 	head.add_child(lv)
 	_level_big = _label("", 46, Color.WHITE, 8)
 	head.add_child(_level_big)
-	var max_label := _label("/ %d" % GameState.MAX_LEVEL, 18, UITheme.TEXT_DIM)
+	var max_label := _label("/ %d" % GameState.level_cap(), 18, UITheme.TEXT_DIM)
+	max_label.tooltip_text = Terms.t("details_level_cap_tip", {"above": GameState.LEVEL_CAP_ABOVE_ACCOUNT, "max": GameState.MAX_LEVEL})
+	max_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	max_label.size_flags_vertical = Control.SIZE_SHRINK_END
 	head.add_child(max_label)
 	var spacer := Control.new()
@@ -558,12 +560,14 @@ static func _mods_text(e: EquipmentData) -> String:
 func _refresh(flash: bool = false) -> void:
 	var o := GameState.get_owned(_uid)
 	var level := int(o.level)
-	var at_max := level >= GameState.MAX_LEVEL
+	var at_max := level >= GameState.level_cap()
+	var capped := at_max and level < GameState.MAX_LEVEL  # held back by the account level, not the true max
 	var old_level := _level_big.text
 	_level_big.text = str(level)
 	_level_chip.text = "%s%d" % [Terms.term("level"), level]
 	if at_max:
-		_exp_label.text = Terms.t("details_level_max", {"lv": level})
+		_exp_label.text = Terms.t("details_level_capped" if capped else "details_level_max", {"lv": level,
+			"account": GameState.get_account_level() + 1})
 		_exp_bar.max_value = 1
 		_exp_bar.value = 1
 	else:
@@ -574,7 +578,8 @@ func _refresh(flash: bool = false) -> void:
 	for levels: int in _buy_buttons:
 		var button: Button = _buy_buttons[levels]
 		var cost := GameState.level_up_cost(_uid, levels)
-		button.text = Terms.t("level_up_max") if at_max else Terms.t("level_up_button", {"count": levels, "cost": cost})
+		button.text = Terms.t("level_up_capped" if capped else "level_up_max") if at_max \
+			else Terms.t("level_up_button", {"count": levels, "cost": cost})
 		button.disabled = at_max or GameState.get_money() < cost
 		button.visible = not at_max or levels == 1
 	for key: String in _feed:

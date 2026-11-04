@@ -1,0 +1,117 @@
+[gd_resource type="Resource" script_class="GachaPool" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/gacha_pool.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/pool_entry.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/characters/gobby.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/characters/justbyluck.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/characters/spijette.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/characters/retinazer.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/characters/baldvegeta.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/characters/baldguy.tres" id="13"]
+[ext_resource type="Resource" path="res://Data/characters/bald_ramsay.tres" id="14"]
+[ext_resource type="Resource" path="res://Data/characters/buffed_steve.tres" id="15"]
+[ext_resource type="Resource" path="res://Data/characters/the_greatest_xi.tres" id="16"]
+[ext_resource type="Resource" path="res://Data/characters/sillvania.tres" id="17"]
+[ext_resource type="Resource" path="res://Data/characters/coconutbird_caster.tres" id="18"]
+[ext_resource type="Resource" path="res://Data/characters/drowsy.tres" id="19"]
+[ext_resource type="Resource" path="res://Data/characters/jimmysmooth.tres" id="20"]
+[ext_resource type="Resource" path="res://Data/characters/perby.tres" id="21"]
+[ext_resource type="Resource" path="res://Data/characters/muni.tres" id="22"]
+[ext_resource type="Resource" path="res://Data/characters/strea.tres" id="23"]
+[ext_resource type="Resource" path="res://Data/characters/roki.tres" id="24"]
+[ext_resource type="Resource" path="res://Data/characters/shadowkittay.tres" id="25"]
+[ext_resource type="Resource" path="res://Data/characters/globox.tres" id="26"]
+[ext_resource type="Resource" path="res://Data/characters/quinnester.tres" id="27"]
+
+[sub_resource type="Resource" id="entry_gobby"]
+script = ExtResource("2")
+character = ExtResource("5")
+
+[sub_resource type="Resource" id="entry_justbyluck"]
+script = ExtResource("2")
+character = ExtResource("6")
+
+[sub_resource type="Resource" id="entry_spijette"]
+script = ExtResource("2")
+character = ExtResource("7")
+
+[sub_resource type="Resource" id="entry_retinazer"]
+script = ExtResource("2")
+character = ExtResource("11")
+featured = true
+
+[sub_resource type="Resource" id="entry_baldvegeta"]
+script = ExtResource("2")
+character = ExtResource("12")
+
+[sub_resource type="Resource" id="entry_baldguy"]
+script = ExtResource("2")
+character = ExtResource("13")
+
+[sub_resource type="Resource" id="entry_bald_ramsay"]
+script = ExtResource("2")
+character = ExtResource("14")
+
+[sub_resource type="Resource" id="entry_buffed_steve"]
+script = ExtResource("2")
+character = ExtResource("15")
+
+[sub_resource type="Resource" id="entry_the_greatest_xi"]
+script = ExtResource("2")
+character = ExtResource("16")
+
+[sub_resource type="Resource" id="entry_sillvania"]
+script = ExtResource("2")
+character = ExtResource("17")
+
+[sub_resource type="Resource" id="entry_coconutbird_caster"]
+script = ExtResource("2")
+character = ExtResource("18")
+
+[sub_resource type="Resource" id="entry_drowsy"]
+script = ExtResource("2")
+character = ExtResource("19")
+
+[sub_resource type="Resource" id="entry_jimmysmooth"]
+script = ExtResource("2")
+character = ExtResource("20")
+
+[sub_resource type="Resource" id="entry_perby"]
+script = ExtResource("2")
+character = ExtResource("21")
+featured = true
+
+[sub_resource type="Resource" id="entry_muni"]
+script = ExtResource("2")
+character = ExtResource("22")
+
+[sub_resource type="Resource" id="entry_strea"]
+script = ExtResource("2")
+character = ExtResource("23")
+
+[sub_resource type="Resource" id="entry_roki"]
+script = ExtResource("2")
+character = ExtResource("24")
+
+[sub_resource type="Resource" id="entry_shadowkittay"]
+script = ExtResource("2")
+character = ExtResource("25")
+
+[sub_resource type="Resource" id="entry_globox"]
+script = ExtResource("2")
+character = ExtResource("26")
+
+[sub_resource type="Resource" id="entry_quinnester"]
+script = ExtResource("2")
+character = ExtResource("27")
+
+[resource]
+script = ExtResource("1")
+id = &"pickup_template"
+display_name = "Pick Up Template"
+theme_color = Color(0.4863, 0.2275, 0.9294, 1)
+cost = 150
+weight_r = 82
+weight_sr = 14
+weight_ssr = 4
+entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki"), SubResource("entry_shadowkittay"), SubResource("entry_globox"), SubResource("entry_quinnester")])

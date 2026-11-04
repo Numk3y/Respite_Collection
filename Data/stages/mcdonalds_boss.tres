@@ -55,3 +55,5 @@ exp_reward = 260
 reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(3, 5), "gossip": Vector2i(2, 3), "snack": Vector2i(5, 8)})
 equipment_drops = Array[ExtResource("3")]([ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15"), ExtResource("16"), ExtResource("17")])
 drop_chance = 0.2
+star_goal = 0
+star_goal_value = 30

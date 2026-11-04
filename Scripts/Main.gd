@@ -18,8 +18,16 @@ var _money_chip: CurrencyChip
 var _cards_chip: CurrencyChip
 var _material_chips := {}  # material key -> CurrencyChip
 var _tabs: TabContainer
+var _account_label: Label
+var _account_bar: ProgressBar
 # Home
 var _home_hint: Label
+var _sortie_button: Button
+var _recruit_button: Button  # Home's shortcut to Recruit (the tutorial points at it for the free pull)
+var _gacha_tab: GachaTab
+var _beginner_button: Button
+var _coach: Coach  # the tutorial's speech bubble, above every screen
+var _auto_run := {}  # the Auto Run series in progress (see _start_auto_run); {} when none
 var _mirror_room: MirrorRoom
 # Team
 var _team_tab: TeamTab
@@ -34,9 +42,14 @@ func _ready() -> void:
 	RenderingServer.set_default_clear_color(UITheme.BG)
 	add_child(CyberBackdrop.new())  # stays behind every screen
 	add_child(AmbientParticles.new())  # drifting bokeh over the backdrop, also behind every screen
+	_coach = Coach.new()
+	add_child(_coach)
+	_coach.skip_pressed.connect(_skip_tutorial)
+	GameState.stats_changed.connect(_refresh_beginner)
 	GameState.money_changed.connect(func(_value): _refresh_status())
 	GameState.materials_changed.connect(_refresh_status)
 	GameState.credit_cards_changed.connect(func(_value): _refresh_status())
+	GameState.account_changed.connect(_refresh_status)
 	GameState.roster_changed.connect(_queue_roster_refresh)
 	if GameState.data.starter_chosen:
 		_show_main()
@@ -60,6 +73,8 @@ func _new_screen() -> VBoxContainer:
 	if _screen_bg:
 		_screen_bg.queue_free()
 		_screen_bg = null
+	if _coach:
+		_coach.clear()
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]:
@@ -193,6 +208,23 @@ func _show_main(tab: int = 0) -> void:
 	title.add_theme_constant_override("shadow_offset_y", 0)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
+	# Account level with its EXP bar; hover for the team cost limit
+	var account := VBoxContainer.new()
+	account.add_theme_constant_override("separation", 2)
+	account.alignment = BoxContainer.ALIGNMENT_CENTER
+	account.custom_minimum_size.x = 150
+	account.mouse_filter = Control.MOUSE_FILTER_STOP
+	header.add_child(account)
+	_account_label = Label.new()
+	_account_label.add_theme_font_size_override("font_size", 14)
+	_account_label.add_theme_color_override("font_color", UITheme.CYAN_BRIGHT)
+	_account_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	account.add_child(_account_label)
+	_account_bar = ProgressBar.new()
+	_account_bar.show_percentage = false
+	_account_bar.custom_minimum_size.y = 6
+	_account_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	account.add_child(_account_bar)
 	_money_chip = CurrencyChip.new("money", Terms.term("money"))
 	header.add_child(_money_chip)
 	_cards_chip = CurrencyChip.new("credit_card", Terms.term("credit_cards"))
@@ -220,6 +252,12 @@ func _show_main(tab: int = 0) -> void:
 	tabs.add_child(_build_collection_tab())
 	tabs.add_child(_build_event_tab())
 	tabs.current_tab = tab
+	# Home: the lobby picture fills the whole window, blurred and darkened behind the menus; the Mirror Room
+	# card shows the same picture sharp and in full colour (Scripts/ui/mirror_room.gd)
+	_set_screen_background(UITheme.blurred(UITheme.home_background()), 0.5)
+	tabs.tab_changed.connect(_on_main_tab_changed)
+	_on_main_tab_changed(tabs.current_tab)
+	_refresh_beginner()
 
 	_refresh_status()
 	_refresh_roster()
@@ -233,6 +271,20 @@ func _refresh_status() -> void:
 	if not is_instance_valid(_money_chip):
 		return
 	_money_chip.set_amount(GameState.get_money())
+	var level := GameState.get_account_level()
+	var limit := GameState.team_cost_limit()
+	_account_label.text = Terms.t("account_level", {"lv": level})
+	var account_box: Control = _account_label.get_parent()
+	if level >= GameState.ACCOUNT_MAX_LEVEL:
+		_account_bar.max_value = 1
+		_account_bar.value = 1
+		account_box.tooltip_text = Terms.t("account_exp_max", {"limit": limit})
+	else:
+		var next := GameState.account_exp_to_next(level)
+		_account_bar.max_value = next
+		_account_bar.value = GameState.get_account_exp()
+		account_box.tooltip_text = Terms.t("account_exp_tip", {"xp": GameState.get_account_exp(), "next": next,
+			"limit": limit, "cap": GameState.TEAM_COST_CAP})
 	_cards_chip.set_amount(GameState.get_credit_cards())
 	for key in _material_chips:
 		_material_chips[key].set_amount(GameState.get_material(key))
@@ -251,7 +303,7 @@ func _refresh_roster() -> void:
 	_refresh_collection()
 	_refresh_team()
 	if is_instance_valid(_home_hint):
-		_home_hint.text = "" if GameState.has_team() else Terms.t("home_no_team")
+		_home_hint.text = _team_problem()
 	_refresh_featured()
 
 ## Gacha-style lobby: the featured friend standing in the Mirror Room on the left, big action buttons on the right
@@ -280,16 +332,24 @@ func _build_home_tab() -> Control:
 	side.add_theme_constant_override("separation", 10)
 	tab.add_child(side)
 	var battle := _button(Terms.t("sortie_button"), _show_map_select, 30)
+	_sortie_button = battle
 	battle.theme_type_variation = &"PrimaryButton"
 	battle.custom_minimum_size.y = 92
 	side.add_child(battle)
 	_home_hint = _wrapped_label("")
 	_home_hint.add_theme_color_override("font_color", Color("#fca5a5"))
 	side.add_child(_home_hint)
+	# Beginner Missions: shows how many are ready to claim; gone once everything (and the free SSR) is claimed
+	_beginner_button = _button(Terms.t("beginner_button"), _open_beginner, 18)
+	_beginner_button.custom_minimum_size.y = 48
+	_beginner_button.add_theme_color_override("font_color", UITheme.GOLD)
+	side.add_child(_beginner_button)
 	for key in ["tab_team", "tab_gacha", "tab_commission", "tab_casino"]:
 		var go := _button(Terms.term(key), _go_to_tab.bind(Terms.term(key)), 20)
 		go.custom_minimum_size.y = 52
 		side.add_child(go)
+		if key == "tab_gacha":
+			_recruit_button = go
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -324,6 +384,29 @@ func _build_home_tab() -> Control:
 	_backup_message.add_theme_font_size_override("font_size", 13)
 	side.add_child(_backup_message)
 	return tab
+
+## The full-screen home picture only shows on the Home tab, with a lighter tab panel so it shows through;
+## the other tabs keep the usual cyber backdrop and solid panels
+func _on_main_tab_changed(index: int) -> void:
+	var home := index == 0
+	_update_home_tutorial.call_deferred()  # after the tab has laid out, so the arrow lands on the button
+	if _screen_bg:
+		_screen_bg.visible = home
+	if home and _screen_bg:
+		var see_through := UITheme.panel_box(12)
+		see_through.corner_radius_top_left = 4
+		see_through.bg_color = Color(UITheme.PANEL, 0.25)
+		_tabs.add_theme_stylebox_override("panel", see_through)
+	else:
+		_tabs.remove_theme_stylebox_override("panel")
+
+## Why the team can't battle right now, or "" if it can
+func _team_problem() -> String:
+	if not GameState.has_team():
+		return Terms.t("home_no_team")
+	if GameState.is_team_over_cost():
+		return Terms.t("team_over_cost", {"cost": GameState.team_cost(), "limit": GameState.team_cost_limit()})
+	return ""
 
 func _go_to_tab(tab_name: String) -> void:
 	for i in _tabs.get_tab_count():
@@ -467,11 +550,7 @@ func _reset_save() -> void:
 ## Test mode is for the developer: always on in editor/debug runs, and on the website only when the address
 ## ends in ?test (e.g. https://numk3y.github.io/Respite_Collection/?test), so regular players never see it
 func _test_mode_enabled() -> bool:
-	if OS.is_debug_build():
-		return true
-	if _is_web:
-		return str(JavaScriptBridge.eval("window.location.search", true)).contains("test")
-	return false
+	return GameState.is_test_mode()
 
 func _open_test_mode() -> void:
 	var dialog := AcceptDialog.new()
@@ -538,13 +617,29 @@ func _show_map_select() -> void:
 	root.add_child(screen)
 	screen.back_pressed.connect(_show_main)
 	screen.battle_pressed.connect(_show_battle)
-	screen.open(GameState.has_team())
+	screen.auto_run_pressed.connect(_open_auto_run)
+	screen.open(GameState.can_battle())
+	# Tutorial: point at the Battle button of the first map
+	if GameState.tutorial_step() <= GameState.Tutorial.MAP_GO and GameState.can_battle():
+		GameState.advance_tutorial(GameState.Tutorial.MAP_GO)
+		_point_coach.call_deferred(screen.battle_button(), Terms.t("tutorial_map_go"))
 
 
 # ───────── Battle (built by Scripts/ui/battle_view.gd) ─────────
 
-func _show_battle(stage: StageData) -> void:
-	var battle := Combat.sortie(stage)
+## `auto`: one run of the Auto Run series in _auto_run (automatic Ultimates, Auto Run EXP, and the next run
+## follows from the results screen); any other battle ends a series
+func _show_battle(stage: StageData, auto: bool = false) -> void:
+	if not auto:
+		_auto_run = {}
+	var manual := not auto and not bool(GameState.get_setting("auto_ultimate", true))
+	# Tutorial: the first fight is guided and always starts with manual Ultimates
+	var guided := not auto and GameState.tutorial_step() < GameState.Tutorial.RECRUIT
+	if guided:
+		GameState.advance_tutorial(GameState.Tutorial.FIRST_FIGHT)
+		manual = true
+	# Live: played one action at a time, rewards at the end
+	var units := Combat.start_sortie(stage, manual, Combat.AUTO_RUN_EXP if auto else 1.0)
 	Music.play_chapter(stage.chapter)  # "Again" asks for the same track, so the song keeps playing
 	var root := _new_screen()
 	_set_screen_background(_battle_background(stage))
@@ -555,11 +650,276 @@ func _show_battle(stage: StageData) -> void:
 	var event := DB.event_of(stage)
 	view.home_pressed.connect(_show_event_tab if event else _show_main)
 	# Event missions: offer to go straight on to the next one (it unlocks by winning this one)
-	var next := _next_event_mission(event, stage)
+	var next: StageData = _next_event_mission(event, stage) if not auto else null
+	if auto:
+		var run := _auto_run
+		view.auto_label = Terms.t("auto_run_progress", {"current": int(run.played) + 1, "runs": run.runs})
+		view.battle_finished.connect(_on_auto_run_battle)
+		if int(run.played) + 1 < int(run.runs):
+			view.next_text = Terms.t("auto_run_next", {"current": int(run.played) + 2, "runs": run.runs})
+			view.next_pressed.connect(_show_battle.bind(stage, true))
+			view.auto_next = true
 	if next:
 		view.next_text = Terms.t("battle_next_mission", {"code": next.code(), "name": next.display_name})
 		view.next_pressed.connect(_show_battle.bind(next))
-	view.start(stage, battle)
+	if guided:
+		view.coach = _coach
+		view.battle_finished.connect(func(_report: Dictionary):
+			GameState.advance_tutorial(GameState.Tutorial.RECRUIT)
+			_coach.clear())
+	view.start_live(stage, units, manual)
+
+# ───────── Auto Run (Combat.can_auto_run) ─────────
+
+## How many runs: one button per count up to the cap
+func _open_auto_run(stage: StageData) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = Terms.t("auto_run_title", {"code": stage.code(), "name": stage.display_name})
+	dialog.ok_button_text = Terms.t("beginner_close")
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	box.custom_minimum_size.x = 420
+	dialog.add_child(box)
+	box.add_child(_wrapped_label(Terms.t("auto_run_intro")))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	for runs in range(1, Combat.AUTO_RUN_MAX + 1):
+		var go := _button(Terms.t("auto_run_count", {"count": runs}), func():
+			dialog.hide()
+			_start_auto_run(stage, runs), 20)
+		go.custom_minimum_size = Vector2(110, 52)
+		go.theme_type_variation = &"PrimaryButton"
+		row.add_child(go)
+	_popup(dialog)
+
+## Starts an Auto Run series: the first run plays right away, the rest follow from the results screen
+func _start_auto_run(stage: StageData, runs: int) -> void:
+	_auto_run = {"stage": stage, "runs": runs, "played": 0, "wins": 0, "money": 0, "exp": 0, "account_exp": 0,
+		"materials": {}, "drops": [], "card_drops": 0, "level_ups": {}, "bond_ups": {}, "account_level_up": 0}
+	_show_battle(stage, true)
+
+## One Auto Run battle is over: add it to the series, and after the last run (or a loss) show the totals
+func _on_auto_run_battle(report: Dictionary) -> void:
+	if _auto_run.is_empty():
+		return
+	var run := _auto_run
+	run.played += 1
+	if report.get("won", false):
+		run.wins += 1
+	run.money += int(report.get("money", 0))
+	run.exp += int(report.get("exp", 0))
+	run.account_exp += int(report.get("account_exp", 0))
+	run.card_drops += int(report.get("card_drops", 0))
+	for key in report.get("materials", {}):
+		run.materials[key] = int(run.materials.get(key, 0)) + int(report.materials[key])
+	run.drops.append_array(report.get("drops", []))
+	for up in report.get("level_ups", []):
+		run.level_ups[up.name] = up.level
+	for up in report.get("bond_ups", []):
+		run.bond_ups[up.name] = up.bond
+	run.account_level_up = maxi(int(run.account_level_up), int(report.get("account_level_up", 0)))
+	if report.get("won", false) and run.played < run.runs:
+		return  # the results screen counts down into the next run
+	_auto_run = {}
+	_show_auto_run_summary(run)
+
+func _show_auto_run_summary(run: Dictionary) -> void:
+	var lines := PackedStringArray()
+	if run.wins < run.played:
+		lines.append(Terms.t("auto_run_stopped"))
+	if run.wins > 0:
+		lines.append(Terms.t("auto_run_money", {"amount": run.money}))
+		for key in run.materials:
+			if int(run.materials[key]) > 0:
+				lines.append("%s x%d" % [Terms.material_name(key), int(run.materials[key])])
+		for item in run.drops:
+			lines.append(Terms.t("auto_run_drop", {"item": item}))
+		lines.append(Terms.t("auto_run_exp", {"amount": run.exp}))
+		lines.append(Terms.t("auto_run_account_exp", {"amount": run.account_exp}))
+	if int(run.card_drops) > 0:
+		lines.append(Terms.t("auto_run_cards", {"amount": run.card_drops, "card_word": Terms.credit_card_word(run.card_drops)}))
+	for friend in run.level_ups:
+		lines.append(Terms.t("battle_level_up", {"name": friend, "lv": run.level_ups[friend]}))
+	if int(run.account_level_up) > 0:
+		lines.append(Terms.t("battle_account_level_up", {"lv": run.account_level_up,
+			"limit": GameState.team_cost_limit_at(run.account_level_up)}))
+	for friend in run.bond_ups:
+		lines.append(Terms.t("battle_bond_up", {"name": friend, "bond": run.bond_ups[friend]}))
+	var dialog := AcceptDialog.new()
+	dialog.title = Terms.t("auto_run_done", {"wins": run.wins, "runs": run.played})
+	dialog.dialog_text = "\n".join(lines)
+	dialog.min_size = Vector2i(420, 0)
+	_popup(dialog)
+
+# ───────── Tutorial (the Coach bubble) and Beginner Missions (Scripts/beginner_missions.gd) ─────────
+
+func _point_coach(target: Control, text: String) -> void:
+	if (target == null or is_instance_valid(target)) and GameState.tutorial_step() < GameState.Tutorial.DONE:
+		_coach.point(target, text)
+
+## On the Home tab: point at Battle before the first fight, then at Beginner Missions after it
+func _update_home_tutorial() -> void:
+	if not is_instance_valid(_tabs) or not is_instance_valid(_sortie_button):
+		return
+	var step := GameState.tutorial_step()
+	if _tabs.current_tab == _gacha_tab.get_index() and step == GameState.Tutorial.RECRUIT:
+		_point_coach(_gacha_tab.free_pull_button(), Terms.t("tutorial_free_pull"))
+		return
+	if _tabs.current_tab == _gacha_tab.get_index() and step == GameState.Tutorial.MISSIONS:
+		return  # the "joined your team" bubble from the pull stays up
+	if _tabs.current_tab != 0:
+		_coach.clear()
+		return
+	if step < GameState.Tutorial.RECRUIT:
+		_point_coach(_sortie_button, Terms.t("tutorial_home_battle"))
+	elif step == GameState.Tutorial.RECRUIT and Gacha.beginner_available():
+		_point_coach(_recruit_button, Terms.t("tutorial_go_recruit"))
+	elif step <= GameState.Tutorial.MISSIONS:
+		_point_coach(_beginner_button, Terms.t("tutorial_missions"))
+	else:
+		_coach.clear()
+
+func _skip_tutorial() -> void:
+	GameState.advance_tutorial(GameState.Tutorial.DONE)
+	_coach.clear()
+
+## The Home button's label and badge ("Beginner Missions (2!)"); hidden once everything is claimed
+func _refresh_beginner() -> void:
+	if not is_instance_valid(_beginner_button):
+		return
+	_beginner_button.visible = not BeginnerMissions.finished()
+	var ready_count := BeginnerMissions.claimable_count()
+	_beginner_button.text = Terms.t("beginner_button_ready", {"count": ready_count}) if ready_count > 0 else Terms.t("beginner_button")
+
+## The checklist: each mission with its progress, reward and a Claim button; the free SSR pick at the bottom
+func _open_beginner() -> void:
+	if GameState.tutorial_step() == GameState.Tutorial.MISSIONS:
+		_skip_tutorial()  # the tutorial ends here
+	var dialog := AcceptDialog.new()
+	dialog.title = Terms.t("beginner_title")
+	dialog.ok_button_text = Terms.t("beginner_close")
+	var list := VBoxContainer.new()
+	list.custom_minimum_size = Vector2(620, 0)
+	list.add_theme_constant_override("separation", 8)
+	dialog.add_child(list)
+	_fill_beginner(list, dialog)
+	_popup(dialog)
+
+func _fill_beginner(list: VBoxContainer, dialog: AcceptDialog) -> void:
+	_clear(list)
+	var intro := _wrapped_label(Terms.t("beginner_intro"))
+	intro.add_theme_color_override("font_color", UITheme.GOLD)
+	list.add_child(intro)
+	for m: Dictionary in BeginnerMissions.MISSIONS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		list.add_child(row)
+		var claimed := BeginnerMissions.is_claimed(m)
+		var done := BeginnerMissions.is_done(m)
+		var title := _wrapped_label(Terms.t("beginner_" + String(m.id)))
+		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title.add_theme_color_override("font_color", UITheme.TEXT_DIM if claimed else UITheme.TEXT)
+		row.add_child(title)
+		var count := Label.new()
+		count.text = "%d/%d" % [BeginnerMissions.progress(m), int(m.goal)]
+		count.custom_minimum_size.x = 56
+		count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count.add_theme_color_override("font_color", Color("#4ade80") if done else UITheme.TEXT_DIM)
+		row.add_child(count)
+		var reward := Label.new()
+		reward.custom_minimum_size.x = 130
+		var parts: PackedStringArray = []
+		if int(m.cards) > 0:
+			parts.append(Terms.t("beginner_reward_cards", {"amount": int(m.cards), "card_word": Terms.credit_card_word(int(m.cards))}))
+		if int(m.money) > 0:
+			parts.append(Terms.t("beginner_reward_money", {"amount": int(m.money)}))
+		for key in m.materials:
+			parts.append("%d %s" % [int(m.materials[key]), Terms.material_name(key)])
+		reward.text = ", ".join(parts)
+		reward.custom_minimum_size.x = 190
+		reward.add_theme_color_override("font_color", UITheme.GOLD)
+		row.add_child(reward)
+		var claim := Button.new()
+		claim.custom_minimum_size.x = 90
+		claim.text = Terms.t("beginner_claimed" if claimed else "beginner_claim")
+		claim.disabled = claimed or not done
+		if done and not claimed:
+			claim.theme_type_variation = &"PrimaryButton"
+		claim.pressed.connect(func():
+			if BeginnerMissions.claim(m):
+				_fill_beginner(list, dialog))
+		row.add_child(claim)
+	# The prize: a free SSR once every mission is claimed
+	list.add_child(HSeparator.new())
+	var prize := HBoxContainer.new()
+	prize.add_theme_constant_override("separation", 10)
+	list.add_child(prize)
+	var prize_text := _wrapped_label(Terms.t("beginner_ssr_row"))
+	prize_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prize_text.add_theme_font_size_override("font_size", 18)
+	prize_text.add_theme_color_override("font_color", UITheme.GOLD)
+	prize.add_child(prize_text)
+	var pick := Button.new()
+	pick.text = Terms.t("beginner_claimed" if BeginnerMissions.ssr_claimed() else "beginner_ssr_pick")
+	pick.custom_minimum_size = Vector2(130, 40)
+	pick.disabled = not BeginnerMissions.all_claimed() or BeginnerMissions.ssr_claimed()
+	if not pick.disabled:
+		pick.theme_type_variation = &"PrimaryButton"
+	pick.pressed.connect(func():
+		dialog.hide()
+		_open_ssr_pick())
+	prize.add_child(pick)
+	dialog.reset_size.call_deferred()
+
+## The free SSR: every recruitable SSR as a card to pick from
+func _open_ssr_pick() -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = Terms.t("beginner_ssr_title")
+	dialog.ok_button_text = Terms.t("beginner_ssr_take")
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	dialog.add_child(grid)
+	var group := ButtonGroup.new()
+	var picked := {"c": null}
+	for c: CharacterData in BeginnerMissions.ssr_choices():
+		var tile := Button.new()
+		tile.toggle_mode = true
+		tile.button_group = group
+		tile.custom_minimum_size = Vector2(140, 230)
+		tile.tooltip_text = c.description
+		var box := VBoxContainer.new()
+		box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 6)
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tile.add_child(box)
+		var art := CharArt.new()
+		art.custom_minimum_size = Vector2(128, 170)
+		art.set_character(c)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		box.add_child(art)
+		for line in [c.display_name, Terms.class_label(c.char_class)]:
+			var label := Label.new()
+			label.text = line
+			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			label.add_theme_font_size_override("font_size", 13)
+			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			if GameState.owns(c.id) and line == c.display_name:
+				label.text += " " + Terms.t("beginner_ssr_owned")
+			box.add_child(label)
+		tile.toggled.connect(func(on: bool):
+			if on:
+				picked.c = c)
+		grid.add_child(tile)
+	dialog.confirmed.connect(func():
+		if picked.c == null:
+			return
+		var c: CharacterData = picked.c
+		if not BeginnerMissions.claim_ssr(c).is_empty():
+			_show_message(Terms.t("beginner_ssr_got", {"name": c.display_name})))
+	_popup(dialog)
 
 ## The mission after `stage` in its event, or null (not an event mission, or the last one)
 func _next_event_mission(event: EventData, stage: StageData) -> StageData:
@@ -639,7 +999,8 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 	tile.toggle_mode = true
 	tile.button_group = group
 	tile.custom_minimum_size = Vector2(128, 0)
-	tile.disabled = not GameState.can_place(uid, slot)
+	var fits := GameState.fits_cost(uid, slot)
+	tile.disabled = not GameState.can_place(uid, slot) or not fits
 	if tile.disabled:
 		tile.modulate.a = 0.4
 	var box := VBoxContainer.new()
@@ -653,10 +1014,12 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 	art.set_character(c)
 	box.add_child(art)
 	var lines := ["%s · %s" % [Terms.rarity_name(c.rarity), Terms.class_label(c.char_class)],
-		"%s%d" % [Terms.term("level"), int(GameState.get_owned(uid).level)]]
+		"%s%d    %s" % [Terms.term("level"), int(GameState.get_owned(uid).level), Terms.t("picker_cost", {"cost": GameState.unit_cost(uid)})]]
 	var current := GameState.team_slot_of(uid)
 	if current >= 0:
 		lines.append(Terms.t("in_team", {"row": Terms.row_name(current)}))
+	elif not fits and GameState.can_place(uid, slot):
+		lines.append(Terms.t("picker_over_cost"))
 	for i in lines.size():
 		var label := Label.new()
 		label.text = lines[i]
@@ -666,7 +1029,7 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 		if i == 0:
 			label.add_theme_color_override("font_color", CharArt.RARITY_COLORS[c.rarity])
 		elif i == 2:
-			label.add_theme_color_override("font_color", UITheme.CYAN)
+			label.add_theme_color_override("font_color", UITheme.CYAN if current >= 0 else Color("#fca5a5"))
 		box.add_child(label)
 	return tile
 
@@ -696,7 +1059,7 @@ func _show_event_missions(event: EventData) -> void:
 	root.add_child(screen)
 	screen.back_pressed.connect(_show_event_tab)
 	screen.battle_pressed.connect(_show_battle)
-	screen.open_event(event, GameState.has_team())
+	screen.open_event(event, GameState.can_battle())
 
 ## Asks the server for an attempt (and its seed), plays the fight, then reports the damage. If the report can't
 ## get through, WorldBoss keeps it in the save and sends it later.
@@ -761,6 +1124,11 @@ func _show_message(text: String) -> void:
 func _build_gacha_tab() -> Control:
 	var tab := GachaTab.new()
 	tab.name = Terms.term("tab_gacha")
+	_gacha_tab = tab
+	tab.beginner_pulled.connect(func(result: Dictionary):
+		if GameState.tutorial_step() < GameState.Tutorial.MISSIONS:
+			GameState.advance_tutorial(GameState.Tutorial.MISSIONS)
+			_point_coach.call_deferred(null, Terms.t("tutorial_after_pull", {"name": result.character.display_name})))
 	return tab
 
 # ───────── Friends tab ─────────
