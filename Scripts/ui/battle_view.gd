@@ -32,6 +32,7 @@ var _views: Array[Dictionary] = []  # one per battle unit, same index
 var _overlay: Control
 var _banner: Label
 var _cut_in: CutInOverlay
+var _combo_cut_in: ComboCutIn
 var _jumpscare: JumpscareOverlay
 var _fx: BattleFX
 var _arena: Control
@@ -171,6 +172,8 @@ func _build(stage: StageData) -> void:
 	# Ultimate cut-ins go above everything else in the arena
 	_cut_in = CutInOverlay.new()
 	arena.add_child(_cut_in)
+	_combo_cut_in = ComboCutIn.new()
+	arena.add_child(_combo_cut_in)
 
 	# The log: names coloured by side, numbers highlighted, knockouts in red (see _style_line)
 	_log = RichTextLabel.new()
@@ -587,10 +590,65 @@ func _animate(event: Dictionary) -> void:
 		_flash(_views[charge.tank].body, Color(0.7, 1.2, 1.9), 2)
 		for ally in charge.allies:
 			_float_text(_views[ally], Terms.t("battle_guard_charge"), Color("#facc15"))
+	if event.has("combo"):
+		await _animate_combo(event.combo)
 	_apply_state(event)
 	_append_lines(event)
 	await _wait(1.5)
 	_fx.set_marker(null, Vector2.ZERO)
+
+## A combo: the members' cards flash gold, the cut-in plays (the combo's own picture and name if it has one, else a
+## split screen of the members), then its hits, heals, revives, sleeps and charged gauges land, and any counters
+## it provoked play out
+func _animate_combo(combo: Dictionary) -> void:
+	var data: ComboData = combo.get("data")
+	var members: Array[CharacterData] = []
+	var names := PackedStringArray()
+	var ally := true
+	for i in combo.members:
+		var unit: Dictionary = _battle.units[i]
+		ally = unit.side == 0
+		names.append(unit.name)
+		if unit.data is CharacterData:
+			members.append(unit.data)
+		_flash(_views[i].body, Color(1.9, 1.6, 0.5), 1.5)
+	var title: String = data.title() if data else combo.name
+	var picture: Texture2D = data.get_cutin() if data else null
+	if picture:
+		await _cut_in.play(null, " & ".join(names), title, ally, _speed, picture, UITheme.GOLD)
+	else:
+		await _combo_cut_in.play(title, members, names, ally, _speed)
+	for i in combo.members:
+		_fx.aura(_center(_views[i]))
+	var fx_color := BattleFX.ALLY_FX if ally else BattleFX.ENEMY_FX
+	if not combo.hits.is_empty():
+		_fx.shake(_arena, 14.0, 0.45)
+	var struck := {}
+	for hit in combo.hits:
+		if struck.has(hit.target):
+			await _wait(1.5)  # e.g. Astolfo Brothers: a second hit on the same enemy lands after the first
+		struck[hit.target] = true
+		var target: Dictionary = _views[hit.target]
+		_fx.slash(_center(target), UITheme.GOLD, 1.0 if ally else -1.0)
+		_react(target, hit, fx_color)
+	for i in combo.revived:
+		var view: Dictionary = _views[i]
+		view.slot.modulate.a = 1.0
+		view.body.modulate = Color.WHITE
+		_fx.aura(_center(view))
+		_float_text(view, Terms.t("battle_combo_revive"), Color("#fde68a"), 30, 28)
+	for heal in combo.heals:
+		_fx.heal(_center(_views[heal.target]))
+		_float_text(_views[heal.target], "+%d" % heal.amount, Color("#4ade80"))
+	for target in combo.get("slept", []):
+		_float_text(_views[target], Terms.t("battle_slept"), Color("#93c5fd"), 60)
+	for target in combo.get("blinded", []):
+		_float_text(_views[target], Terms.t("battle_blinded"), Color("#fde047"), 60)
+	for i in combo.charged:
+		_float_text(_views[i], Terms.t("battle_combo_charged"), Color("#facc15"), 30)
+	await _wait(2)
+	for assist in combo.assists:
+		await _animate_assist(assist)
 
 ## A card's centre in the effects layer's coordinates
 func _center(view: Dictionary) -> Vector2:

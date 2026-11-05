@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ComboData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/combo_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"the_baldness"
+display_name = "The Baldness"
+description = "ShadowKittay and two or more bald friends shine together: ShadowKittay hits every enemy (35% damage), then every enemy is Blinded for 2 turns (-50% Accuracy)."
+members = Array[StringName]([&"shadowkittay"])
+any_of = Array[StringName]([&"bald_ramsay", &"baldguy", &"baldvegeta"])
+any_count = 2
+effect_id = &"the_baldness"
+params = {"damage_mult": 0.35, "accuracy": -0.5, "turns": 2}

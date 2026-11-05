@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ComboData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/combo_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"example_combo"
+display_name = "Example Combo"
+description = "A template to copy: set the members, pick an effect no other combo uses, then turn on enabled."
+members = Array[StringName]([&"bald_ramsay", &"baldguy"])
+enabled = false
+effect_id = &"combo_strike"
+params = {"damage_mult": 3.0}
+cutin_title = "Example Combo!"

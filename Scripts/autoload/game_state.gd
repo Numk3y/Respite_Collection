@@ -884,7 +884,21 @@ func get_battle_team(index: int = 0) -> Dictionary:
 			continue
 		var row := "vanguard" if is_vanguard_slot(slot) else "rearguard"
 		team[row].append(c.battle_unit(get_unit_stats(uid)))
+	team.combos = active_combos(index).map(func(combo: ComboData): return combo.battle_dict())
 	return team
+
+## Combos whose members are all in team `index` (the battle still checks that each one actually fights)
+func active_combos(index: int = 0) -> Array[ComboData]:
+	var ids := {}
+	for slot in TEAM_SLOTS:
+		var c := get_character(team_uid(slot, index))
+		if c != null:
+			ids[c.id] = true
+	var out: Array[ComboData] = []
+	for combo: ComboData in DB.combos.values():
+		if combo.is_ready(ids):
+			out.append(combo)
+	return out
 
 # ───────── Gear ─────────
 

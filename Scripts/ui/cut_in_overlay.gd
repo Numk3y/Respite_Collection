@@ -155,10 +155,14 @@ func _d(seconds: float) -> float:
 	return seconds / maxf(_speed, 0.01)
 
 ## Plays the whole cut-in and returns when it has finished. ally = true for the player's side
-## (picture enters from the left), false for enemies (mirrored, red accent).
-func play(data: CharacterData, caster_name: String, skill_name: String, ally: bool, speed: float) -> void:
+## (picture enters from the left), false for enemies (mirrored, red accent). `picture` replaces the caster's
+## cut-in art (e.g. a combo's own picture); `accent` replaces the side colour.
+func play(data: CharacterData, caster_name: String, skill_name: String, ally: bool, speed: float,
+		picture: Texture2D = null, accent_override: Color = Color(0, 0, 0, 0)) -> void:
 	_speed = speed
 	var accent: Color = UITheme.CYAN if ally else ENEMY_ACCENT
+	if accent_override.a > 0.0:
+		accent = accent_override
 	var dir := 1.0 if ally else -1.0
 	global_position = Vector2.ZERO
 	size = get_viewport_rect().size
@@ -169,7 +173,7 @@ func play(data: CharacterData, caster_name: String, skill_name: String, ally: bo
 	_flash.modulate.a = 0.0
 	_stage.position = Vector2.ZERO
 
-	var texture: Texture2D = data.get_cutin() if data else null
+	var texture: Texture2D = picture if picture else (data.get_cutin() if data else null)
 	var has_pic := texture != null
 	_bg.visible = has_pic
 	_pic.visible = has_pic

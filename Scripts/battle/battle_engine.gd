@@ -5,6 +5,7 @@ extends RefCounted
 ## A team is {"vanguard": [unit, ...], "rearguard": [unit, ...]} and a unit is
 ## {"name", "cls": CharacterData.CharClass, "stats": {hp, attack, defense, evasion, accuracy, speed},
 ##  "energy_max": int, "data": CharacterData (for the battle screen), "ultimate": {"effect": StringName, "name": String, "params": Dictionary} or {}}.
+## A team may also carry "combos": [ComboData.battle_dict(), ...] (GameState.get_battle_team adds the active ones).
 ## CharacterData.battle_unit() builds one.
 ##
 ## `enemies` is one team or {"waves": [team, ...]} for missions with several battles in a row.
@@ -22,6 +23,8 @@ extends RefCounted
 ##                 "hits": [{"target", "hit", "damage", "crit", "guard"}], "heals": [{"target", "amount"}],
 ##                 "off_balance": [target, ...], "assists": [{"actor", "target", "damage"}],
 ##                 "guard_charges": [{"tank", "allies": [index, ...]}], "lines": PackedStringArray,
+##                 "combo" (only when one fired after the action): {"id", "name", "effect", "members": [index, ...],
+##                   "data": ComboData, "hits", "heals", "assists", "revived": [index], "charged": [index], "slept": [index]},
 ##                 "state": [{"hp", "energy", "buffs": PackedStringArray}] (every unit, after the action)}
 ##   "end_lines": PackedStringArray  (the victory/defeat line)
 

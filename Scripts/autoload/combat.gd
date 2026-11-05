@@ -7,6 +7,7 @@ const ANIMATRONIC_WAVE_INDEX := 1
 
 var engine: BattleEngine = FormationBattleEngine.new()
 var force_animatronics := false  # test mode: the next sortie on a 2+ wave mission meets them for sure
+var force_combo := false  # test mode: in the next sortie every combo roll succeeds (each combo still fires once)
 
 var _rng := RandomNumberGenerator.new()
 var _live_stage: StageData  # the map of the live battle in progress (see start_sortie)
@@ -27,7 +28,11 @@ func start_sortie(stage: StageData, manual: bool, exp_mult: float = 1.0) -> Arra
 		_live_animatronics = true
 		enemies.waves[ANIMATRONIC_WAVE_INDEX] = stage.wave_team(ANIMATRONIC_WAVE)
 	_live_stage = stage
-	return engine.begin(GameState.get_battle_team(), enemies, _rng, true, manual)
+	var team := GameState.get_battle_team()
+	if force_combo:
+		force_combo = false
+		team.force_combos = true
+	return engine.begin(team, enemies, _rng, true, manual)
 
 ## The live battle's next event, or {} once it's over
 func next_event() -> Dictionary:

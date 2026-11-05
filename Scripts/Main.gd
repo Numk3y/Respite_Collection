@@ -585,6 +585,7 @@ func _open_test_mode() -> void:
 	currency_row.add_child(_button(Terms.t("test_cards"), GameState.add_credit_cards.bind(10)))
 	currency_row.add_child(_button(Terms.t("test_parts"), GameState.add_parts.bind(100)))
 	currency_row.add_child(_button(Terms.t("test_animatronics"), func(): Combat.force_animatronics = true))
+	currency_row.add_child(_button(Terms.t("test_combo"), func(): Combat.force_combo = true))
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size.y = clampf(screen.y - 300.0, 150.0, 420.0)  # room left for title, hint, buttons, OK

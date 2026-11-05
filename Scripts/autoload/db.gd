@@ -10,6 +10,7 @@ var pools: Array[GachaPool] = []
 var stages: Array[StageData] = []
 var commissions: Array[CommissionData] = []
 var events: Dictionary[StringName, EventData] = {}  # id -> event; Data/events/<id>/event.tres
+var combos: Dictionary[StringName, ComboData] = {}  # id -> combo attack; Data/combos/*.tres
 
 func _ready() -> void:
 	for res in _load_all("res://Data/characters/"):
@@ -53,8 +54,37 @@ func _ready() -> void:
 			push_error("Event %s has no boss_stage" % ev.id)
 			continue
 		events[ev.id] = ev
+	_load_combos()
 	# Maps outside the story first, then story order: 1-1 ... 1-5, 2-1 ...
 	stages.sort_custom(func(a, b): return a.chapter < b.chapter or (a.chapter == b.chapter and a.number < b.number))
+
+## Combos: every id unique, every enabled combo with its own effect (no two share one), 2+ known members
+func _load_combos() -> void:
+	var effect_owner := {}
+	for res in _load_all("res://Data/combos/"):
+		var c := res as ComboData
+		if c == null:
+			continue
+		if combos.has(c.id):
+			push_error("Duplicate combo id: %s" % c.id)
+			continue
+		combos[c.id] = c
+		if not c.enabled:
+			continue
+		if c.min_size() < 2:
+			push_warning("Combo %s needs at least 2 members; it can't trigger." % c.id)
+		if c.any_count > c.any_of.size():
+			push_warning("Combo %s wants %d of any_of but lists only %d; it can't trigger." % [c.id, c.any_count, c.any_of.size()])
+		for m in c.members + c.any_of:
+			if not characters.has(m):
+				push_warning("Combo %s: unknown member '%s'; it can't trigger." % [c.id, m])
+		if not FormationBattleEngine.COMBO_EFFECTS.has(c.effect_id):
+			push_warning("Combo %s: unknown effect '%s'; it can't trigger." % [c.id, c.effect_id])
+		elif effect_owner.has(c.effect_id):
+			push_error("Combos %s and %s both use the effect '%s'; every combo needs its own." % [
+				effect_owner[c.effect_id], c.id, c.effect_id])
+		else:
+			effect_owner[c.effect_id] = c.id
 
 func get_stage(stage_id: StringName) -> StageData:
 	for s in stages:

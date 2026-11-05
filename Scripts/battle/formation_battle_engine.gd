@@ -27,6 +27,9 @@ extends BattleEngine
 ##   that target at ASSIST_DAMAGE_MULT damage. Off-Balance targets can't dodge it. At most one assist per action.
 ## - Guard charge: when a Tank is hit hard (raw damage before Defense of GUARD_HEAVY_PCT of its max HP) or is
 ##   targeted while taunting, every living rearguard ally with an Ultimate gains GUARD_CHARGE_PCT of their gauge.
+## - Combo: after the action, if the actor is a member of one of its team's combos (ComboData) and every member is
+##   alive, the combo rolls its chance (higher while the team is losing). On a hit the whole group unleashes it
+##   (COMBO_EFFECTS) without using anyone's turn. Each combo fires once per battle (or once per wave).
 
 const TIMER_FULL := 100.0
 const MAX_ACTIONS := 300  # a stalemate past this counts as a loss
@@ -111,6 +114,29 @@ const ULTIMATE_EFFECTS := {
 	# enemy's max HP, ignoring Defense, but at most `cap_mult` x the caster's Attack; the Hats then start over.
 	&"hat_trick": {"damage_mult": 1.0, "turns": 3, "marks": 3, "explode_pct": 0.3, "cap_mult": 3.0},
 }
+
+## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
+## entry (and its match branch in _cast_combo) for every new combo rather than reusing one.
+## "Combined Attack" is the sum of every member's current Attack.
+const COMBO_EFFECTS := {
+	# Every enemy takes `damage_mult` x combined Attack (reduced by Defense); it can't miss
+	&"combo_strike": {"damage_mult": 3.0},
+	# Every living ally heals `heal_pct` of max HP, then the first fallen ally comes back with `revive_pct` of max HP
+	&"combo_rally": {"heal_pct": 0.4, "revive_pct": 0.3},
+	# Every enemy's turn meter empties and it falls asleep for its next N actions (ignores sleep cooldowns)
+	&"combo_time_stop": {"turns": 1},
+	# Every living ally's Ultimate gauge fills up
+	&"combo_overcharge": {},
+	# The ally lowest on HP (share of max HP) and the enemy highest on it swap HP shares (the enemy keeps at least 1 HP)
+	&"combo_swap": {},
+	# Astolfo Brothers (Spijette & Gobby): each member strikes `hits` times for `hit_mult` x a normal hit (can't miss;
+	# a target that drops is replaced by the next one), then every other member heals the total damage it dealt
+	&"astolfo_brothers": {"hits": 2, "hit_mult": 1.0},
+	# The Baldness (ShadowKittay + 2 bald friends): the first required member (ShadowKittay) hits every enemy for
+	# `damage_mult` x a normal hit (can't miss), then every enemy still standing is Blinded, `accuracy` for its next N actions
+	&"the_baldness": {"damage_mult": 0.35, "accuracy": -0.5, "turns": 2},
+}
+const COMBO_BOSS_CAP_PCT := 0.15  # combo damage to one boss is capped at this share of its max HP
 
 ## Passive effects a passive SkillData.effect_id can use, with their default params
 const PASSIVE_EFFECTS := {
@@ -221,7 +247,14 @@ func begin(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerator, 
 		"win": false, "done": false, "end_key": "log_timeout", "actions": 0, "wave_actions": 0, "wave": 0,
 		"manual_fired": 0,  # Ultimates the player fired by hand
 		"max_actions": int(enemies.get("max_actions", MAX_ACTIONS)),  # world boss fights are short on purpose
-		"timeout_key": enemies.get("timeout_key", "log_timeout")}
+		"timeout_key": enemies.get("timeout_key", "log_timeout"),
+		"combos": _setup_combos(units, allies, 0),
+		"force_combos": bool(allies.get("force_combos", false))}  # test mode: every roll succeeds
+	if enemies.has("max_actions"):
+		# world boss fights: every enemy counts as a boss for combo damage caps
+		for u in units:
+			if u.side == 1:
+				u.boss = true
 	return _run.snapshot
 
 func is_done() -> bool:
@@ -377,6 +410,7 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"passive_cooldown": 0,  # own actions left before the passive can trigger again
 				"buffs": [],
 				"data": u.get("data"),
+				"boss": bool(team.get("boss", false)),  # boss waves: combo damage is capped (COMBO_BOSS_CAP_PCT)
 				"dealt": 0,  # combat stats for the results screen (see _count_damage / _heal)
 				"taken": 0,
 				"healed": 0,
@@ -674,6 +708,8 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	if actor.passive_cooldown > 0:
 		actor.passive_cooldown -= 1
 	actor.actions_taken = int(actor.get("actions_taken", 0)) + 1  # e.g. Full Metal Kit's enrage
+	if event.kind != "sleep":
+		_check_combo(actor, units, rng, event, record)
 	if record:
 		event.state = _state(units)
 	return event
@@ -1399,6 +1435,176 @@ func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumbe
 	if record:
 		event.lines.append(Terms.t("log_splash", {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
+
+# ───────── Combo attacks ─────────
+
+## One entry per combo that can happen on `side`: {"combo": the battle_dict, "side", "members": [unit index] (required),
+## "optional": [unit index] (its any_of friends who fight), "used_wave": the wave it last fired in, -1 = not yet}
+func _setup_combos(units: Array[Dictionary], team: Dictionary, side: int) -> Array:
+	var out := []
+	for combo: Dictionary in team.get("combos", []):
+		if not COMBO_EFFECTS.has(combo.effect):
+			push_warning("Combo %s: unknown effect '%s'; it won't fire." % [combo.name, combo.effect])
+			continue
+		var members := _unit_indices(units, side, combo.members)
+		var optional := _unit_indices(units, side, combo.get("any_of", []))
+		# someone left out of the battle (e.g. wrong row): no combo
+		if members.size() == combo.members.size() and optional.size() >= int(combo.get("any_count", 0)):
+			out.append({"combo": combo, "side": side, "members": members, "optional": optional, "used_wave": -1})
+	return out
+
+## The units on `side` playing these characters (ids with no unit are skipped)
+func _unit_indices(units: Array[Dictionary], side: int, ids: Array) -> Array:
+	var out := []
+	for id in ids:
+		for u in units:
+			if u.side == side and u.data is CharacterData and u.data.id == id:
+				out.append(u.index)
+				break
+	return out
+
+## Who unleashes the combo right now: every required member plus the optional ones still standing, or [] if it can't
+## happen (a required member is down, or too few optional ones are left)
+func _combo_group(entry: Dictionary, units: Array[Dictionary]) -> Array:
+	if not entry.members.all(func(i): return _alive(units[i])):
+		return []
+	var optional: Array = entry.optional.filter(func(i): return _alive(units[i]))
+	if optional.size() < int(entry.combo.get("any_count", 0)):
+		return []
+	return entry.members + optional
+
+## A side's total HP share (current / max) among its units on the field
+func _team_hp_share(units: Array[Dictionary], side: int) -> float:
+	var hp := 0
+	var max_hp := 0
+	for u in units:
+		if u.side == side and u.active:
+			hp += maxi(u.hp, 0)
+			max_hp += u.max_hp
+	return float(hp) / maxf(max_hp, 1)
+
+## The chance a combo fires on one roll at a given team HP share
+static func combo_chance(combo: Dictionary, hp_share: float) -> float:
+	return float(combo.comeback_chance) if hp_share < float(combo.comeback_hp) else float(combo.chance)
+
+## After `actor` acts: each of its combos that's still available rolls; the first to succeed fires (one per action)
+func _check_combo(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
+	if _run.is_empty() or _run.combos.is_empty() or not _side_standing(units, 1 - actor.side):
+		return
+	for entry: Dictionary in _run.combos:
+		if entry.side != actor.side or not (entry.members.has(actor.index) or entry.optional.has(actor.index)):
+			continue
+		if entry.used_wave >= 0 and (not entry.combo.per_wave or entry.used_wave == _run.wave):
+			continue
+		var group := _combo_group(entry, units)
+		if group.is_empty():
+			continue
+		var chance := combo_chance(entry.combo, _team_hp_share(units, actor.side))
+		if not _run.force_combos and rng.randf() >= chance:
+			continue
+		entry.used_wave = _run.wave
+		_cast_combo(entry, group, units, rng, event, record)
+		return
+
+## Unleashes a combo. Its results go in event.combo, shaped like an action of its own
+## ({"id", "name", "effect", "members", "data", "hits", "heals", "assists", "revived", "charged", "slept", ...}) so
+## the battle screen can play it after the action; its log lines join the action's.
+func _cast_combo(entry: Dictionary, group: Array, units: Array[Dictionary], rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
+	var combo: Dictionary = entry.combo
+	var p: Dictionary = COMBO_EFFECTS[combo.effect].merged(combo.params, true)
+	var members: Array = group.map(func(i): return units[i])
+	var lead: Dictionary = members[0]  # credited with the combo's damage and healing on the results screen
+	var side: int = entry.side
+	var ev := {"id": combo.id, "name": combo.name, "effect": combo.effect, "members": group.duplicate(),
+		"data": combo.data, "hits": [], "heals": [], "off_balance": [], "assists": [], "guard_charges": [],
+		"drains": [], "revived": [], "charged": [], "lines": PackedStringArray()}
+	if record:
+		var names := PackedStringArray(members.map(func(m): return m.name))
+		ev.lines.append(Terms.t("log_combo", {"names": " & ".join(names), "skill": combo.name}))
+	var combined := 0.0
+	for m in members:
+		combined += _stat(m, "attack")
+	var allies := units.filter(func(u): return u.side == side and _alive(u))
+	var foes := units.filter(func(u): return u.side != side and _alive(u))
+	match combo.effect:
+		&"combo_strike":
+			for foe in foes:
+				var raw := combined * float(p.damage_mult) * rng.randf_range(1.0 - DAMAGE_VARIANCE, 1.0 + DAMAGE_VARIANCE)
+				_combo_damage(lead, foe, _mitigate(raw, foe), ev, record, rng)
+		&"combo_rally":
+			for ally in allies:
+				_heal(ally, roundi(ally.max_hp * float(p.heal_pct)), ev, record, lead)
+			for u in units:
+				if u.side == side and u.active and u.hp <= 0:
+					u.hp = maxi(roundi(u.max_hp * float(p.revive_pct)), 1)
+					u.buffs.clear()
+					ev.revived.append(u.index)
+					if record:
+						ev.lines.append(Terms.t("log_combo_revive", {"name": u.name, "hp": u.hp}))
+					break
+		&"combo_time_stop":
+			for foe in foes:
+				foe.timer = 0.0
+				_put_to_sleep(lead, foe, int(p.turns), false, ev, record, combo.name, "log_combo_frozen")
+		&"combo_overcharge":
+			for ally in allies:
+				if not ally.ultimate.is_empty() and ally.energy < ally.energy_max:
+					_gain_energy(ally, ally.energy_max)
+					if ally.energy >= ally.energy_max:
+						ev.charged.append(ally.index)
+			if record and not ev.charged.is_empty():
+				ev.lines.append(Terms.t("log_combo_overcharge", {"count": ev.charged.size()}))
+		&"combo_swap":
+			if not allies.is_empty() and not foes.is_empty():
+				var share := func(u): return float(u.hp) / maxf(u.max_hp, 1)
+				allies.sort_custom(func(a, b): return share.call(a) < share.call(b))
+				foes.sort_custom(func(a, b): return share.call(a) > share.call(b))
+				var ally: Dictionary = allies[0]
+				var foe: Dictionary = foes[0]
+				var ally_share: float = share.call(ally)
+				var foe_share: float = share.call(foe)
+				if foe_share > ally_share:
+					if record:
+						ev.lines.append(Terms.t("log_combo_swap", {"ally": ally.name, "enemy": foe.name}))
+					_combo_damage(lead, foe, foe.hp - maxi(roundi(foe.max_hp * ally_share), 1), ev, record, rng)
+					_heal(ally, roundi(ally.max_hp * foe_share) - ally.hp, ev, record, lead)
+		&"astolfo_brothers":
+			for m in members:
+				var dealt := 0
+				for h in int(p.hits):
+					var targets := _targetable(units, 1 - side)
+					if targets.is_empty() or m.hp <= 0:
+						break
+					var target: Dictionary = targets[rng.randi() % targets.size()]
+					var raw := _raw_damage(m, rng) * float(p.hit_mult)
+					dealt += _combo_damage(m, target, _mitigate(raw, target), ev, record, rng)
+				for other in members:
+					if other.index != m.index and dealt > 0:
+						_heal(other, dealt, ev, record, m)
+		&"the_baldness":
+			for foe in foes:
+				_combo_damage(lead, foe, _mitigate(_raw_damage(lead, rng) * float(p.damage_mult), foe), ev, record, rng)
+				if foe.hp <= 0:
+					continue
+				_add_buff(foe, {"id": &"blinded", "name": Terms.t("buff_blinded"), "mods": {"accuracy": float(p.accuracy)},
+					"remaining": int(p.turns), "counts": "actions"})
+				ev.get_or_add("blinded", []).append(foe.index)
+				if record:
+					ev.lines.append(Terms.t("log_blinded", {"target": foe.name, "skill": combo.name}))
+	event.combo = ev
+	event.lines.append_array(ev.lines)
+
+## Combo damage: always lands, capped against bosses, and goes through _apply_damage so passives still react.
+## Returns the damage dealt.
+func _combo_damage(source: Dictionary, target: Dictionary, amount: int, ev: Dictionary, record: bool, rng: RandomNumberGenerator) -> int:
+	if target.get("boss", false):
+		amount = mini(amount, roundi(target.max_hp * COMBO_BOSS_CAP_PCT))
+	amount = maxi(amount, 1)
+	ev.hits.append({"target": target.index, "hit": true, "damage": amount, "crit": false, "guard": false})
+	if record:
+		ev.lines.append(Terms.t("log_combo_hit", {"target": target.name, "damage": amount}))
+	_apply_damage(source, target, amount, ev, record, rng)
+	return amount
 
 # ───────── Combat chain: assists & guard charges ─────────
 
