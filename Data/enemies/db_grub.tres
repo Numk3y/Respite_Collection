@@ -36,5 +36,5 @@ speed = 65
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 ultimate_max = 100
-portrait_path = "res://Art/enemies/db_grub.png"
+portrait_path = "res://Art/enemies/Rust_DBGrub.png"
 description = "Naked except for a double-barrel shotgun he definitely didn't craft himself. Somehow he keeps winning."

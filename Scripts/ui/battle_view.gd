@@ -576,6 +576,8 @@ func _animate(event: Dictionary) -> void:
 		_fx.shake(_arena, 8.0, 0.3)
 	for quinn in event.get("until_next_time", []):
 		_float_text(_views[quinn], Terms.t("battle_until_next_time"), Color("#fde68a"), 60)
+	for target in event.get("storm_splash", []):
+		_float_text(_views[target], Terms.t("battle_storm_splash"), Color("#7dd3fc"), 60)
 	for horse in event.get("horse", []):
 		_float_text(_views[horse], Terms.t("battle_horse"), Color("#f0abfc"), 60, 30)
 	if attacking:

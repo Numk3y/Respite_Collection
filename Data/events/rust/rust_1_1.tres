@@ -1,33 +1,36 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
-[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
-[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="5"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="6"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_wolf.tres" id="7"]
-[ext_resource type="Resource" path="res://Data/enemies/db_grub.tres" id="8"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1_63817"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="2_let0c"]
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="3_uj8bx"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4_wo1ea"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="5_83dtn"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="6_npr1x"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/Rust_Event.png" id="bg"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub_2.tres" id="g2"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub_3.tres" id="g3"]
 
 [sub_resource type="Resource" id="wave_1"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5")])
-enemy_rearguard = Array[ExtResource("2")]([])
+script = ExtResource("4_wo1ea")
+enemy_vanguard = Array[ExtResource("1_63817")]([ExtResource("5_83dtn"), ExtResource("g2")])
 
 [sub_resource type="Resource" id="wave_2"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5"), ExtResource("5")])
-enemy_rearguard = Array[ExtResource("2")]([ExtResource("6")])
+script = ExtResource("4_wo1ea")
+enemy_vanguard = Array[ExtResource("1_63817")]([ExtResource("g3"), ExtResource("5_83dtn"), ExtResource("g2")])
+enemy_rearguard = Array[ExtResource("1_63817")]([ExtResource("6_npr1x")])
 
 [resource]
-script = ExtResource("1")
+background = ExtResource("bg")
+script = ExtResource("3_uj8bx")
 id = &"rust_1_1"
 display_name = "Fresh Spawn"
 description = "You wake up on the beach with a rock and a torch. So does everyone else, and they all want your rock."
-chapter = 1
-number = 1
 recommended_level = 5
 enemy_level = 3
-waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2")])
+waves = Array[ExtResource("4_wo1ea")]([SubResource("wave_1"), SubResource("wave_2")])
 reward_money = 100
 exp_reward = 30
-reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(1, 3), "coffee": Vector2i(0, 1)})
+reward_materials = Dictionary[String, Vector2i]({
+"coffee": Vector2i(0, 1),
+"snack": Vector2i(1, 3)
+})

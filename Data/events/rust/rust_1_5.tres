@@ -1,39 +1,47 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
-[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
-[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="5"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="6"]
-[ext_resource type="Resource" path="res://Data/enemies/rust_wolf.tres" id="7"]
-[ext_resource type="Resource" path="res://Data/enemies/db_grub.tres" id="8"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1_jysa1"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="2_ddwmy"]
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="3_gtsgj"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4_7gljy"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_scientist.tres" id="5_4erq6"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub.tres" id="6_2iueb"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_wolf.tres" id="7_vesgn"]
+[ext_resource type="Resource" path="res://Data/enemies/db_grub.tres" id="8_d687g"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/Rust_Event.png" id="bg"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub_2.tres" id="g2"]
+[ext_resource type="Resource" path="res://Data/enemies/rust_grub_3.tres" id="g3"]
 
 [sub_resource type="Resource" id="wave_1"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("7"), ExtResource("5")])
-enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+script = ExtResource("4_7gljy")
+enemy_vanguard = Array[ExtResource("1_jysa1")]([ExtResource("6_2iueb"), ExtResource("7_vesgn"), ExtResource("g2")])
+enemy_rearguard = Array[ExtResource("1_jysa1")]([ExtResource("5_4erq6"), ExtResource("5_4erq6")])
 
 [sub_resource type="Resource" id="wave_2"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("5"), ExtResource("7")])
-enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+script = ExtResource("4_7gljy")
+enemy_vanguard = Array[ExtResource("1_jysa1")]([ExtResource("7_vesgn"), ExtResource("g3"), ExtResource("7_vesgn")])
+enemy_rearguard = Array[ExtResource("1_jysa1")]([ExtResource("5_4erq6"), ExtResource("5_4erq6")])
 
 [sub_resource type="Resource" id="wave_3"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("5")])
-enemy_rearguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("6")])
+script = ExtResource("4_7gljy")
+enemy_vanguard = Array[ExtResource("1_jysa1")]([ExtResource("8_d687g"), ExtResource("6_2iueb")])
+enemy_rearguard = Array[ExtResource("1_jysa1")]([ExtResource("5_4erq6"), ExtResource("5_4erq6")])
 is_boss = true
 
 [resource]
-script = ExtResource("1")
+background = ExtResource("bg")
+script = ExtResource("3_gtsgj")
 id = &"rust_1_5"
 display_name = "DB Grub"
 description = "A naked grub with a double-barrel shotgun is camping the only road off the island. Nobody knows where he got it."
-chapter = 1
 number = 5
 recommended_level = 10
 enemy_level = 3
-waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+waves = Array[ExtResource("4_7gljy")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
 reward_money = 220
 exp_reward = 60
-reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(2, 4), "coffee": Vector2i(1, 2), "gossip": Vector2i(0, 1)})
+reward_materials = Dictionary[String, Vector2i]({
+"coffee": Vector2i(1, 2),
+"gossip": Vector2i(0, 1),
+"snack": Vector2i(2, 4)
+})

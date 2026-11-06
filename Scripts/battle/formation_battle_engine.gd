@@ -108,6 +108,9 @@ const ULTIMATE_EFFECTS := {
 	# Fires `shots` times, each at a random attackable enemy (a taunt pulls every shot), for `damage_mult` x Attack.
 	# With `any_row` the shots spray both rows, back row included.
 	&"full_auto": {"shots": 5, "damage_mult": 0.6, "any_row": false},
+	# Storm: the same volley as full_auto (5 arrows at random attackable enemies), with its own log line. Each arrow
+	# is a separate attack, so passive Eye of the Storm rolls on every one.
+	&"light_assault": {"shots": 5, "damage_mult": 0.6, "any_row": false},
 	# Locks onto one enemy (picked like a normal single-target attack) and fires at it for `damage_mult` x Attack.
 	# For the caster's next N actions every attack goes to that enemy (ignoring taunts) while it stands, and every
 	# hit that lands on it (this shot too) leaves a Hat. At `marks` Hats they explode for `explode_pct` of the
@@ -212,6 +215,9 @@ const PASSIVE_EFFECTS := {
 	# lands (every target of an area attack too) splashes onto another living enemy for `splash` of the damage (can't miss). Then it can't
 	# trigger again until `cooldown` own actions after the takedown.
 	&"until_next_time": {"speed": -0.3, "damage": 0.65, "splash": 0.5, "turns": 3, "cooldown": 5},
+	# Each of its own attacks that lands (every Ultimate shot too) has `chance` to splash onto a random living enemy in
+	# the back row (not the one just hit) for `splash` of the hit's damage before crits (can't miss, reduced by Defense).
+	&"eye_of_the_storm": {"chance": 0.5, "splash": 0.8},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -876,9 +882,9 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			if record:
 				event.lines.append(Terms.t("log_hat_lock", {"name": actor.name, "target": mark.name}))
 			event.hits.append(_attack(actor, mark, rng, record, event, float(p.damage_mult)))
-		&"full_auto":
+		&"full_auto", &"light_assault":
 			if record:
-				event.lines.append(Terms.t("log_full_auto", {"name": actor.name}))
+				event.lines.append(Terms.t("log_" + String(effect), {"name": actor.name}))
 			var mult_shot := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
 			for i in int(p.shots):
 				var foes := _units.filter(func(t): return t.side != actor.side and _alive(t)) if p.any_row \
@@ -1322,6 +1328,7 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		event.lines.append(Terms.t(key, {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 	_add_hat(actor, target, event, record, rng)
+	_check_eye_of_the_storm(actor, target, mult, rng, record, event)
 	# Passive Bow Wow: the hit opens a bleed (one per attacker; a new hit refreshes it)
 	var bow_wow := _passive_params(actor, &"bow_wow")
 	if target.hp > 0 and not bow_wow.is_empty():
@@ -1434,6 +1441,24 @@ func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumbe
 	event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
 	if record:
 		event.lines.append(Terms.t("log_splash", {"attacker": actor.name, "target": target.name, "damage": dealt}))
+	_apply_damage(actor, target, dealt, event, record, rng)
+
+## Passive Eye of the Storm: a landed attack may splash onto a back-row enemy
+func _check_eye_of_the_storm(actor: Dictionary, main: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool,
+		event: Dictionary) -> void:
+	var p := _passive_params(actor, &"eye_of_the_storm")
+	if p.is_empty() or rng.randf() >= float(p.chance):
+		return
+	var back := _units.filter(func(u): return u.side != actor.side and not u.vanguard and _alive(u) and u.index != main.index)
+	if back.is_empty():
+		return
+	var target: Dictionary = back[rng.randi_range(0, back.size() - 1)]
+	var dealt := _mitigate(_raw_damage(actor, rng) * mult * float(p.splash), target)
+	event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+	event.get_or_add("storm_splash", []).append(target.index)
+	if record:
+		event.lines.append(Terms.t("log_storm_splash", {"attacker": actor.name, "target": target.name, "damage": dealt,
+			"skill": actor.passive.name}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 
 # ───────── Combo attacks ─────────

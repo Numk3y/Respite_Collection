@@ -36,5 +36,5 @@ speed = 48
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 ultimate_max = 110
-portrait_path = "res://Art/enemies/full_metal_ak.png"
+portrait_path = "res://Art/enemies/Rust_FullMetalAK.png"
 description = "Full metal facemask, chestplate and kilt, an AK with a holosight, and zero fear. Every player on the server is fighting him at once."

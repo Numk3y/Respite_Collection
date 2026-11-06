@@ -1,24 +1,26 @@
 [gd_resource type="Resource" script_class="StageData" format=3]
 
-[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
-[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
-[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
-[ext_resource type="Resource" path="res://Data/events/rust/world_boss.tres" id="5"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1_5nf0p"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="2_pafyf"]
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="3_2ckwi"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4_8274g"]
+[ext_resource type="Resource" path="res://Data/events/rust/world_boss.tres" id="5_y5os3"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/Rust_Event.png" id="bg"]
 
 [sub_resource type="Resource" id="wave_1"]
-script = ExtResource("4")
-enemy_vanguard = Array[ExtResource("2")]([ExtResource("5")])
+script = ExtResource("4_8274g")
+enemy_vanguard = Array[ExtResource("1_5nf0p")]([ExtResource("5_y5os3")])
 is_boss = true
 
 [resource]
-script = ExtResource("1")
+script = ExtResource("3_2ckwi")
 id = &"rust_world_boss_fight"
 display_name = "Full Metal AK"
+background = ExtResource("bg")
 description = "The World Boss. Every player's damage comes off the same health bar."
-chapter = 1
 number = 5
 recommended_level = 12
 enemy_level = 1
-waves = Array[ExtResource("4")]([SubResource("wave_1")])
+waves = Array[ExtResource("4_8274g")]([SubResource("wave_1")])
 reward_money = 0
 exp_reward = 0

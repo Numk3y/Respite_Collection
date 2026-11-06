@@ -14,5 +14,5 @@ defense = 15
 evasion = 10
 accuracy = 75
 speed = 50
-portrait_path = "res://Art/enemies/rust_scientist.png"
+portrait_path = "res://Art/enemies/Rust_Scientist.png"
 description = "A monument guard in a hazmat suit. Keeps his distance and never stops shooting."

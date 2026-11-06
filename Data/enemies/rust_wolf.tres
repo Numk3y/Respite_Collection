@@ -14,5 +14,5 @@ defense = 25
 evasion = 15
 accuracy = 70
 speed = 60
-portrait_path = "res://Art/enemies/rust_wolf.png"
+portrait_path = "res://Art/enemies/Rust_WolfGeared.png"
 description = "Wolf headdress, hide skirt and a bone club. Mid-wiped and looking for a fight."
