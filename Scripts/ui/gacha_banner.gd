@@ -622,7 +622,9 @@ class Showcase extends Control:
 	## `top`: the hero panels (SSRs); `lineup`: the strip (SRs). Friends without art are left out.
 	func set_characters(ssr: Array[CharacterData], sr: Array[CharacterData]) -> void:
 		var top := ssr if not ssr.is_empty() else sr
-		var strip: Array[CharacterData] = sr if not ssr.is_empty() else []
+		var strip: Array[CharacterData] = []  # (a bare [] in a ternary is untyped and fails the typed assignment)
+		if not ssr.is_empty():
+			strip = sr
 		_heroes.clear()
 		for c in top:
 			var texture := c.get_portrait()

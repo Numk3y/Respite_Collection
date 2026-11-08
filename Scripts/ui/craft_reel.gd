@@ -126,10 +126,12 @@ func _ready() -> void:
 	_tick_player = AudioStreamPlayer.new()
 	_tick_player.max_polyphony = 4
 	_tick_player.volume_db = -10.0
+	_tick_player.bus = Sound.BUS
 	add_child(_tick_player)
 	_sfx_player = AudioStreamPlayer.new()
 	_sfx_player.max_polyphony = 4
 	_sfx_player.volume_db = -4.0
+	_sfx_player.bus = Sound.BUS
 	add_child(_sfx_player)
 
 	# Build the sounds now, while the window fades in, so the hit itself never hitches
@@ -415,32 +417,9 @@ class Forge extends Control:
 		draw_set_transform(Vector2.ZERO)
 		_draw_hammer(c)
 
-	## The piece by slot, centred on (0, 0): a sword, a chestplate or a ring with a gem
+	## The piece by slot, centred on (0, 0): a sword, a shield or a ring with a gem (drawn by GearIcon)
 	func _draw_piece(fill: Color, edge: Color) -> void:
-		match slot:
-			EquipmentData.Slot.WEAPON:
-				var blade := PackedVector2Array([Vector2(-70, -6), Vector2(40, -6), Vector2(62, 0), Vector2(40, 6), Vector2(-70, 6)])
-				draw_colored_polygon(blade, fill)
-				draw_polyline(blade + PackedVector2Array([blade[0]]), edge, 2.0)
-				draw_line(Vector2(-66, 0), Vector2(40, 0), Color(1, 1, 1, 0.35), 1.5)
-				draw_rect(Rect2(-80, -18, 10, 36), edge.lightened(0.3))
-				draw_rect(Rect2(-108, -4, 28, 8), Color("#5b3a1e"))
-				draw_circle(Vector2(-112, 0), 7, edge.lightened(0.3))
-			EquipmentData.Slot.ARMOR:  # a heater shield with a boss
-				var shield := PackedVector2Array([Vector2(-38, -40), Vector2(0, -46), Vector2(38, -40), Vector2(38, 2),
-					Vector2(24, 26), Vector2(0, 44), Vector2(-24, 26), Vector2(-38, 2)])
-				draw_colored_polygon(shield, fill)
-				draw_polyline(shield + PackedVector2Array([shield[0]]), edge, 3.0)
-				draw_line(Vector2(0, -42), Vector2(0, 40), edge, 2.0)
-				draw_line(Vector2(-36, -6), Vector2(36, -6), edge, 2.0)
-				draw_circle(Vector2(0, -6), 9, edge.lightened(0.2))
-				draw_circle(Vector2(-3, -9), 3, Color(1, 1, 1, 0.4))
-			_:
-				draw_arc(Vector2(0, 6), 28, 0, TAU, 40, edge, 13.0)
-				draw_arc(Vector2(0, 6), 28, 0, TAU, 40, fill, 9.0)
-				var gem := PackedVector2Array([Vector2(0, -38), Vector2(13, -24), Vector2(0, -12), Vector2(-13, -24)])
-				draw_colored_polygon(gem, Color("#ff6fa8").lerp(fill, 0.3))
-				draw_polyline(gem + PackedVector2Array([gem[0]]), edge, 2.0)
+		GearIcon.draw_piece(self, slot, fill, edge)
 
 	## The hammer, hinged at its handle's end down to the right of the anvil: resting over the piece at 0, raised
 	## upright at 1, and down on the piece at -0.15 (the strike)

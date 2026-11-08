@@ -8,7 +8,6 @@ var _is_web := OS.has_feature("web")
 var _screen: Control
 var _screen_bg: TextureRect  # an optional full-screen picture behind the current screen (e.g. battles)
 var _roster_dirty := false
-var _backup_message: Label
 var _restore_target: TextEdit
 var _file_picked_callback = null  # JavaScriptObject; must stay referenced or the browser drops it
 var _boss_starting := false  # waiting for the server to hand out a World Boss attempt
@@ -25,7 +24,10 @@ var _home_hint: Label
 var _sortie_button: Button
 var _recruit_button: Button  # Home's shortcut to Recruit (the tutorial points at it for the free pull)
 var _gacha_tab: GachaTab
-var _beginner_button: Button
+var _beginner_button: HomeTile
+var _home_menu: VBoxContainer  # the Home tab's tile column
+var _home_tiles := {}  # "battle" / "missions" / "recruit" / "team" / "commissions" / "casino" -> HomeTile
+var _menu_pictures := {}  # file name -> Texture2D, so refreshing the tiles doesn't reload them
 var _coach: Coach  # the tutorial's speech bubble, above every screen
 var _auto_run := {}  # the Auto Run series in progress (see _start_auto_run); {} when none
 var _mirror_room: MirrorRoom
@@ -309,98 +311,192 @@ func _refresh_roster() -> void:
 		_home_hint.text = _team_problem()
 		_home_hint.visible = _home_hint.text != ""
 	_refresh_featured()
+	_refresh_home_tiles()
 
-## Gacha-style lobby: the featured friend standing in the Mirror Room on the left, big action buttons on the right
+## Gacha-style lobby: the Mirror Room fills the tab with the featured friend standing left of centre (with a speech
+## bubble), and a column of picture tiles sits over the right side: a big Battle tile showing the next map, Beginner
+## Missions (while there are any), then Recruit / Team / Commissions / Casino. Each tile shows live status and a
+## red badge when something's waiting (see _refresh_home_tiles). Save backups and reset live in Settings.
 func _build_home_tab() -> Control:
-	var tab := HBoxContainer.new()
+	var tab := Control.new()
 	tab.name = Terms.term("tab_home")
-	tab.add_theme_constant_override("separation", 16)
-
-	var stage := PanelContainer.new()
-	stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var frame := UITheme.box(UITheme.INSET, Color(UITheme.CYAN, 0.45), 1, 12, 0)
-	frame.shadow_color = Color(UITheme.CYAN, 0.18)
-	frame.shadow_size = 10
-	stage.add_theme_stylebox_override("panel", frame)
-	tab.add_child(stage)
 	_mirror_room = MirrorRoom.new()
-	stage.add_child(_mirror_room)
-	var welcome := _title(Terms.t("home_welcome"), 20)
-	welcome.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	welcome.position = Vector2(18, 12)
-	welcome.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
-	_mirror_room.add_child(welcome)
+	_mirror_room.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tab.add_child(_mirror_room)
 
-	# The side column scrolls if a short window can't fit it all (otherwise the bottom rows get cut off)
-	var side_scroll := ScrollContainer.new()
-	side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	side_scroll.custom_minimum_size.x = 300
-	tab.add_child(side_scroll)
-	var side := VBoxContainer.new()
-	side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_theme_constant_override("separation", 8)
-	side_scroll.add_child(side)
-	var battle := _button(Terms.t("sortie_button"), _show_map_select, 30)
+	_home_menu = VBoxContainer.new()
+	_home_menu.add_theme_constant_override("separation", 10)
+	tab.add_child(_home_menu)
+	tab.resized.connect(_layout_home.bind(tab))
+	_home_tiles.clear()
+
+	var battle := _home_tile("battle", Terms.t("sortie_button"), _show_map_select, UITheme.CYAN, 46)
+	battle.shine = true
+	battle.custom_minimum_size.y = 110
+	battle.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	battle.size_flags_stretch_ratio = 1.3
 	_sortie_button = battle
-	battle.theme_type_variation = &"PrimaryButton"
-	battle.custom_minimum_size.y = 76
-	side.add_child(battle)
+	_home_menu.add_child(battle)
 	_home_hint = _wrapped_label("")
 	_home_hint.add_theme_color_override("font_color", Color("#fca5a5"))
+	_home_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	_home_hint.add_theme_constant_override("outline_size", 5)
 	_home_hint.visible = false
-	side.add_child(_home_hint)
-	# Beginner Missions: shows how many are ready to claim; gone once everything (and the free SSR) is claimed
-	_beginner_button = _button(Terms.t("beginner_button"), _open_beginner, 18)
-	_beginner_button.custom_minimum_size.y = 44
-	_beginner_button.add_theme_color_override("font_color", UITheme.GOLD)
-	side.add_child(_beginner_button)
-	for key in ["tab_team", "tab_gacha", "tab_commission", "tab_casino"]:
-		var go := _button(Terms.term(key), _go_to_tab.bind(Terms.term(key)), 20)
-		go.custom_minimum_size.y = 46
-		side.add_child(go)
-		if key == "tab_gacha":
-			_recruit_button = go
+	_home_menu.add_child(_home_hint)
+	# Beginner Missions: gone once everything (and the free SSR) is claimed
+	_beginner_button = _home_tile("missions", Terms.t("beginner_button"), _open_beginner, UITheme.GOLD, 20)
+	_beginner_button.custom_minimum_size.y = 58
+	_home_menu.add_child(_beginner_button)
 
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_child(spacer)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	grid.size_flags_stretch_ratio = 2.0
+	_home_menu.add_child(grid)
+	for spec in [["recruit", "tab_gacha", UITheme.GOLD], ["team", "tab_team", UITheme.CYAN],
+			["commissions", "tab_commission", UITheme.TEAL], ["casino", "tab_casino", Color("#c084fc")]]:
+		var tab_name := Terms.term(spec[1])
+		var tile := _home_tile(spec[0], tab_name, _go_to_tab.bind(tab_name), spec[2], 26)
+		tile.custom_minimum_size = Vector2(0, 86)
+		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		grid.add_child(tile)
+	_recruit_button = _home_tiles.recruit
+
 	if not GameState.is_storage_persistent():
 		var warning := _wrapped_label(Terms.t("storage_warning"))
+		warning.add_theme_font_size_override("font_size", 13)
 		warning.add_theme_color_override("font_color", Color("#f87171"))
-		side.add_child(warning)
-	var hint := _wrapped_label(Terms.t("backup_hint_short"))
-	hint.add_theme_font_size_override("font_size", 13)
-	hint.add_theme_color_override("font_color", UITheme.TEXT_DIM)
-	side.add_child(hint)
-	var backup_row := HBoxContainer.new()
-	backup_row.add_theme_constant_override("separation", 8)
-	side.add_child(backup_row)
-	for b in [_button(Terms.t("backup_download" if _is_web else "backup_copy"), _export_backup),
-			_button(Terms.t("backup_restore"), _open_restore)]:
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 14)
-		backup_row.add_child(b)
-	var save_row := HBoxContainer.new()
-	save_row.add_theme_constant_override("separation", 8)
-	side.add_child(save_row)
-	var save_buttons := [_button(Terms.t("reset_save"), _confirm_reset_save)]
-	if _test_mode_enabled():
-		save_buttons.push_front(_button(Terms.t("test_mode"), _open_test_mode))
-	for b: Button in save_buttons:
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 14)
-		save_row.add_child(b)
-	_backup_message = Label.new()
-	_backup_message.add_theme_font_size_override("font_size", 13)
-	side.add_child(_backup_message)
+		_home_menu.add_child(warning)
+	_mirror_room.set_greeting(Terms.t("home_welcome"))
+	_refresh_home_tiles()
 	return tab
+
+func _home_tile(key: String, title: String, callback: Callable, accent: Color, title_size: int) -> HomeTile:
+	var tile := HomeTile.new()
+	tile.title = title
+	tile.accent = accent
+	tile.title_size = title_size
+	tile.pressed.connect(callback)
+	_home_tiles[key] = tile
+	return tile
+
+## The tile column takes the right ~40% of the tab; the friend stands centred in the space left of it
+func _layout_home(tab: Control) -> void:
+	var width := clampf(tab.size.x * 0.4, 320.0, 470.0)
+	_home_menu.position = Vector2(tab.size.x - width - 8.0, 8.0)
+	_home_menu.size = Vector2(width, tab.size.y - 16.0)
+	_mirror_room.focus_x = (tab.size.x - width) * 0.5 / maxf(tab.size.x, 1.0)
+
+## Live status on the Home tiles: the next map and its picture, pity and the free pull, the team and its cost,
+## who's on shift, plus the red badges
+func _refresh_home_tiles() -> void:
+	if _home_tiles.is_empty() or not is_instance_valid(_home_tiles.battle):
+		return
+	# Battle: the first open story map not cleared yet, over its picture
+	var battle: HomeTile = _home_tiles.battle
+	var next := _next_story_stage()
+	if next:
+		battle.subtitle = Terms.t("home_battle_next", {"code": next.code(), "name": next.display_name})
+		battle.picture = _battle_background(next)
+	else:
+		var story := DB.stages.filter(func(s: StageData): return s.is_story())
+		battle.subtitle = Terms.t("home_battle_done")
+		battle.picture = _battle_background(story.back()) if not story.is_empty() else null
+	battle.picture_focus = Vector2(0.5, 0.5)
+	# Recruit: an SSR from the main pool, the pulls left to the guaranteed SSR, FREE while the free pull waits
+	var recruit: HomeTile = _home_tiles.recruit
+	var pool := _main_pool()
+	var free := Gacha.beginner_available()
+	recruit.badge = Terms.t("home_badge_free") if free else ""
+	if free:
+		recruit.subtitle = Terms.t("home_recruit_free")
+	elif pool and pool.pity_threshold > 0:
+		recruit.subtitle = Terms.t("home_recruit_pity", {"count": pool.pity_threshold - GameState.get_pity(pool.id)})
+	else:
+		recruit.subtitle = pool.display_name if pool else ""
+	var star := _pool_star(pool)
+	recruit.picture = star.get_cutin() if star else (pool.banner if pool else null)
+	# Team: the leader's picture, size and cost, "!" when it can't battle
+	var team: HomeTile = _home_tiles.team
+	var members := GameState.team_members()
+	var leader := GameState.get_character(members[0]) if not members.is_empty() else null
+	team.picture = leader.get_cutin() if leader else null
+	team.subtitle = Terms.t("home_team_cost", {"count": members.size(), "cost": GameState.team_cost(),
+		"limit": GameState.team_cost_limit()}) if leader else Terms.t("home_team_empty")
+	team.badge = "!" if _team_problem() != "" else ""
+	# Commissions: finished shifts get a badge with their count
+	var commissions: HomeTile = _home_tiles.commissions
+	var busy := 0
+	var done := 0
+	for c in DB.commissions:
+		if Commissions.is_active(c):
+			busy += 1
+			if Commissions.time_left(c) <= 0:
+				done += 1
+	if done > 0:
+		commissions.subtitle = Terms.t("home_commission_done", {"count": done})
+	elif busy > 0:
+		commissions.subtitle = Terms.t("home_commission_busy", {"count": busy, "total": DB.commissions.size()})
+	else:
+		commissions.subtitle = Terms.t("home_commission_idle")
+	commissions.badge = str(done) if done > 0 else ""
+	# Tile pictures: Art/backgrounds/MM_<name>.* (MM = main menu), cropped around the interesting part
+	commissions.picture = _menu_picture("MM_Commissions", "FrennisNightClub")
+	commissions.picture_focus = Vector2(0.62, 0.3)  # the FRONT / CASHIER counter
+	# Casino
+	var casino: HomeTile = _home_tiles.casino
+	casino.subtitle = Terms.t("home_casino_sub")
+	casino.picture = _menu_picture("MM_Casino", "JustBClub")
+	casino.picture_focus = Vector2(0.35, 0.45)  # the slot machines
+
+## A Home tile picture from Art/backgrounds/, else a fallback background (loaded once)
+func _menu_picture(file: String, fallback: String) -> Texture2D:
+	if not _menu_pictures.has(file):
+		var texture := UITheme.background(file)
+		_menu_pictures[file] = texture if texture else UITheme.background(fallback)
+	return _menu_pictures[file]
+
+## The first open story map that isn't cleared yet, in chapter and map order (null when every one is cleared)
+func _next_story_stage() -> StageData:
+	var chapters := DB.chapters()
+	chapters.sort()
+	for chapter in chapters:
+		for number in range(1, StageData.BOSS_NUMBER + 1):
+			var s := DB.get_map(chapter, number)
+			if s and GameState.is_stage_unlocked(s) and not GameState.is_stage_cleared(s.id):
+				return s
+	return null
+
+## The always-open pool the Recruit tile advertises (the first one that isn't the Beginner pool)
+func _main_pool() -> GachaPool:
+	for pool in DB.pools:
+		if not pool.beginner:
+			return pool
+	return DB.pools[0] if not DB.pools.is_empty() else null
+
+## A pool's poster friend: its first featured friend, else its first SSR with a cut-in picture
+func _pool_star(pool: GachaPool) -> CharacterData:
+	if pool == null:
+		return null
+	for c in pool.featured_characters():
+		if c.get_cutin():
+			return c
+	for entry in pool.entries:
+		var c := entry.character
+		if c and c.enabled and c.rarity == CharacterData.Rarity.SSR and c.get_cutin():
+			return c
+	return null
 
 ## The full-screen home picture only shows on the Home tab, with a lighter tab panel so it shows through;
 ## the other tabs keep the usual cyber backdrop and solid panels
 func _on_main_tab_changed(index: int) -> void:
 	var home := index == 0
 	_update_home_tutorial.call_deferred()  # after the tab has laid out, so the arrow lands on the button
+	if home:
+		_refresh_home_tiles()  # shifts may have finished, pity moved, etc. while on another tab
 	if _screen_bg:
 		_screen_bg.visible = home
 	if home and _screen_bg:
@@ -450,10 +546,9 @@ func _export_backup() -> void:
 	if _is_web:
 		var stamp := Time.get_datetime_string_from_system().replace(":", "-")
 		JavaScriptBridge.download_buffer(text.to_utf8_buffer(), "respite_collection_save_%s.json" % stamp, "application/json")
-		_backup_message.text = ""
 	else:
 		DisplayServer.clipboard_set(text)
-		_backup_message.text = Terms.t("backup_copied")
+		_show_message(Terms.t("backup_copied"))
 
 func _open_restore() -> void:
 	var dialog := ConfirmationDialog.new()
@@ -482,7 +577,7 @@ func _restore_backup(text: String) -> void:
 		_popup(dialog)
 		return
 	_show_main()
-	_backup_message.text = Terms.t("backup_restored")
+	_show_message(Terms.t("backup_restored"))
 
 ## Opens the browser's file picker and puts the chosen file's text into the restore dialog
 func _pick_backup_file(target: TextEdit) -> void:
@@ -518,17 +613,57 @@ func _open_settings() -> void:
 	box.custom_minimum_size = Vector2(420, 0)
 	box.add_theme_constant_override("separation", 8)
 	dialog.add_child(box)
+	_volume_row(box, Terms.t("settings_music"), Music.get_volume(), Music.set_volume)
+	_volume_row(box, Terms.t("settings_sfx"), Sound.get_volume(), Sound.set_volume, Sound.play.bind("hit"))
+	# Save data: backups, reset, and test mode where it's allowed
+	box.add_child(HSeparator.new())
+	var heading := Label.new()
+	heading.text = Terms.t("settings_save")
+	heading.add_theme_color_override("font_color", UITheme.CYAN_BRIGHT)
+	box.add_child(heading)
+	if not GameState.is_storage_persistent():
+		var warning := _wrapped_label(Terms.t("storage_warning"))
+		warning.add_theme_color_override("font_color", Color("#f87171"))
+		box.add_child(warning)
+	var hint := _wrapped_label(Terms.t("backup_hint_short"))
+	hint.add_theme_font_size_override("font_size", 13)
+	hint.add_theme_color_override("font_color", UITheme.TEXT_DIM)
+	box.add_child(hint)
+	var rows := [[_button(Terms.t("backup_download" if _is_web else "backup_copy"), _export_backup),
+		_button(Terms.t("backup_restore"), _close_then.bind(dialog, _open_restore))], []]
+	if _test_mode_enabled():
+		rows[1].append(_button(Terms.t("test_mode"), _close_then.bind(dialog, _open_test_mode)))
+	rows[1].append(_button(Terms.t("reset_save"), _close_then.bind(dialog, _confirm_reset_save)))
+	for buttons: Array in rows:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		box.add_child(row)
+		for b: Button in buttons:
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.add_theme_font_size_override("font_size", 14)
+			row.add_child(b)
+	_popup(dialog)
+
+## Closes a dialog, then does something (Settings' Restore / Test mode / Reset open their own windows)
+func _close_then(dialog: Window, action: Callable) -> void:
+	dialog.hide()
+	action.call()
+
+## A Settings row: label, 0-100% slider, and the amount ("Off" at 0); `apply` gets the volume as 0-1, and
+## `preview` (if given) runs when the slider is let go, e.g. a sample sound at the new level
+func _volume_row(box: VBoxContainer, text: String, volume: float, apply: Callable, preview: Callable = Callable()) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	box.add_child(row)
 	var label := Label.new()
-	label.text = Terms.t("settings_music")
+	label.text = text
+	label.custom_minimum_size = Vector2(130, 0)
 	row.add_child(label)
 	var slider := HSlider.new()
 	slider.min_value = 0
 	slider.max_value = 100
 	slider.step = 1
-	slider.value = roundi(Music.get_volume() * 100)
+	slider.value = roundi(volume * 100)
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(slider)
@@ -540,9 +675,10 @@ func _open_settings() -> void:
 		amount.text = Terms.t("settings_off") if value <= 0 else "%d%%" % value
 	show_amount.call(slider.value)
 	slider.value_changed.connect(func(value: float) -> void:
-		Music.set_volume(value / 100.0)
+		apply.call(value / 100.0)
 		show_amount.call(value))
-	_popup(dialog)
+	if preview.is_valid():
+		slider.drag_ended.connect(func(_changed: bool) -> void: preview.call())
 
 func _confirm_reset_save() -> void:
 	var dialog := ConfirmationDialog.new()
@@ -804,7 +940,8 @@ func _refresh_beginner() -> void:
 		return
 	_beginner_button.visible = not BeginnerMissions.finished()
 	var ready_count := BeginnerMissions.claimable_count()
-	_beginner_button.text = Terms.t("beginner_button_ready", {"count": ready_count}) if ready_count > 0 else Terms.t("beginner_button")
+	_beginner_button.subtitle = Terms.t("home_missions_ready", {"count": ready_count}) if ready_count > 0 else Terms.t("home_missions_todo")
+	_beginner_button.badge = str(ready_count) if ready_count > 0 else ""
 
 ## The checklist: each mission with its progress, reward and a Claim button; the free SSR pick at the bottom
 func _open_beginner() -> void:

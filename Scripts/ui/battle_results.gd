@@ -50,6 +50,7 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	var win: bool = battle.win or boss  # a world boss fight always ends in a show of the damage done
 	_rays.color = GOLD if win else DEFEAT_RED
 	_rays.visible = win
+	Sound.play("victory" if win else "defeat")
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

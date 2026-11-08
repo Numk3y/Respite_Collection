@@ -75,6 +75,7 @@ func start_live(stage: StageData, units: Array, manual: bool) -> void:
 
 func _build(stage: StageData) -> void:
 	add_theme_constant_override("separation", 8)
+	Sound.prepare()  # builds the battle sounds over the next few frames
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
@@ -422,6 +423,7 @@ func _animate_wave(event: Dictionary) -> void:
 	var wave_text := Terms.t("battle_wave_boss" if event.boss else "battle_wave_banner", {"current": wave + 1, "total": event.wave_count})
 	if event.banner.is_empty():
 		_show_banner(wave_text)
+		Sound.play("wave")
 	var arriving: Array[Dictionary] = []
 	for view in _views:
 		if view.side != 1:
@@ -451,6 +453,7 @@ func _animate_wave(event: Dictionary) -> void:
 ## red-hot, each with its own burst of sparks
 func _jumpscare_entrance(arriving: Array[Dictionary], title: String, subtitle: String) -> void:
 	await _jumpscare.blackout(_speed)
+	Sound.play("jumpscare")
 	var total := _jumpscare.reveal(title, subtitle, _jumpscare.get_parent())
 	if not arriving.is_empty():
 		var t := create_tween().set_parallel()
@@ -490,6 +493,7 @@ func _animate(event: Dictionary) -> void:
 	if event.kind == "ultimate":
 		# Everything waits for the cut-in, then the caster's card flashes gold and the skill lands
 		var caster: Dictionary = _battle.units[event.actor]
+		Sound.play("ultimate")
 		await _cut_in.play(caster.data, caster.name, event.skill, caster.side == 0, _speed)
 		_fx.aura(_center(actor))
 		await _flash(actor.body, Color(1.9, 1.6, 0.5), 1.5)
@@ -512,8 +516,11 @@ func _animate(event: Dictionary) -> void:
 		var lunge := BUMP_DISTANCE * direction * (1.0 if melee else -0.35)
 		forward.tween_property(actor.body, "position:x", lunge, _dur(1)).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		forward.tween_property(actor.body, "modulate", Color(1.5, 1.5, 1.5), _dur(1))
+		if melee and not puking:
+			Sound.play("swing", -2.0)
 		await forward.finished
 		if puking or not melee:
+			Sound.play("puke" if puking else "shoot")
 			# All shots fly together; wait for them to land
 			var flight := 0.0
 			for hit in event.hits:
@@ -531,6 +538,7 @@ func _animate(event: Dictionary) -> void:
 	for target in event.get("off_balance", []):
 		_float_text(_views[target], Terms.t("battle_off_balance"), Color("#fb923c"), 34)
 	for heal in event.heals:
+		Sound.play("heal")
 		_fx.heal(_center(_views[heal.target]))
 		_float_text(_views[heal.target], "+%d" % heal.amount, Color("#4ade80"))
 	for target in event.get("slept", []):
@@ -547,6 +555,7 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[target], Terms.t("battle_blinded"), Color("#fde047"), 60)
 	for drain in event.get("drains", []):
 		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#84cc16") if drain.get("poison", false) else Color("#c084fc")
+		Sound.play("hit", -7.0, 0.8)  # a softer, duller hit for damage over time
 		_fx.hit(_center(_views[drain.target]), drain_color)
 		_float_text(_views[drain.target], "-%d" % drain.amount, drain_color, 30)
 	for target in event.get("grubbed", []):
@@ -616,6 +625,7 @@ func _animate_combo(combo: Dictionary) -> void:
 		_flash(_views[i].body, Color(1.9, 1.6, 0.5), 1.5)
 	var title: String = data.title() if data else combo.name
 	var picture: Texture2D = data.get_cutin() if data else null
+	Sound.play("ultimate")
 	if picture:
 		await _cut_in.play(null, " & ".join(names), title, ally, _speed, picture, UITheme.GOLD)
 	else:
@@ -637,9 +647,11 @@ func _animate_combo(combo: Dictionary) -> void:
 		var view: Dictionary = _views[i]
 		view.slot.modulate.a = 1.0
 		view.body.modulate = Color.WHITE
+		Sound.play("heal")
 		_fx.aura(_center(view))
 		_float_text(view, Terms.t("battle_combo_revive"), Color("#fde68a"), 30, 28)
 	for heal in combo.heals:
+		Sound.play("heal")
 		_fx.heal(_center(_views[heal.target]))
 		_float_text(_views[heal.target], "+%d" % heal.amount, Color("#4ade80"))
 	for target in combo.get("slept", []):
@@ -665,6 +677,7 @@ func _animate_assist(assist: Dictionary) -> void:
 	var forward := create_tween().set_parallel()
 	forward.tween_property(helper.body, "position:x", BUMP_DISTANCE * 1.4 * direction, _dur(0.8)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	forward.tween_property(helper.body, "modulate", Color(0.6, 1.6, 1.9), _dur(0.8))
+	Sound.play("swing", -2.0, 1.2)
 	await forward.finished
 	var color := BattleFX.ALLY_FX if helper.side == 0 else BattleFX.ENEMY_FX
 	_fx.slash(_center(_views[assist.target]), Color("#7df9ff"), direction)
@@ -678,9 +691,11 @@ func _animate_assist(assist: Dictionary) -> void:
 ## Crits are gold, bigger, and shake the whole arena.
 func _react(view: Dictionary, hit: Dictionary, fx_color: Color = BattleFX.ALLY_FX) -> void:
 	if not hit.hit:
+		Sound.play("miss")
 		_float_text(view, Terms.t("battle_miss"), Color("#cbd5e1"))
 		return
 	var crit: bool = hit.get("crit", false)
+	Sound.play("crit" if crit else "hit")
 	_fx.hit(_center(view), fx_color, crit)
 	if crit:
 		_float_text(view, Terms.t("battle_crit", {"damage": hit.damage}), Color("#fde047"), 0.0, 32)
@@ -768,6 +783,7 @@ func _transform(view: Dictionary, on: bool) -> void:
 	_flash(view.body, Color(2.0, 1.6, 2.0) if on else Color(1.6, 1.6, 1.6), 2)
 
 func _knockout(view: Dictionary) -> void:
+	Sound.play("knockout")
 	_fx.knockout(_center(view), BattleFX.ALLY_FX if view.side == 0 else BattleFX.ENEMY_FX)
 	var t := create_tween().set_parallel()
 	t.tween_property(view.slot, "modulate:a", DOWNED_ALPHA, _dur(2))

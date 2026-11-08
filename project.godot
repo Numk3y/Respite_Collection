@@ -28,6 +28,7 @@ Combat="*res://Scripts/autoload/combat.gd"
 Commissions="*res://Scripts/autoload/commissions.gd"
 WorldBoss="*res://Scripts/autoload/world_boss.gd"
 Music="*res://Scripts/autoload/music.gd"
+Sound="*res://Scripts/autoload/sound.gd"
 
 [display]
 

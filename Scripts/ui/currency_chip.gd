@@ -11,6 +11,7 @@ const KIND_COLORS := {
 	"snack": Color("#F59E0B"),
 	"coffee": Color("#C08457"),
 	"gossip": Color("#F472B6"),
+	"parts": Color("#F59E0B"),
 }
 
 var value_label: Label
@@ -84,6 +85,14 @@ class ChipIcon extends Control:
 				draw_arc(c + Vector2(r * 0.26, r * 0.14), r * 0.17, -PI / 2, PI / 2, 12, ink, 2.0, true)
 				for dx in [-0.22, 0.02]:
 					draw_line(c + Vector2(dx * r, -r * 0.24), c + Vector2(dx * r + r * 0.06, -r * 0.48), Color(ink, 0.8), 1.5, true)
+			"parts":  # a cog: eight teeth round a wheel with a hole
+				for i in 8:
+					var a := TAU * i / 8.0
+					draw_set_transform(c + Vector2.from_angle(a) * r * 0.5, a, Vector2.ONE)
+					draw_rect(Rect2(-r * 0.12, -r * 0.1, r * 0.24, r * 0.2), ink)
+				draw_set_transform(Vector2.ZERO)
+				draw_circle(c, r * 0.46, ink)
+				draw_circle(c, r * 0.18, Color(0, 0, 0, 0.55))
 			"gossip":  # a speech bubble with three dots
 				draw_circle(c + Vector2(0, -r * 0.05), r * 0.52, ink)
 				draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.3, r * 0.25), c + Vector2(-r * 0.05, r * 0.4), c + Vector2(-r * 0.45, r * 0.62)]), ink)

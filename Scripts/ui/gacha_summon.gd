@@ -4,13 +4,18 @@ extends Control
 ## Each result gets its own reveal: a crystal drops in glowing in its rarity colour while light streams into it
 ## (longer, with the screen shaking, for an SSR), a white flash bursts it, and the friend's art fills the screen
 ## over turning rays (rainbow for an SSR), with a name plate: rarity, stars popping in one by one, name, class and
-## NEW! / Ascension note. The first crystal glows in the best rarity of the whole pull, the classic gacha tease.
-## Clicking anywhere while a reveal plays jumps to its finished state; clicking again plays the next one. Skip All
-## jumps to the end. A pull of several ends on a summary grid of everything; a single pull closes on the next click.
+## NEW! / Ascension note. Every crystal glows in its own friend's rarity (no teasing with a better colour).
+## A pull of several opens on a lineup first: every crystal drops into a grid in its colour. Now and then one or two
+## start a tier low and, once all have landed, tremble and burst up to their real colour. That's only for show:
+## a crystal never shows a colour above the friend inside, and always ends on the true one.
+## The lineup and every SSR reveal always play in full. Otherwise clicking anywhere while a reveal plays jumps to its
+## finished state, and clicking again plays the next one. Skip All (after the lineup) jumps to the next SSR still to
+## come, or to the end when there are none. A pull of several ends on a summary grid of everything; a single pull
+## closes on the next click.
 
 signal finished
 
-enum Phase { PLAYING, REVEALED, SUMMARY }
+enum Phase { LINEUP, LINEUP_DONE, PLAYING, REVEALED, SUMMARY }
 
 const COLORS := {
 	CharacterData.Rarity.N: Color("#9aa3b0"),
@@ -21,6 +26,14 @@ const COLORS := {
 const CHARGE_SEC := 0.75  # light streaming into the crystal
 const SSR_CHARGE_SEC := 1.35
 const ART_SHADER := preload("res://Shaders/banner_art.gdshader")
+const LINEUP_GAP_SEC := 0.09  # between crystals dropping into the lineup
+const LINEUP_SCALE := 0.42
+const LINEUP_SPACING := Vector2(118, 150)
+## Chance a crystal holding this rarity starts the lineup one tier low and upgrades (at most MAX_UPGRADES per pull)
+const UPGRADE_CHANCE := {CharacterData.Rarity.SR: 0.08, CharacterData.Rarity.SSR: 0.15}
+const MAX_UPGRADES := 2
+const UPGRADE_CHARGE_SEC := 0.46  # the tremble before the burst (matches the rise of the "ultimate" sound at 1.2x)
+const PING_PITCH := {CharacterData.Rarity.R: 1.0, CharacterData.Rarity.SR: 1.12, CharacterData.Rarity.SSR: 1.26}
 
 var _results: Array[Dictionary] = []
 var _notes: Array[String] = []
@@ -44,6 +57,9 @@ var _hint: Label
 var _skip: Button
 var _flash: ColorRect
 var _summary: Control
+var _lineup_layer: Control
+var _lineup: Array[Crystal] = []  # one per result, same index
+var _shown: Array[int] = []  # the rarity each lineup crystal is showing right now
 
 func _init() -> void:
 	top_level = true  # covers the whole window
@@ -74,6 +90,7 @@ func _init() -> void:
 	add_child(_stream)
 	_crystal = Crystal.new()
 	add_child(_crystal)
+	_lineup_layer = _full(Control.new())
 
 	_art = TextureRect.new()
 	_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -155,7 +172,11 @@ func open(results: Array[Dictionary], notes: Array[String]) -> void:
 	blink.tween_property(_hint, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
 	modulate.a = 0.0
 	create_tween().tween_property(self, "modulate:a", 1.0, 0.25)
-	_next()
+	Sound.prepare(["crystal", "ultimate"])
+	if results.size() > 1:
+		_start_lineup()
+	else:
+		_next()
 
 func _gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) \
@@ -163,10 +184,126 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	accept_event()
 	match _phase:
+		Phase.LINEUP:
+			pass  # the lineup always plays in full
+		Phase.LINEUP_DONE:
+			_leave_lineup()
 		Phase.PLAYING:
-			_finish_reveal()  # jump to the finished state of this one
+			if not _current_is_ssr():  # an SSR's reveal always plays in full
+				_finish_reveal()  # jump to the finished state of this one
 		Phase.REVEALED:
 			_next()
+
+# ───────── Lineup (pulls of several) ─────────
+
+## Every crystal drops into a grid (rows of 5) in its colour, then any that started a tier low upgrade one by one
+func _start_lineup() -> void:
+	_phase = Phase.LINEUP
+	_hint.visible = false
+	_skip.visible = false  # back once the lineup has finished
+	_counter.text = ""
+	for node: CanvasItem in [_crystal, _art, _plate]:  # the one-by-one reveal's pieces wait unseen
+		node.modulate.a = 0.0
+	_bg.set_color(COLORS[CharacterData.Rarity.R].lerp(Color.WHITE, 0.5), false)
+	_bg.intensity = 0.25
+	var n := _results.size()
+	# Which crystals start a tier low: picked in random order so the cap doesn't favour the first slots
+	_shown.clear()
+	for r in _results:
+		_shown.append(int(r.rarity))
+	var upgraded: Array[int] = []
+	var order := range(n)
+	order.shuffle()
+	for i: int in order:
+		if upgraded.size() < MAX_UPGRADES and randf() < UPGRADE_CHANCE.get(_shown[i], 0.0):
+			_shown[i] -= 1
+			upgraded.append(i)
+	upgraded.sort()
+
+	_step = create_tween().set_parallel()
+	for i in n:
+		var crystal := Crystal.new()
+		crystal.color = COLORS.get(_shown[i], Color.WHITE)
+		var center := _lineup_slot(i)
+		crystal.position = center - Crystal.SIZE / 2.0 + Vector2(0, -160)
+		crystal.scale = Vector2.ZERO
+		crystal.modulate.a = 0.0
+		_lineup_layer.add_child(crystal)
+		_lineup.append(crystal)
+		var delay := LINEUP_GAP_SEC * i
+		_step.tween_property(crystal, "position:y", center.y - Crystal.SIZE.y / 2.0, 0.3).set_delay(delay) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_step.tween_property(crystal, "scale", Vector2.ONE * LINEUP_SCALE, 0.3).set_delay(delay) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_step.tween_property(crystal, "modulate:a", 1.0, 0.12).set_delay(delay)
+		_step.tween_callback(_ping.bind(i)).set_delay(delay + 0.22)
+	# Then the upgrades, one at a time: the crystal trembles and glows, then bursts into its real colour
+	var t := LINEUP_GAP_SEC * n + 0.6
+	for i in upgraded:
+		_step.tween_callback(Sound.play.bind("ultimate", -3.0, 1.2)).set_delay(t)
+		_step.tween_property(_lineup[i], "charge", 1.0, UPGRADE_CHARGE_SEC).set_delay(t).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		_step.tween_callback(_upgrade.bind(i)).set_delay(t + UPGRADE_CHARGE_SEC)
+		t += UPGRADE_CHARGE_SEC + 0.6
+	_step.tween_callback(_lineup_done).set_delay(t + 0.2)
+
+## A crystal lands: a glassy ping, higher for rarer colours, and a little spark
+func _ping(i: int) -> void:
+	Sound.play("crystal", -4.0, PING_PITCH.get(_shown[i], 1.0))
+	var color: Color = COLORS.get(_shown[i], Color.WHITE)
+	_fx.hit(_lineup_center(i), color, _shown[i] >= CharacterData.Rarity.SR)
+
+func _lineup_center(i: int) -> Vector2:
+	return _lineup[i].position + Crystal.SIZE / 2.0
+
+## Where crystal `i` sits in the lineup grid (rows of 5, centred on the screen)
+func _lineup_slot(i: int) -> Vector2:
+	var n := _results.size()
+	var grid := Vector2(mini(n, 5) - 1, ceili(n / 5.0) - 1)
+	return size / 2.0 - grid * LINEUP_SPACING / 2.0 + Vector2(i % 5, floori(i / 5.0)) * LINEUP_SPACING
+
+## A crystal that started a tier low bursts up to its real colour
+func _upgrade(i: int) -> void:
+	var rarity := int(_results[i].rarity)
+	var color: Color = COLORS.get(rarity, Color.WHITE)
+	var crystal := _lineup[i]
+	var center := _lineup_center(i)
+	_shown[i] = rarity
+	crystal.color = color
+	crystal.charge = 0.0
+	_fx.hit(center, color, true)
+	_fx._ring(center, Color.WHITE, 150.0, 0.45)
+	if rarity == CharacterData.Rarity.SSR:
+		_fx.aura(center)
+		_fx._burst(center, 40, 1.4, [UITheme.GOLD, Color("#ff7ab8"), Color("#7df9ff"), Color.WHITE], true)
+	_bg.set_color(color, rarity == CharacterData.Rarity.SSR)
+	_bg.intensity = 0.6
+	var pop := crystal.create_tween()
+	pop.tween_property(crystal, "scale", Vector2.ONE * LINEUP_SCALE * 1.35, 0.08)
+	pop.tween_property(crystal, "scale", Vector2.ONE * LINEUP_SCALE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+## Everything has landed (and upgraded): the backdrop takes the best colour and waits for a click
+func _lineup_done() -> void:
+	_phase = Phase.LINEUP_DONE
+	var best := 0
+	for r in _results:
+		best = maxi(best, int(r.rarity))
+	_bg.set_color(COLORS.get(best, Color.WHITE), best == CharacterData.Rarity.SSR)
+	_bg.intensity = maxf(_bg.intensity, 0.5)
+	_hint.text = Terms.t("summon_tap")
+	_hint.visible = true
+	_skip.visible = true
+
+## On to the one-by-one reveals: the lineup fades out as the first crystal drops in
+func _leave_lineup() -> void:
+	_fade_lineup()
+	_next()
+
+func _fade_lineup() -> void:
+	if not _lineup_layer.visible:
+		return
+	var t := _lineup_layer.create_tween()
+	t.tween_property(_lineup_layer, "modulate:a", 0.0, 0.25)
+	t.tween_callback(func(): _lineup_layer.visible = false)
 
 # ───────── One reveal ─────────
 
@@ -184,12 +321,8 @@ func _next() -> void:
 	var ssr := rarity == CharacterData.Rarity.SSR
 	_counter.text = Terms.t("summon_counter", {"current": _index + 1, "total": _results.size()})
 	_hint.visible = false
-	# The very first crystal of a pull glows in the best rarity of the whole pull
-	var tease := rarity
-	if _index == 0:
-		for x in _results:
-			tease = maxi(tease, int(x.rarity))
-	var color: Color = COLORS.get(tease, Color.WHITE)
+	_skip.disabled = ssr  # until it's revealed
+	var color: Color = COLORS.get(rarity, Color.WHITE)
 	var center := size / 2.0
 
 	_place_reveal(r)  # laid out now (hidden) so the slide-in below knows where the plate ends up
@@ -204,7 +337,7 @@ func _next() -> void:
 	_crystal.modulate.a = 1.0
 	_stream.position = center
 	_stream.color = color
-	var charge := SSR_CHARGE_SEC if tease == CharacterData.Rarity.SSR else CHARGE_SEC
+	var charge := SSR_CHARGE_SEC if ssr else CHARGE_SEC
 
 	_step = create_tween()
 	# The crystal drops in
@@ -214,7 +347,7 @@ func _next() -> void:
 	_step.tween_callback(func(): _stream.emitting = true)
 	_step.tween_property(_crystal, "charge", 1.0, charge).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_step.parallel().tween_property(_bg, "intensity", 1.0, charge)
-	if tease == CharacterData.Rarity.SSR:
+	if ssr:
 		_step.parallel().tween_method(func(k: float): position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * 8.0 * k,
 			0.0, 1.0, charge)
 	# Burst: white flash, the crystal shatters, then the friend appears
@@ -279,6 +412,7 @@ func _place_reveal(r: Dictionary) -> void:
 
 func _on_revealed() -> void:
 	_phase = Phase.REVEALED
+	_skip.disabled = false
 	_hint.visible = true
 	_hint.text = Terms.t("summon_tap") if _index < _results.size() - 1 or _results.size() > 1 else Terms.t("summon_tap_close")
 
@@ -300,20 +434,38 @@ func _finish_reveal() -> void:
 	_stars.count = GachaBanner.STAR_COUNTS.get(int(r.rarity), 3)
 	_on_revealed()
 
+func _current_is_ssr() -> bool:
+	return _index >= 0 and _index < _results.size() and int(_results[_index].rarity) == CharacterData.Rarity.SSR
+
+## Skip All: on to the next SSR still to come (its reveal always plays), or to the summary when there are none.
+## Does nothing during the lineup or while an SSR is being revealed.
 func _skip_all() -> void:
+	if _phase == Phase.LINEUP or _phase == Phase.SUMMARY or (_phase == Phase.PLAYING and _current_is_ssr()):
+		return
 	if _step and _step.is_valid():
 		_step.kill()
 	_stream.emitting = false
 	position = Vector2.ZERO
-	_index = _results.size() - 1
-	_show_summary()
+	_flash.color.a = 0.0
+	_fade_lineup()
+	var next_ssr := -1
+	for i in range(_index + 1, _results.size()):
+		if int(_results[i].rarity) == CharacterData.Rarity.SSR:
+			next_ssr = i
+			break
+	if next_ssr == -1:
+		_index = _results.size() - 1
+		_show_summary()
+	else:
+		_index = next_ssr - 1
+		_next()
 
 # ───────── Summary ─────────
 
 ## Everything from the pull in a grid that pops in tile by tile, with OK to close
 func _show_summary() -> void:
 	_phase = Phase.SUMMARY
-	for node: CanvasItem in [_crystal, _art, _plate, _hint, _skip, _counter]:
+	for node: CanvasItem in [_crystal, _art, _plate, _hint, _skip, _counter, _lineup_layer]:
 		node.visible = false
 	var best := 0
 	for r in _results:

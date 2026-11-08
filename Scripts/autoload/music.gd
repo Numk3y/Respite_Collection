@@ -6,9 +6,11 @@ extends Node
 ## Asking for the track that's already playing does nothing, so replaying a map keeps the song going instead of
 ## restarting it. Coming back to a track picks it up where it left off (e.g. Home after a battle). A missing
 ## track keeps whatever is playing. Every track loops; switching crossfades.
-## The player's music volume (Settings) is kept in the save as "music_volume" (0-1).
+## Music plays on its own "Music" bus (sound effects have "SFX", see sound.gd); the player's music volume
+## (Settings) is kept in the save as "music_volume" (0-1).
 
 const LEVELS := preload("res://Scripts/autoload/music_levels.gd")  # per-track volume correction (level_music.ps1)
+const BUS := &"Music"
 const MUSIC_DIR := "res://Audio/music/"
 const EXTENSIONS := ["ogg", "mp3", "wav"]
 const DEFAULT_VOLUME := 0.5
@@ -24,8 +26,10 @@ var _fade: Tween
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	ensure_bus(BUS)
 	for i in 2:
 		var p := AudioStreamPlayer.new()
+		p.bus = BUS
 		p.volume_db = SILENT_DB
 		add_child(p)
 		_players.append(p)
@@ -64,8 +68,19 @@ func set_volume(volume: float) -> void:
 	GameState.request_save()
 	_apply_volume()
 
+## The index of the audio bus with this name, adding it (feeding Master) if there isn't one yet. The Music and SFX
+## buses must also be in default_bus_layout.tres: on the web, players on a bus added at runtime stay silent.
+static func ensure_bus(bus_name: StringName) -> int:
+	var index := AudioServer.get_bus_index(bus_name)
+	if index == -1:
+		AudioServer.add_bus()
+		index = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(index, bus_name)
+		AudioServer.set_bus_send(index, &"Master")
+	return index
+
 func _apply_volume() -> void:
-	var bus := AudioServer.get_bus_index("Master")
+	var bus := AudioServer.get_bus_index(BUS)
 	var volume := get_volume()
 	AudioServer.set_bus_mute(bus, volume <= 0.0)
 	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(volume, 0.001)))

@@ -6,7 +6,8 @@ extends Control
 ## redrawn only on resize; the living parts animate every frame while the stage is visible: the card floats,
 ## sways and breathes with a light sheen sweeping across it, the picture itself moves in a Live2D-style idle and
 ## leans towards the mouse, light motes rise through the air and pulse rings ripple out from the pedestal.
-## Call set_featured() with the character to show.
+## Call set_featured() with the character to show. `focus_x` is where the character stands across the room (0-1),
+## so the Home menu can sit over the right side; set_greeting() puts a speech bubble by their head.
 
 const ART_HEIGHT := 0.8  # of the room height
 const MOTE_COUNT := 26
@@ -28,6 +29,12 @@ var _sub_label: Label
 var _time := 0.0
 var _look := Vector2.ZERO  # where the character leans, eased towards the mouse
 var _backdrop: Texture2D  # Art/backgrounds/home.* (or HomeBg.*) replaces the drawn room when it exists
+var _bubble: PanelContainer
+var _bubble_label: Label
+var focus_x := 0.5:
+	set(value):
+		focus_x = value
+		_layout()
 
 func _init() -> void:
 	clip_contents = true
@@ -68,6 +75,25 @@ func _init() -> void:
 	_sub_label.add_theme_color_override("font_color", UITheme.CYAN)
 	lines.add_child(_sub_label)
 	add_child(_plate)
+
+	_bubble = PanelContainer.new()
+	var bubble_style := UITheme.box(Color(1, 1, 1, 0.94), Color(UITheme.CYAN, 0.9), 2, 14)
+	bubble_style.content_margin_left = 14
+	bubble_style.content_margin_right = 14
+	bubble_style.content_margin_top = 8
+	bubble_style.content_margin_bottom = 9
+	bubble_style.corner_radius_bottom_left = 3  # the corner pointing at the speaker
+	bubble_style.shadow_color = Color(0, 0, 0, 0.35)
+	bubble_style.shadow_size = 6
+	bubble_style.shadow_offset = Vector2(0, 3)
+	_bubble.add_theme_stylebox_override("panel", bubble_style)
+	_bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bubble_label = Label.new()
+	_bubble_label.add_theme_font_size_override("font_size", 17)
+	_bubble_label.add_theme_color_override("font_color", Color("#1a2236"))
+	_bubble.add_child(_bubble_label)
+	_bubble.visible = false
+	add_child(_bubble)
 	resized.connect(_layout)
 	item_rect_changed.connect(queue_redraw)  # the picture is pinned to the window, so a move shifts it
 	visibility_changed.connect(_update_processing)
@@ -85,6 +111,8 @@ func _process(delta: float) -> void:
 	_art.pivot_offset = Vector2(r.size.x * 0.5, r.size.y)  # sway from the feet
 	_art.position = r.position + Vector2(0, sin(_time * BOB_SPEED) * size.y * BOB)
 	_art.rotation = deg_to_rad(sin(_time * SWAY_SPEED) * SWAY_DEG)
+	if _bubble.visible:
+		_bubble.position.y = r.position.y + r.size.y * 0.08 + sin(_time * BOB_SPEED - 0.8) * 4.0
 	_art.scale = Vector2.ONE * (1.0 + sin(_time * BOB_SPEED + 0.6) * BREATH)
 	_sheen.phase = fmod(_time, SHEEN_EVERY) / 0.9  # the sweep takes 0.9 s, then rests
 	_sheen.queue_redraw()
@@ -112,17 +140,34 @@ func set_featured(c: CharacterData, title: String, subtitle: String, ascension: 
 	_sub_label.text = subtitle
 	_layout()
 
+## A speech bubble beside the character's head ("" hides it); it pops in
+func set_greeting(text: String) -> void:
+	_bubble_label.text = text
+	_bubble.visible = not text.is_empty()
+	if _bubble.visible:
+		_layout()
+		_bubble.pivot_offset = Vector2(0, _bubble.size.y)
+		_bubble.scale = Vector2(0.6, 0.6)
+		_bubble.modulate.a = 0.0
+		var t := _bubble.create_tween().set_parallel()
+		t.tween_property(_bubble, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		t.tween_property(_bubble, "modulate:a", 1.0, 0.2)
+
 func _art_rect() -> Rect2:
 	var h := size.y * ART_HEIGHT
 	var w := h * 0.75
-	return Rect2(size.x * 0.5 - w * 0.5, size.y * 0.93 - h, w, h)
+	return Rect2(size.x * focus_x - w * 0.5, size.y * 0.93 - h, w, h)
 
 func _layout() -> void:
+	if _art == null or _bubble == null:
+		return
 	var r := _art_rect()
 	_art.position = r.position
 	_art.size = r.size
 	_plate.reset_size()
 	_plate.position = Vector2(18, size.y - _plate.size.y - 18)
+	_bubble.reset_size()
+	_bubble.position = Vector2(r.end.x - r.size.x * 0.12, r.position.y + r.size.y * 0.08)
 	queue_redraw()
 
 func _horizon() -> float:
