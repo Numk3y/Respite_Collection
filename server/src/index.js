@@ -12,6 +12,8 @@
 //   POST /admin/start   {boss_key, max_hp, hours, attempts_per_day, max_hit}   (header X-Admin-Key)
 //   POST /admin/end                                                            (header X-Admin-Key)
 //   POST /admin/set_hp  {max_hp}   new max HP for the running event; damage already dealt still counts (X-Admin-Key)
+//   POST /admin/set_hours {hours}  the newest event now lasts `hours` from its start; reopens it if it ran out of
+//                                  time (not if the boss fell). Damage and the leaderboard are kept. (X-Admin-Key)
 import { DurableObject } from "cloudflare:workers";
 
 // A started fight must be reported within this time. Long, because a game that loses its connection
@@ -42,6 +44,8 @@ export default {
 				result = await room.adminEnd();
 			} else if (route === "POST /admin/set_hp") {
 				result = await room.adminSetHp(body);
+			} else if (route === "POST /admin/set_hours") {
+				result = await room.adminSetHours(body);
 			}
 		} else {
 			// Old builds still open in someone's tab get told to refresh instead of breaking
@@ -247,6 +251,21 @@ export class BossRoom extends DurableObject {
 		if (maxHp <= dealt) return fail(409, "would_defeat", { damage_dealt: dealt });
 		this.sql.exec("UPDATE events SET max_hp = ?, hp = ? WHERE id = ?", maxHp, maxHp - dealt, event.id);
 		return ok({ event: publicEvent(this._currentEvent(Date.now())), damage_dealt: dealt });
+	}
+
+	// Changes how long the newest event lasts, counted from its start: 72h set to 168h runs it a week. An event that
+	// ran out of time (or was ended) comes back if the new end is still ahead; a defeated boss stays defeated.
+	adminSetHours(body) {
+		const now = Date.now();
+		const event = this._currentEvent(now);
+		if (!event) return fail(409, "no_event");
+		if (event.status === "defeated") return fail(409, "already_defeated");
+		const hours = Number(body.hours) || 0;
+		if (hours <= 0) return fail(400, "bad_hours");
+		const endsAt = event.starts_at + Math.round(hours * 60 * 60 * 1000);
+		if (endsAt <= now) return fail(409, "already_past", { ends_at: endsAt });
+		this.sql.exec("UPDATE events SET ends_at = ?, status = 'active' WHERE id = ?", endsAt, event.id);
+		return ok({ event: publicEvent(this._currentEvent(now)) });
 	}
 
 	// The newest event, marked expired if its time is up

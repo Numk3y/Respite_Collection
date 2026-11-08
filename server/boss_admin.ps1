@@ -5,15 +5,17 @@
 #       Reads boss_hp, hours, attempts_per_day and the damage cap from Data/events/sample_event/event.tres
 #       (through Godot, so edit the numbers there, not here) and opens the event.
 #   .\boss_admin.ps1 set-hp -MaxHp 2000000      new max HP for the running event; damage already dealt still counts
-#   .\boss_admin.ps1 end                         ends the running event now (no rewards unless the boss already fell)
+#   .\boss_admin.ps1 set-hours -Hours 168        the event now lasts 168 hours from its start (reopens it if it ran out of time)
+#   .\boss_admin.ps1 end                       ends the running event now (no rewards unless the boss already fell)
 #   .\boss_admin.ps1 status                      shows the running event, top 10 and latest hits
 #
 # The admin key is asked for once and kept in server\.admin_key on this PC (never committed: see .gitignore).
 # Pass -Key to use a different one. Add -Url http://localhost:8787 to use a local "npx wrangler dev" server.
 param(
-    [Parameter(Mandatory = $true)][ValidateSet("start", "set-hp", "end", "status")][string]$Action,
+    [Parameter(Mandatory = $true)][ValidateSet("start", "set-hp", "set-hours", "end", "status")][string]$Action,
     [Alias("Event")][string]$EventId = "",
     [long]$MaxHp = 0,
+    [double]$Hours = 0,
     [string]$Key = "",
     [string]$Url = "https://respite-boss.numk3y.workers.dev",
     [string]$Godot = "C:\Users\Numkey\Desktop\Godot_v4.7.2-stable_win64.exe"
@@ -91,6 +93,19 @@ switch ($Action) {
             throw
         }
         Write-Host ("Damage already dealt ({0:N0}) still counts." -f $r.damage_dealt)
+        Show-Event $r.event
+    }
+    "set-hours" {
+        if ($Hours -le 0) { throw "Give the event's new length in hours, counted from its start: -Hours 168" }
+        try {
+            $r = Invoke-Admin "/admin/set_hours" (@{ hours = $Hours } | ConvertTo-Json)
+        } catch {
+            if ("$_" -match "already_past") { throw "That end time has already passed. Pick more hours." }
+            if ("$_" -match "already_defeated") { throw "The boss has already fallen; its event can't be reopened." }
+            if ("$_" -match "no_event") { throw "No event has been opened yet." }
+            if ("$_" -match "not_found") { throw "The live server doesn't know this command yet: run deploy.bat first." }
+            throw
+        }
         Show-Event $r.event
     }
     "end" {
