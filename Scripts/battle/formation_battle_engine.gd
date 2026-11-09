@@ -116,6 +116,14 @@ const ULTIMATE_EFFECTS := {
 	# hit that lands on it (this shot too) leaves a Hat. At `marks` Hats they explode for `explode_pct` of the
 	# enemy's max HP, ignoring Defense, but at most `cap_mult` x the caster's Attack; the Hats then start over.
 	&"hat_trick": {"damage_mult": 1.0, "turns": 3, "marks": 3, "explode_pct": 0.3, "cap_mult": 3.0},
+	# Goes into hiding for N own actions: +`attack` Attack and `speed` Speed. While hidden, each enemy single-target
+	# attack aimed at it has `dodge_chance` to switch onto another living ally in its row (a taunt still comes first;
+	# area attacks aren't affected; with no other ally in the row it gets hit as usual).
+	&"snake_mode": {"turns": 3, "attack": 2.0, "speed": -0.5, "dodge_chance": 0.7},
+	# Hits every attackable enemy (the front row, or the back row once the front is down; ignores taunt) for
+	# `damage_mult` x Attack each (not reduced like a Mage's spread). Each survivor it hits has `stun_chance` to be
+	# Stunned: it skips its next `stun_turns` actions.
+	&"try_finger_but_hole": {"damage_mult": 1.0, "stun_chance": 0.6, "stun_turns": 1},
 }
 
 ## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
@@ -218,6 +226,12 @@ const PASSIVE_EFFECTS := {
 	# Each of its own attacks that lands (every Ultimate shot too) has `chance` to splash onto a random living enemy in
 	# the back row (not the one just hit) for `splash` of the hit's damage before crits (can't miss, reduced by Defense).
 	&"eye_of_the_storm": {"chance": 0.5, "splash": 0.8},
+	# Every one of its own attacks that lands (Ultimate hits too) splashes onto a random living enemy in the back row
+	# (not the one just hit) for `splash` of the hit's damage before crits (can't miss, reduced by Defense)
+	&"pool_addiction": {"splash": 0.2},
+	# Each hit that lands (Ultimate hits too) drains `gauge` of a surviving enemy's Ultimate gauge (a share of its
+	# max) and gives it `speed` Speed for its next N actions (a new hit refreshes it; it doesn't stack)
+	&"testicular_torsion": {"gauge": 0.15, "speed": -0.1, "turns": 2},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -428,7 +442,9 @@ func _snapshot(units: Array[Dictionary]) -> Array:
 		"energy_max": u.energy_max, "has_ultimate": not u.ultimate.is_empty(), "data": u.data})
 
 func _state(units: Array[Dictionary]) -> Array:
-	return units.map(func(u): return {"hp": u.hp, "energy": u.energy, "buffs": _buff_names(u), "horse": _has_flag(u, "horse")})
+	# "horse" = Roki's horse (pukes instead of attacking); "alt" = any transformation that swaps in the alt-form art
+	return units.map(func(u): return {"hp": u.hp, "energy": u.energy, "buffs": _buff_names(u), "horse": _has_flag(u, "horse"),
+		"alt": _has_flag(u, "horse") or _has_flag(u, "stealth")})
 
 ## Buff names for display; stacks of the same buff (e.g. Cancer) show once as "Cancer x3"
 func _buff_names(u: Dictionary) -> PackedStringArray:
@@ -653,8 +669,9 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	if not sleep.is_empty():
 		# e.g. Power Nap: the whole action is spent asleep (no attack, no energy), waking on the last one
 		event.kind = "sleep"
+		event.stunned_turn = sleep.get("sleep_log", "") == "log_stunned_turn"  # e.g. Try Finger But Hole
 		if record:
-			event.lines.append(Terms.t("log_sleeping", {"name": actor.name}))
+			event.lines.append(Terms.t(sleep.get("sleep_log", "log_sleeping"), {"name": actor.name}))
 		sleep.remaining -= 1
 		if sleep.remaining <= 0:
 			actor.buffs.erase(sleep)
@@ -894,12 +911,31 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 				var taunting := foes.filter(func(t): return _has_flag(t, "taunt"))
 				var pool := taunting if not taunting.is_empty() else foes
 				event.hits.append(_attack(actor, pool[rng.randi_range(0, pool.size() - 1)], rng, record, event, mult_shot))
+		&"snake_mode":
+			_add_buff(actor, {"id": &"snake_mode", "name": skill_name, "stealth": true,
+				"mods": {"attack": float(p.attack), "speed": float(p.speed)}, "dodge_chance": float(p.dodge_chance),
+				"remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("snake_mode", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_snake_mode", {"name": actor.name}))
+		&"try_finger_but_hole":
+			if record:
+				event.lines.append(Terms.t("log_try_finger", {"name": actor.name}))
+			var mult_finger := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+			for target in _targetable(_units, 1 - actor.side):
+				var hit := _attack(actor, target, rng, record, event, mult_finger)
+				event.hits.append(hit)
+				if hit.hit and rng.randf() < float(p.stun_chance):
+					_put_to_sleep(actor, target, int(p.stun_turns), false, event, record, Terms.t("buff_stunned"),
+						"log_stunned", "log_unstunned", "stunned", "log_stunned_turn")
 
 ## Puts `target` to sleep for its next `turns` actions (no attack, no energy). With Drowsiness on `source`, the
 ## sleeper takes extra damage and is immune for a while after waking; respect_cooldown skips immune targets.
 ## buff_name / log_key let other "skip a turn" effects reuse this (e.g. Group Owner's vote kick).
+## event_key / sleep_key let a stun show as a stun (its own float text and "can't move" line) instead of sleep.
 func _put_to_sleep(source: Dictionary, target: Dictionary, turns: int, respect_cooldown: bool, event: Dictionary, record: bool,
-		buff_name: String = "", log_key: String = "log_put_to_sleep", wake_key: String = "log_wake_plain") -> void:
+		buff_name: String = "", log_key: String = "log_put_to_sleep", wake_key: String = "log_wake_plain",
+		event_key: String = "slept", sleep_key: String = "log_sleeping") -> void:
 	if target.hp <= 0 or _has_flag(target, "sleep") or _has_flag(target, "undying"):
 		return
 	if respect_cooldown and int(target.get("sleep_immune", 0)) > 0:
@@ -907,8 +943,8 @@ func _put_to_sleep(source: Dictionary, target: Dictionary, turns: int, respect_c
 	var drowsy := _passive_params(source, &"drowsiness")
 	_add_buff(target, {"id": &"asleep", "name": buff_name if not buff_name.is_empty() else Terms.t("buff_asleep"),
 		"sleep": true, "remaining": turns, "counts": "sleep", "damage_taken": float(drowsy.get("damage_taken", 0.0)),
-		"immune_after": int(drowsy.get("cooldown", 0)), "wake_log": wake_key})
-	event.get_or_add("slept", []).append(target.index)
+		"immune_after": int(drowsy.get("cooldown", 0)), "wake_log": wake_key, "sleep_log": sleep_key})
+	event.get_or_add(event_key, []).append(target.index)
 	if record:
 		event.lines.append(Terms.t(log_key, {"target": target.name, "attacker": source.name}))
 
@@ -1249,6 +1285,18 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 						if record:
 							event.lines.append(Terms.t("log_rat_lure", {"attacker": actor.name, "name": rat.name, "skill": rat.passive.name}))
 						break
+			# Ultimate Snake Mode: a hidden unit slips out of sight and the attack lands on another ally in its row
+			var hidden := _flag_buff(target, "stealth")
+			if taunting.is_empty() and not hidden.is_empty() and rng.randf() < float(hidden.dodge_chance):
+				var hider: Dictionary = target
+				var decoys := foes.filter(func(u): return u.index != hider.index and u.vanguard == hider.vanguard \
+					and not _has_flag(u, "stealth"))
+				if not decoys.is_empty():
+					target = decoys[rng.randi_range(0, decoys.size() - 1)]
+					event.get_or_add("snuck", []).append(hider.index)
+					if record:
+						event.lines.append(Terms.t("log_snake_dodge", {"attacker": actor.name, "name": hider.name,
+							"target": target.name}))
 			targets = [target]
 	# Passive Unfazed: a chance the swing carries through the rest of the target's row at reduced damage
 	var cleaved: Array = []
@@ -1328,7 +1376,7 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		event.lines.append(Terms.t(key, {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 	_add_hat(actor, target, event, record, rng)
-	_check_eye_of_the_storm(actor, target, mult, rng, record, event)
+	_check_back_row_splash(actor, target, mult, rng, record, event)
 	# Passive Bow Wow: the hit opens a bleed (one per attacker; a new hit refreshes it)
 	var bow_wow := _passive_params(actor, &"bow_wow")
 	if target.hp > 0 and not bow_wow.is_empty():
@@ -1363,6 +1411,16 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	var drowsy := _passive_params(actor, &"drowsiness")
 	if not drowsy.is_empty() and rng.randf() < float(drowsy.chance):
 		_put_to_sleep(actor, target, int(drowsy.turns), true, event, record)
+	# Passive Testicular Torsion: the hit drains the target's Ultimate gauge and slows it down
+	var torsion := _passive_params(actor, &"testicular_torsion")
+	if target.hp > 0 and not torsion.is_empty():
+		if not target.ultimate.is_empty():
+			target.energy = maxi(target.energy - roundi(target.energy_max * float(torsion.gauge)), 0)
+		_add_buff(target, {"id": &"torsion", "name": Terms.t("buff_torsion"), "mods": {"speed": float(torsion.speed)},
+			"remaining": int(torsion.turns), "counts": "actions"})
+		event.get_or_add("torsion", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_torsion", {"target": target.name, "skill": actor.passive.name}))
 	if target.hp > 0 and actor.vanguard and (hit.crit or dealt >= target.max_hp * HEAVY_HIT_PCT):
 		event.off_balance.append(target.index)
 		if record:
@@ -1443,11 +1501,15 @@ func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumbe
 		event.lines.append(Terms.t("log_splash", {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 
-## Passive Eye of the Storm: a landed attack may splash onto a back-row enemy
-func _check_eye_of_the_storm(actor: Dictionary, main: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool,
+## Passives Eye of the Storm (a chance) and Pool Addiction (always): a landed attack splashes onto a back-row enemy
+func _check_back_row_splash(actor: Dictionary, main: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool,
 		event: Dictionary) -> void:
 	var p := _passive_params(actor, &"eye_of_the_storm")
-	if p.is_empty() or rng.randf() >= float(p.chance):
+	var key := "storm_splash"
+	if p.is_empty():
+		p = _passive_params(actor, &"pool_addiction")
+		key = "pool_splash"
+	if p.is_empty() or rng.randf() >= float(p.get("chance", 1.0)):
 		return
 	var back := _units.filter(func(u): return u.side != actor.side and not u.vanguard and _alive(u) and u.index != main.index)
 	if back.is_empty():
@@ -1455,9 +1517,9 @@ func _check_eye_of_the_storm(actor: Dictionary, main: Dictionary, mult: float, r
 	var target: Dictionary = back[rng.randi_range(0, back.size() - 1)]
 	var dealt := _mitigate(_raw_damage(actor, rng) * mult * float(p.splash), target)
 	event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
-	event.get_or_add("storm_splash", []).append(target.index)
+	event.get_or_add(key, []).append(target.index)
 	if record:
-		event.lines.append(Terms.t("log_storm_splash", {"attacker": actor.name, "target": target.name, "damage": dealt,
+		event.lines.append(Terms.t("log_" + key, {"attacker": actor.name, "target": target.name, "damage": dealt,
 			"skill": actor.passive.name}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 

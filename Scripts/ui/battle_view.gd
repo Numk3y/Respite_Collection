@@ -246,7 +246,7 @@ func _unit_view(u: Dictionary, index: int) -> Dictionary:
 	info.add_child(name_label)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
 		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "ult_label": null, "energy_full": false,
-		"buffs": null, "art": art, "data": u.data, "horse": false, "style": style}
+		"buffs": null, "art": art, "data": u.data, "horse": false, "alt": false, "style": style}
 	# Everyone has HP now; the rearguard is only hit once its vanguard is down
 	view.hp_bar = HpBar.new(u.max_hp)
 	info.add_child(view.hp_bar)
@@ -504,7 +504,8 @@ func _animate(event: Dictionary) -> void:
 		_float_text(actor, Terms.t("battle_heal_turn"), Color("#86efac"), 30)
 		await _flash(actor.body, Color(0.8, 1.7, 1.0), 2)
 	elif event.kind == "sleep":
-		_float_text(actor, Terms.t("battle_sleep"), Color("#93c5fd"), 30)
+		var stunned: bool = event.get("stunned_turn", false)
+		_float_text(actor, Terms.t("battle_stunned_turn" if stunned else "battle_sleep"), Color("#fde047") if stunned else Color("#93c5fd"), 30)
 		await _flash(actor.body, Color(0.6, 0.8, 1.6), 2)
 	var attacking: bool = not event.hits.is_empty()
 	# Front-row fighters lunge in and slash; the back row recoils and fires glowing bolts at every target;
@@ -587,6 +588,16 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[quinn], Terms.t("battle_until_next_time"), Color("#fde68a"), 60)
 	for target in event.get("storm_splash", []):
 		_float_text(_views[target], Terms.t("battle_storm_splash"), Color("#7dd3fc"), 60)
+	for target in event.get("torsion", []):
+		_float_text(_views[target], Terms.t("battle_torsion"), Color("#c084fc"), 34)
+	for target in event.get("stunned", []):
+		_float_text(_views[target], Terms.t("battle_stunned"), Color("#fde047"), 60)
+	for target in event.get("pool_splash", []):
+		_float_text(_views[target], Terms.t("battle_pool_splash"), Color("#38bdf8"), 60)
+	for snake in event.get("snake_mode", []):
+		_float_text(_views[snake], Terms.t("battle_snake_mode"), Color("#a3a3a3"), 60, 30)
+	for snake in event.get("snuck", []):
+		_float_text(_views[snake], Terms.t("battle_snuck"), Color("#d4d4d4"), 34)
 	for horse in event.get("horse", []):
 		_float_text(_views[horse], Terms.t("battle_horse"), Color("#f0abfc"), 60, 30)
 	if attacking:
@@ -757,10 +768,11 @@ func _apply_state(event: Dictionary) -> void:
 			elif s.hp > 0:
 				view.slot.modulate.a = 1.0
 			view.hp = s.hp
-		var horse: bool = s.get("horse", false)
-		if horse != view.horse:
-			view.horse = horse
-			_transform(view, horse)
+		var alt: bool = s.get("alt", false)
+		view.horse = s.get("horse", false)  # the horse pukes instead of slashing
+		if alt != view.get("alt", false):
+			view.alt = alt
+			_transform(view, alt)
 		if view.energy_bar:
 			view.energy_bar.value = s.energy
 			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
