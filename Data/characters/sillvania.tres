@@ -7,18 +7,18 @@
 script = ExtResource("2")
 id = &"sillvania_passive"
 display_name = "Winnie the Hamster!"
-description = "Every time Sillvania attacks, her hamster Winnie scurries over and heals the front-row ally with the lowest HP for 55% of Sillvania's Attack (the back row once the front row is healthy or down)."
+description = "Every time Sillvania attacks, her hamster Winnie scurries over and heals the front-row ally with the lowest HP for 20% of Sillvania's Attack (the back row once the front row is healthy or down)."
 effect_id = &"winnie"
-params = {"heal_mult": 0.55}
+params = {"heal_mult": 0.2}
 
 [sub_resource type="Resource" id="active"]
 script = ExtResource("2")
 id = &"sillvania_active"
 display_name = "Let's Go Winnie"
 kind = 1
-description = "Sillvania stops attacking to focus on healing. Right away and for her next 3 turns, she and Winnie heal 2 allies for 80% of her Attack each: front-row allies with the lowest HP first, then the back row."
+description = "Sillvania stops attacking to focus on healing. Right away and on her next turn, she and Winnie heal the ally who needs it most for 40% of her Attack: front-row allies with the lowest HP first, then the back row."
 effect_id = &"lets_go_winnie"
-params = {"heal_mult": 0.8, "targets": 2, "turns": 3}
+params = {"heal_mult": 0.4, "targets": 1, "turns": 1}
 
 [resource]
 script = ExtResource("1")

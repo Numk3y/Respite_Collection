@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"shigemori_passive"
+display_name = "Mind Rot"
+description = "Shige is rotten to the brain and has no idea where to attack. He ignores the front and back row and hits a random enemy for 65% of his Attack. Every hit that lands adds +10% damage (and +5% to the teammate hit). Each attack has a 15% chance to hit a random teammate instead for 35% (never a knockout), which resets the boost."
+effect_id = &"mind_rot"
+params = {"ally_chance": 0.15, "ally_mult": 0.35, "ally_ramp": 0.05, "damage_mult": 0.65, "ramp": 0.1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"shigemori_active"
+display_name = "Chud Rat Slam"
+kind = 1
+description = "Shige slams a HUGE chud rat into a random enemy for 200% of his Attack, splashing 20% onto 2 other random enemies. The impact stuns Shige himself for his next turn."
+effect_id = &"chud_rat_slam"
+params = {"damage_mult": 2.0, "splash": 0.2, "splash_targets": 2, "stun_turns": 1}
+
+[resource]
+script = ExtResource("1")
+id = &"shigemori"
+display_name = "Shigemori"
+char_class = 4
+rarity = 2
+hp = 120
+attack = 125
+defense = 20
+evasion = 20
+accuracy = 75
+speed = 85
+portrait_path = "res://Art/characters/Shigemori.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "Rotten to the brain. Nobody, including Shige, knows who he's going to hit next."
+is_starter = false

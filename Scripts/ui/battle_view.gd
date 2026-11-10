@@ -592,6 +592,18 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[target], Terms.t("battle_torsion"), Color("#c084fc"), 34)
 	for target in event.get("stunned", []):
 		_float_text(_views[target], Terms.t("battle_stunned"), Color("#fde047"), 60)
+	for grey in event.get("spotted", []):
+		_float_text(_views[grey], Terms.t("battle_spotted"), Color("#f87171"), 60, 30)
+	for ally in event.get("bird_up", []):
+		_float_text(_views[ally], Terms.t("battle_bird_up"), Color("#fde68a"), 60)
+	for answer in event.get("six_seven", []):
+		_float_text(_views[answer], Terms.t("battle_six_seven"), Color("#facc15"), 60, 30)
+	for lag in event.get("nimble_dodge", []):
+		_float_text(_views[lag], Terms.t("battle_nimble_dodge"), Color("#7dd3fc"), 34)
+	for lag in event.get("double_time", []):
+		_float_text(_views[lag], Terms.t("battle_double_time"), Color("#38bdf8"), 60, 30)
+	for shige in event.get("mind_rot", []):
+		_float_text(_views[shige], Terms.t("battle_mind_rot"), Color("#a3e635"), 60, 30)
 	for target in event.get("pool_splash", []):
 		_float_text(_views[target], Terms.t("battle_pool_splash"), Color("#38bdf8"), 60)
 	for snake in event.get("snake_mode", []):

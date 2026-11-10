@@ -124,6 +124,20 @@ const ULTIMATE_EFFECTS := {
 	# `damage_mult` x Attack each (not reduced like a Mage's spread). Each survivor it hits has `stun_chance` to be
 	# Stunned: it skips its next `stun_turns` actions.
 	&"try_finger_but_hole": {"damage_mult": 1.0, "stun_chance": 0.6, "stun_turns": 1},
+	# Slams one random living enemy (any row; Mind Rot doesn't know where it's aiming either) for `damage_mult` x Attack.
+	# If it lands, the rat splashes onto up to `splash_targets` other random living enemies for `splash` x Attack each
+	# (can't miss, reduced by Defense). Then the caster is Stunned: it skips its next `stun_turns` actions.
+	&"chud_rat_slam": {"damage_mult": 2.0, "splash": 0.2, "splash_targets": 2, "stun_turns": 1},
+	# For N own actions: +`attack` Attack, Nimble Body's dodge chance becomes `dodge`, and each attack adds
+	# `stack_mult` Nimble stacks instead of one
+	&"double_time": {"turns": 3, "attack": 0.2, "dodge": 0.8, "stack_mult": 2},
+	# One enemy, picked like a normal single-target attack, for `damage_mult` x Attack. If it lands, the moon splashes
+	# onto up to `splash_targets` other random living enemies for `splash` x Attack each (can't miss, reduced by
+	# Defense). Then, if the first enemy still stands, a snipe hits it for `snipe_mult` x Attack.
+	&"moonlight_vigil": {"damage_mult": 1.25, "splash": 0.75, "splash_targets": 2, "snipe_mult": 0.75},
+	# Every living ally: +`defense` Defense and +`speed` Speed for its next N actions, and at the end of each of those
+	# actions it heals `regen_lost` of the HP it's missing
+	&"bird_up": {"defense": 0.3, "speed": 0.1, "regen_lost": 0.1, "turns": 3},
 }
 
 ## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
@@ -232,6 +246,22 @@ const PASSIVE_EFFECTS := {
 	# Each hit that lands (Ultimate hits too) drains `gauge` of a surviving enemy's Ultimate gauge (a share of its
 	# max) and gives it `speed` Speed for its next N actions (a new hit refreshes it; it doesn't stack)
 	&"testicular_torsion": {"gauge": 0.15, "speed": -0.1, "turns": 2},
+	# Basic attacks ignore rows and taunts: a random living enemy (back row included) for `damage_mult` x Attack. Each
+	# one that lands adds a Rot stack: +`ramp` to the enemy hit and +`ally_ramp` to the teammate hit. Each attack has
+	# `ally_chance` to hit a random living teammate instead for `ally_mult` x Attack (+stacks; can't miss, reduced by
+	# Defense, never knocks them out), which clears the stacks.
+	&"mind_rot": {"damage_mult": 0.65, "ramp": 0.1, "ally_chance": 0.15, "ally_mult": 0.35, "ally_ramp": 0.05},
+	# Every attack aimed at this unit (area attacks and Ultimate hits too) has `dodge` chance to be evaded. Each own
+	# basic attack adds a Nimble stack of +`speed_per_stack` Speed (up to `max_stacks`); every stack drops the moment an
+	# enemy actually damages it.
+	&"nimble_body": {"dodge": 0.3, "speed_per_stack": 0.1, "max_stacks": 3},
+	# Basic attacks deal only `damage_mult` x Attack. After `every` of them, the next attack fires `shots` shots at
+	# `damage_mult` x Attack each (at one enemy; if it drops, the rest go to the next one), and the count starts over.
+	&"six_seven": {"damage_mult": 0.67, "every": 6, "shots": 6},
+	# Can't be targeted by enemies at all (area attacks included) until a rearguard ally falls, or until it's the last
+	# one standing on its side. Never attacks: each own action heals the first `targets` allies in healing order (hurt
+	# vanguard first, lowest HP share first) for `heal_mult` x Attack.
+	&"background_npc": {"heal_mult": 0.4, "targets": 1},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -456,10 +486,53 @@ func _buff_names(u: Dictionary) -> PackedStringArray:
 		names.append(buff_name if counts[buff_name] == 1 else "%s x%d" % [buff_name, counts[buff_name]])
 	if int(u.get("drunk", 0)) > 0:
 		names.append(Terms.t("buff_drunk", {"stacks": u.drunk}))
+	if int(u.get("rot_stacks", 0)) > 0:
+		names.append(Terms.t("buff_mind_rot", {"stacks": u.rot_stacks}))
+	if int(u.get("nimble", 0)) > 0:
+		names.append(Terms.t("buff_nimble", {"stacks": u.nimble}))
+	if _alive(u) and _hidden(u):
+		names.append(Terms.t("buff_background_npc"))
+	var six := _passive_params(u, &"six_seven")
+	if not six.is_empty() and int(u.get("six_count", 0)) > 0:
+		var every := int(six.every)
+		names.append(Terms.t("buff_six_seven_ready") if int(u.six_count) >= every
+			else Terms.t("buff_six_seven", {"count": u.six_count, "every": every}))
 	return names
 
 func _alive(u: Dictionary) -> bool:
 	return u.active and u.hp > 0  # enemies of later waves aren't on the field yet
+
+## Alive and something the other side can aim at (Background NPC hides its unit; see _hidden)
+func _reachable(u: Dictionary) -> bool:
+	return _alive(u) and not _hidden(u)
+
+## Passive Background NPC: nobody can target the unit until a rearguard ally of its own falls. It also shows up once
+## it's the last one standing on its side, so a battle can always end.
+func _hidden(u: Dictionary) -> bool:
+	if u.passive.is_empty() or u.passive.effect != &"background_npc" or u.get("revealed", false):
+		return false
+	var company := false
+	for a in _units:
+		if a.side != u.side or a.index == u.index or not a.active:
+			continue
+		if a.hp > 0:
+			company = true
+		elif not a.vanguard:
+			u.revealed = true
+			return false
+	return company
+
+## Passive Background NPC: a rearguard unit just fell, so every hidden ally on its side is spotted
+func _check_spotted(fallen: Dictionary, event: Dictionary, record: bool) -> void:
+	if fallen.vanguard:
+		return
+	for a in _units:
+		if a.side == fallen.side and a.index != fallen.index and _alive(a) and not a.get("revealed", false) \
+				and not _passive_params(a, &"background_npc").is_empty():
+			a.revealed = true
+			event.get_or_add("spotted", []).append(a.index)
+			if record:
+				event.lines.append(Terms.t("log_spotted", {"name": a.name, "skill": a.passive.name}))
 
 func _side_standing(units: Array[Dictionary], side: int) -> bool:
 	return units.any(func(u): return u.side == side and _alive(u))
@@ -467,7 +540,7 @@ func _side_standing(units: Array[Dictionary], side: int) -> bool:
 ## Who normal attacks against `side` can hit: its living vanguard, or its living rearguard once the vanguard is down.
 ## back_row = true aims at the living rearguard first (for skills that lock onto the back row).
 func _targetable(units: Array[Dictionary], side: int, back_row: bool = false) -> Array:
-	var alive := units.filter(func(u): return u.side == side and _alive(u))
+	var alive := units.filter(func(u): return u.side == side and _reachable(u))
 	var front := alive.filter(func(u): return u.vanguard)
 	var back := alive.filter(func(u): return not u.vanguard)
 	if back_row and not back.is_empty():
@@ -478,7 +551,7 @@ func _targetable(units: Array[Dictionary], side: int, back_row: bool = false) ->
 ## it further down (Defense -15 with +50% -> -7.5), so they always mean the same thing.
 func _stat(u: Dictionary, stat: String) -> float:
 	var mult := 1.0 + _scramble_bonus(u, stat) + _drunk_bonus(u, stat) + _bow_wow_bonus(u, stat) + _group_bonus(u, stat) \
-		+ _horse_bonus(u, stat) + _enrage_bonus(u, stat)
+		+ _horse_bonus(u, stat) + _enrage_bonus(u, stat) + _nimble_bonus(u, stat)
 	for b in u.buffs:
 		mult += b.get("mods", {}).get(stat, 0.0)
 	var base: float = u.base[stat]
@@ -567,6 +640,13 @@ func _chill_regen(u: Dictionary, event: Dictionary, record: bool) -> void:
 		if not p.is_empty():
 			_heal(u, maxi(roundi(_stat(ally, "attack") * float(p.regen_pct)), 1), event, record, ally)
 
+## Ultimate Bird Up: at the end of each own action under the buff, heal a share of the HP that's missing
+func _bird_up_regen(u: Dictionary, event: Dictionary, record: bool) -> void:
+	var b := _buff_by_id(u, &"bird_up")
+	if b.is_empty() or u.hp <= 0 or u.hp >= u.max_hp:
+		return
+	_heal(u, maxi(roundi((u.max_hp - u.hp) * float(b.regen_lost)), 1), event, record, _units[int(b.source)])
+
 ## Passive Group Owner: +Defense for every other living ally
 func _group_bonus(u: Dictionary, stat: String) -> float:
 	if stat != "defense" or u.passive.is_empty() or u.passive.effect != &"group_owner":
@@ -582,7 +662,7 @@ func _check_kick_vote(u: Dictionary, event: Dictionary, record: bool) -> void:
 	u.kick_count = int(u.get("kick_count", 0)) + 1
 	if u.kick_count % int(p.kick_every) != 0:
 		return
-	var foes := _units.filter(func(t): return t.side != u.side and _alive(t) and not _has_flag(t, "sleep"))
+	var foes := _units.filter(func(t): return t.side != u.side and _reachable(t) and not _has_flag(t, "sleep"))
 	if foes.is_empty():
 		return
 	foes.sort_custom(func(a, b): return _stat(a, "attack") > _stat(b, "attack"))
@@ -602,6 +682,28 @@ func _enrage_bonus(u: Dictionary, stat: String) -> float:
 	if stat != "attack" or u.passive.is_empty() or u.passive.effect != &"full_metal_kit":
 		return 0.0
 	return pow(1.0 + float(_passive_params(u, &"full_metal_kit").enrage), int(u.get("actions_taken", 0))) - 1.0
+
+## Passive Nimble Body: +Speed for every Nimble stack
+func _nimble_bonus(u: Dictionary, stat: String) -> float:
+	if stat != "speed" or int(u.get("nimble", 0)) <= 0:
+		return 0.0
+	var p := _passive_params(u, &"nimble_body")
+	return 0.0 if p.is_empty() else int(u.nimble) * float(p.speed_per_stack)
+
+## Passive Nimble Body: each own attack builds speed (twice as fast during Double Time)
+func _add_nimble_stack(u: Dictionary) -> void:
+	var p := _passive_params(u, &"nimble_body")
+	if p.is_empty() or u.hp <= 0:
+		return
+	var gain := int(_flag_buff(u, "double_time").get("stack_mult", 1))
+	u.nimble = mini(int(u.get("nimble", 0)) + gain, int(p.max_stacks))
+
+## Passive Nimble Body: the chance this unit evades an incoming attack (Double Time raises it)
+func _nimble_dodge_chance(u: Dictionary) -> float:
+	var p := _passive_params(u, &"nimble_body")
+	if p.is_empty():
+		return 0.0
+	return maxf(float(p.dodge), float(_flag_buff(u, "double_time").get("dodge", 0.0)))
 
 ## Bleeds and poisons lose HP at the end of each of the victim's own actions (ignoring Defense; this can knock it
 ## out). Morale Booster on whoever caused a bleed makes it hurt more; a poison heals its source (I Need Asswipe).
@@ -702,6 +804,14 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		var plants := _passive_params(actor, &"sus_green_plants")
 		_heal_lowest(actor, 1, roundi(_stat(actor, "attack") * float(plants.heal_mult)), event, record)
 		_gain_energy(actor, ENERGY_PER_ACTION)
+	elif not _passive_params(actor, &"background_npc").is_empty():
+		# e.g. CommissarGrey never attacks; he quietly patches people up from the background
+		event.kind = "heal"
+		var npc := _passive_params(actor, &"background_npc")
+		if record:
+			event.lines.append(Terms.t("log_background_heal", {"name": actor.name, "skill": actor.passive.name}))
+		_heal_lowest(actor, int(npc.targets), roundi(_stat(actor, "attack") * float(npc.heal_mult)), event, record)
+		_gain_energy(actor, ENERGY_PER_ACTION)
 	elif not _passive_params(actor, &"one_above_all").is_empty():
 		# e.g. Xi never attacks himself; the turn still charges his Ultimate
 		event.kind = "idle"
@@ -710,12 +820,15 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		_gain_energy(actor, ENERGY_PER_ACTION)
 	else:
 		_basic_attack(actor, units, rng, record, event)
+		if not event.hits.is_empty():
+			_add_nimble_stack(actor)
 		_check_winnie(actor, event, record)
 		_tick_buffs(actor, "attacks", event, record, rng)
 		_gain_energy(actor, ENERGY_PER_ACTION)
 		_add_cancer_stack(actor)
 	_bleed_tick(actor, event, record)
 	_chill_regen(actor, event, record)
+	_bird_up_regen(actor, event, record)
 	_horse_tick(actor, event, record)
 	_tick_buffs(actor, "actions", event, record, rng)
 	_clear_stale_hats(actor)
@@ -782,7 +895,7 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			_heal(actor, roundi(actor.max_hp * float(p.heal_pct)), event, record)
 			if record:
 				event.lines.append(Terms.t("log_all_enemies", {"attacker": actor.name}))
-			for target in _units.filter(func(t): return t.side != actor.side and _alive(t)):
+			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
 				event.hits.append(_attack(actor, target, rng, record, event, float(p.damage_mult)))
 		&"ccp":
 			# Taunt and harden; when it runs out, _tick_buffs sets off the shockwave
@@ -812,7 +925,7 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 		&"brain_rot":
 			if record:
 				event.lines.append(Terms.t("log_brain_rot", {"name": actor.name}))
-			for target in _units.filter(func(t): return t.side != actor.side and _alive(t)):
+			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
 				_add_buff(target, {"id": &"brain_rot", "name": Terms.t("buff_brain_rot"), "remaining": int(p.turns),
 					"counts": "actions", "mods": {"attack": float(p.attack), "defense": float(p.defense), "speed": float(p.speed)}})
 				event.get_or_add("decayed", []).append(target.index)
@@ -826,7 +939,7 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			if record:
 				event.lines.append(Terms.t("log_close_instance", {"name": actor.name}))
 			var mult_all := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
-			for target in _units.filter(func(t): return t.side != actor.side and _alive(t)):
+			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
 				event.hits.append(_attack(actor, target, rng, record, event, mult_all))
 				var kept: Array = target.buffs.filter(func(b): return not _is_boon(b))
 				if kept.size() < target.buffs.size() and target.hp > 0:
@@ -859,8 +972,8 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 		&"i_need_asswipe":
 			if record:
 				event.lines.append(Terms.t("log_asswipe", {"name": actor.name}))
-			var front := _units.filter(func(t): return t.side != actor.side and _alive(t) and t.vanguard)
-			var back := _units.filter(func(t): return t.side != actor.side and _alive(t) and not t.vanguard)
+			var front := _units.filter(func(t): return t.side != actor.side and _reachable(t) and t.vanguard)
+			var back := _units.filter(func(t): return t.side != actor.side and _reachable(t) and not t.vanguard)
 			front.shuffle()
 			back.shuffle()
 			var amount := _stat(actor, "attack") * float(p.poison_mult)
@@ -881,7 +994,7 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			if record:
 				event.lines.append(Terms.t("log_speaker_on", {"name": actor.name}))
 			var mult_speaker := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
-			for target in _units.filter(func(t): return t.side != actor.side and _alive(t)):
+			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
 				event.hits.append(_attack(actor, target, rng, record, event, mult_speaker))
 				if target.hp > 0:
 					_add_buff(target, {"id": &"deafened", "name": Terms.t("buff_deafened"), "remaining": int(p.turns),
@@ -904,7 +1017,7 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 				event.lines.append(Terms.t("log_" + String(effect), {"name": actor.name}))
 			var mult_shot := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
 			for i in int(p.shots):
-				var foes := _units.filter(func(t): return t.side != actor.side and _alive(t)) if p.any_row \
+				var foes := _units.filter(func(t): return t.side != actor.side and _reachable(t)) if p.any_row \
 					else _targetable(_units, 1 - actor.side)
 				if foes.is_empty():
 					break
@@ -928,6 +1041,62 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 				if hit.hit and rng.randf() < float(p.stun_chance):
 					_put_to_sleep(actor, target, int(p.stun_turns), false, event, record, Terms.t("buff_stunned"),
 						"log_stunned", "log_unstunned", "stunned", "log_stunned_turn")
+		&"chud_rat_slam":
+			var foes := _units.filter(func(t): return t.side != actor.side and _reachable(t))
+			if not foes.is_empty():
+				if record:
+					event.lines.append(Terms.t("log_chud_rat_slam", {"name": actor.name}))
+				var class_mult := float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+				var main: Dictionary = foes[rng.randi_range(0, foes.size() - 1)]
+				var hit := _attack(actor, main, rng, record, event, float(p.damage_mult) / class_mult)
+				event.hits.append(hit)
+				if hit.hit:
+					var others := _units.filter(func(t): return t.side != actor.side and _reachable(t) and t.index != main.index)
+					for i in mini(int(p.splash_targets), others.size()):
+						var target: Dictionary = others.pop_at(rng.randi_range(0, others.size() - 1))
+						var dealt := _mitigate(_raw_damage(actor, rng) / class_mult * float(p.splash), target)
+						event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+						if record:
+							event.lines.append(Terms.t("log_rat_splash", {"target": target.name, "damage": dealt}))
+						_apply_damage(actor, target, dealt, event, record, rng)
+			# The slam knocks the caster silly too
+			if actor.hp > 0:
+				_put_to_sleep(actor, actor, int(p.stun_turns), false, event, record, Terms.t("buff_stunned"),
+					"log_stunned", "log_unstunned", "stunned", "log_stunned_turn")
+		&"moonlight_vigil":
+			var main := _pick_target(actor, rng)
+			if not main.is_empty():
+				if record:
+					event.lines.append(Terms.t("log_moonlight_vigil", {"name": actor.name, "target": main.name}))
+				var class_mult := float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+				var hit := _attack(actor, main, rng, record, event, float(p.damage_mult) / class_mult)
+				event.hits.append(hit)
+				if hit.hit:
+					var others := _units.filter(func(t): return t.side != actor.side and _reachable(t) and t.index != main.index)
+					for i in mini(int(p.splash_targets), others.size()):
+						var target: Dictionary = others.pop_at(rng.randi_range(0, others.size() - 1))
+						var dealt := _mitigate(_raw_damage(actor, rng) / class_mult * float(p.splash), target)
+						event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+						if record:
+							event.lines.append(Terms.t("log_moon_splash", {"target": target.name, "damage": dealt}))
+						_apply_damage(actor, target, dealt, event, record, rng)
+				if _alive(main):
+					if record:
+						event.lines.append(Terms.t("log_moon_snipe", {"name": actor.name, "target": main.name}))
+					event.hits.append(_attack(actor, main, rng, record, event, float(p.snipe_mult) / class_mult))
+		&"bird_up":
+			if record:
+				event.lines.append(Terms.t("log_bird_up", {"name": actor.name}))
+			for ally in _units.filter(func(a): return a.side == actor.side and _alive(a)):
+				_add_buff(ally, {"id": &"bird_up", "name": skill_name, "mods": {"defense": float(p.defense), "speed": float(p.speed)},
+					"regen_lost": float(p.regen_lost), "source": actor.index, "remaining": int(p.turns), "counts": "actions"})
+				event.get_or_add("bird_up", []).append(ally.index)
+		&"double_time":
+			_add_buff(actor, {"id": &"double_time", "name": skill_name, "double_time": true, "mods": {"attack": float(p.attack)},
+				"dodge": float(p.dodge), "stack_mult": int(p.stack_mult), "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("double_time", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_double_time", {"name": actor.name}))
 
 ## Puts `target` to sleep for its next `turns` actions (no attack, no energy). With Drowsiness on `source`, the
 ## sleeper takes extra damage and is immune for a while after waking; respect_cooldown skips immune targets.
@@ -1002,7 +1171,7 @@ func _check_winnie(u: Dictionary, event: Dictionary, record: bool) -> void:
 func _explode(u: Dictionary, pct: float, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
 	if record:
 		event.lines.append(Terms.t("log_explode", {"name": u.name}))
-	for target in _units.filter(func(t): return t.side != u.side and _alive(t)):
+	for target in _units.filter(func(t): return t.side != u.side and _reachable(t)):
 		var dealt := _mitigate(u.max_hp * pct, target)
 		event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
 		if record:
@@ -1094,6 +1263,11 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	target.hp = maxi(target.hp - dealt, 0)
 	_count_damage(attacker, target, before - target.hp)
+	# Passive Nimble Body: getting tagged by an enemy kills the momentum
+	if attacker.side != target.side and dealt > 0 and int(target.get("nimble", 0)) > 0:
+		target.nimble = 0
+		if record:
+			event.lines.append(Terms.t("log_nimble_reset", {"name": target.name}))
 	_gain_energy(target, ENERGY_PER_HIT_TAKEN)
 	_check_counter(target, attacker, event, record, rng)
 	_check_mid_finger(target, attacker, before - target.hp, event, record, rng)
@@ -1116,6 +1290,7 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	if record:
 		event.lines.append(Terms.t("log_down", {"target": target.name}))
+	_check_spotted(target, event, record)
 	_check_until_next_time(attacker, event, record)
 	# e.g. SelfDecaying: killing an enemy while the buff is active heals
 	for b in attacker.buffs:
@@ -1241,13 +1416,21 @@ func _cancer_drain(u: Dictionary, event: Dictionary, record: bool) -> void:
 # ───────── Attacks ─────────
 
 func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGenerator, record: bool, event: Dictionary) -> void:
+	var rot := _passive_params(actor, &"mind_rot")
+	if not rot.is_empty() and _flag_buff(actor, "all_enemies").is_empty() and _locked_target(actor).is_empty():
+		_mind_rot_attack(actor, units, rot, rng, record, event)
+		return
+	var six := _passive_params(actor, &"six_seven")
+	if not six.is_empty() and _flag_buff(actor, "all_enemies").is_empty() and _locked_target(actor).is_empty():
+		_six_seven_attack(actor, units, six, rng, record, event)
+		return
 	var enemy_side: int = 1 - actor.side
 	var targets: Array = []
 	var mult := 1.0
 	var all_enemies := _flag_buff(actor, "all_enemies")
 	if not all_enemies.is_empty():
 		# e.g. Lucky Break: this attack hits every living enemy, back row included
-		targets = units.filter(func(u): return u.side == enemy_side and _alive(u))
+		targets = units.filter(func(u): return u.side == enemy_side and _reachable(u))
 		mult = float(all_enemies.get("damage_mult", 1.0))
 		if record:
 			event.lines.append(Terms.t("log_all_enemies", {"attacker": actor.name}))
@@ -1256,7 +1439,7 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 	else:
 		var foes := _targetable(units, enemy_side, _has_flag(actor, "back_row"))
 		if not _passive_params(actor, &"full_metal_kit").is_empty():
-			foes = units.filter(func(u): return u.side == enemy_side and _alive(u))  # every row is in reach
+			foes = units.filter(func(u): return u.side == enemy_side and _reachable(u))  # every row is in reach
 		if foes.is_empty():
 			return
 		if actor.cls == CharacterData.CharClass.MAGE:
@@ -1303,7 +1486,7 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 	var unfazed := _passive_params(actor, &"unfazed")
 	if targets.size() == 1 and all_enemies.is_empty() and not unfazed.is_empty() and rng.randf() < float(unfazed.cleave_chance):
 		var main: Dictionary = targets[0]
-		cleaved = units.filter(func(u): return u.side == enemy_side and _alive(u) and u.vanguard == main.vanguard and u.index != main.index)
+		cleaved = units.filter(func(u): return u.side == enemy_side and _reachable(u) and u.vanguard == main.vanguard and u.index != main.index)
 		if not cleaved.is_empty() and record:
 			event.lines.append(Terms.t("log_cleave", {"attacker": actor.name, "skill": actor.passive.name}))
 	var landed_on: Array = []
@@ -1320,6 +1503,67 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 	for target in cleaved:
 		if _alive(target):
 			event.hits.append(_attack(actor, target, rng, record, event, mult * float(unfazed.cleave_mult)))
+	_resolve_chain(actor, units, rng, record, event)
+
+## Passive Mind Rot: a random enemy from any row (ignoring taunts), or now and then a random teammate. Landed hits
+## stack up both kinds of damage; hitting a teammate clears the stacks.
+func _mind_rot_attack(actor: Dictionary, units: Array[Dictionary], p: Dictionary, rng: RandomNumberGenerator, record: bool,
+		event: Dictionary) -> void:
+	var stacks := int(actor.get("rot_stacks", 0))
+	var class_mult := float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+	var mates := units.filter(func(u): return u.side == actor.side and _alive(u) and u.index != actor.index)
+	if not mates.is_empty() and rng.randf() < float(p.ally_chance):
+		var mate: Dictionary = mates[rng.randi_range(0, mates.size() - 1)]
+		var share := float(p.ally_mult) + float(p.ally_ramp) * stacks
+		var dealt := mini(_mitigate(_raw_damage(actor, rng) / class_mult * share, mate), mate.hp - 1)  # never a knockout
+		actor.rot_stacks = 0
+		event.get_or_add("mind_rot", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_mind_rot_ally", {"name": actor.name, "target": mate.name, "skill": actor.passive.name}))
+		if dealt > 0:
+			event.hits.append({"target": mate.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+			if record:
+				event.lines.append(Terms.t("log_hit", {"attacker": actor.name, "target": mate.name, "damage": dealt}))
+			_apply_damage(actor, mate, dealt, event, record, rng)
+		return
+	var foes := units.filter(func(u): return u.side != actor.side and _reachable(u))
+	if foes.is_empty():
+		return
+	var target: Dictionary = foes[rng.randi_range(0, foes.size() - 1)]
+	var hit := _attack(actor, target, rng, record, event, (float(p.damage_mult) + float(p.ramp) * stacks) / class_mult)
+	event.hits.append(hit)
+	if hit.hit:
+		actor.rot_stacks = stacks + 1
+	_resolve_chain(actor, units, rng, record, event)
+
+## One enemy picked like a normal single-target attack: the vanguard first, and a taunt (or, for the rearguard, a
+## back-row taunt like Mid Fingered) pulls it. {} if nobody is left.
+func _pick_target(actor: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var foes := _targetable(_units, 1 - actor.side)
+	if foes.is_empty():
+		return {}
+	var taunting := foes.filter(func(u): return _has_flag(u, "taunt") or (not actor.vanguard and _has_flag(u, "taunt_back_row")))
+	var pool := taunting if not taunting.is_empty() else foes
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+## Passive Six-Seven: weak single shots, then every few attacks a burst of them at one enemy
+func _six_seven_attack(actor: Dictionary, units: Array[Dictionary], p: Dictionary, rng: RandomNumberGenerator, record: bool,
+		event: Dictionary) -> void:
+	var count := int(actor.get("six_count", 0))
+	var burst := count >= int(p.every)
+	actor.six_count = 0 if burst else count + 1
+	if burst:
+		event.get_or_add("six_seven", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_six_seven", {"name": actor.name, "skill": actor.passive.name, "shots": int(p.shots)}))
+	var mult := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+	var target := {}
+	for i in int(p.shots) if burst else 1:
+		if target.is_empty() or not _alive(target):
+			target = _pick_target(actor, rng)
+			if target.is_empty():
+				break
+		event.hits.append(_attack(actor, target, rng, record, event, mult))
 	_resolve_chain(actor, units, rng, record, event)
 
 ## Raw damage before the target's Defense: Attack x variance x class multiplier x damage buffs (e.g. Morale Booster)
@@ -1353,6 +1597,12 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	if rng.randf() >= hit_chance:
 		if record:
 			event.lines.append(Terms.t("log_miss", {"attacker": actor.name, "target": target.name}))
+		return hit
+	# Passive Nimble Body: a chance to slip out of the way of anything aimed at it
+	if target.side != actor.side and rng.randf() < _nimble_dodge_chance(target):
+		event.get_or_add("nimble_dodge", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_nimble_dodge", {"attacker": actor.name, "target": target.name, "skill": target.passive.name}))
 		return hit
 
 	var raw := _raw_damage(actor, rng) * mult
@@ -1491,7 +1741,7 @@ func _check_until_next_time(attacker: Dictionary, event: Dictionary, record: boo
 
 ## Passive Until Next Time's splash: a share of a fresh hit lands on another living enemy (can't miss)
 func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumberGenerator, record: bool, event: Dictionary) -> void:
-	var others := _units.filter(func(u): return u.side != actor.side and _alive(u) and u.index != main.index)
+	var others := _units.filter(func(u): return u.side != actor.side and _reachable(u) and u.index != main.index)
 	if others.is_empty():
 		return
 	var target: Dictionary = others[rng.randi_range(0, others.size() - 1)]
@@ -1511,7 +1761,7 @@ func _check_back_row_splash(actor: Dictionary, main: Dictionary, mult: float, rn
 		key = "pool_splash"
 	if p.is_empty() or rng.randf() >= float(p.get("chance", 1.0)):
 		return
-	var back := _units.filter(func(u): return u.side != actor.side and not u.vanguard and _alive(u) and u.index != main.index)
+	var back := _units.filter(func(u): return u.side != actor.side and not u.vanguard and _reachable(u) and u.index != main.index)
 	if back.is_empty():
 		return
 	var target: Dictionary = back[rng.randi_range(0, back.size() - 1)]
@@ -1612,7 +1862,7 @@ func _cast_combo(entry: Dictionary, group: Array, units: Array[Dictionary], rng:
 	for m in members:
 		combined += _stat(m, "attack")
 	var allies := units.filter(func(u): return u.side == side and _alive(u))
-	var foes := units.filter(func(u): return u.side != side and _alive(u))
+	var foes := units.filter(func(u): return u.side != side and _reachable(u))
 	match combo.effect:
 		&"combo_strike":
 			for foe in foes:
