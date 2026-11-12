@@ -608,6 +608,20 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[target], Terms.t("battle_pool_splash"), Color("#38bdf8"), 60)
 	for snake in event.get("snake_mode", []):
 		_float_text(_views[snake], Terms.t("battle_snake_mode"), Color("#a3a3a3"), 60, 30)
+	for flame in event.get("french", []):
+		_float_text(_views[flame], Terms.t("battle_french"), Color("#60a5fa"), 60, 30)
+	for ally in event.get("nein", []):
+		_float_text(_views[ally], Terms.t("battle_nein"), Color("#fde68a"), 60)
+	for ally in event.get("nein_block", []):
+		_float_text(_views[ally], Terms.t("battle_nein_block"), Color("#fde68a"), 60, 30)
+	for ally in event.get("bread", []):
+		_float_text(_views[ally], Terms.t("battle_bread"), Color("#d6a35c"), 34)
+	for shura in event.get("deflection_counter", []):
+		_float_text(_views[shura], Terms.t("battle_deflection_counter"), Color("#f87171"), 60, 30)
+	for target in event.get("provoked", []):
+		_float_text(_views[target], Terms.t("battle_provoked"), Color("#ef4444"), 60)
+	for target in event.get("nearsighted_spot", []):
+		_float_text(_views[target], Terms.t("battle_nearsighted_spot"), Color("#93c5fd"), 34)
 	for snake in event.get("snuck", []):
 		_float_text(_views[snake], Terms.t("battle_snuck"), Color("#d4d4d4"), 34)
 	for horse in event.get("horse", []):
@@ -713,6 +727,12 @@ func _animate_assist(assist: Dictionary) -> void:
 ## Target reaction: sparks and an impact ring, a shake and red flash with a damage number, or a MISS.
 ## Crits are gold, bigger, and shake the whole arena.
 func _react(view: Dictionary, hit: Dictionary, fx_color: Color = BattleFX.ALLY_FX) -> void:
+	if hit.get("blocked", false):
+		return  # Nein!: the shield's own float text covers it
+	if hit.get("deflected", false):
+		Sound.play("miss")
+		_float_text(view, Terms.t("battle_deflected"), Color("#f87171"), 0.0, 30)
+		return
 	if not hit.hit:
 		Sound.play("miss")
 		_float_text(view, Terms.t("battle_miss"), Color("#cbd5e1"))

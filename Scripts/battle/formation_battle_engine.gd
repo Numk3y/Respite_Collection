@@ -138,6 +138,17 @@ const ULTIMATE_EFFECTS := {
 	# Every living ally: +`defense` Defense and +`speed` Speed for its next N actions, and at the end of each of those
 	# actions it heals `regen_lost` of the HP it's missing
 	&"bird_up": {"defense": 0.3, "speed": 0.1, "regen_lost": 0.1, "turns": 3},
+	# BlueFlame: puts his glasses on for N own actions. Passive Nearsighted then always lands its `front_mult` on the
+	# front row, and back-row hits deal `back_mult` instead of Nearsighted's penalty. (The in-game text just says
+	# "He's French.")
+	&"french": {"turns": 5, "front_mult": 1.5, "back_mult": 1.2},
+	# Shura: taunts for N own actions. Every attack that lands on him in that time has `deflect_chance` to be turned
+	# back: he takes nothing and the attacker takes the hit instead (reduced by the attacker's own Defense).
+	&"deflection_counter": {"turns": 2, "deflect_chance": 0.5},
+	# Dreamy: every living front-row ally gets a one-time shield that stops the next enemy attack that would land on it
+	# (no damage, nothing that hit would have caused) or the next debuff/sleep/bleed/poison/Provoke put on it by
+	# someone else, whichever comes first. It stays until used.
+	&"nein": {},
 }
 
 ## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
@@ -262,11 +273,23 @@ const PASSIVE_EFFECTS := {
 	# one standing on its side. Never attacks: each own action heals the first `targets` allies in healing order (hurt
 	# vanguard first, lowest HP share first) for `heal_mult` x Attack.
 	&"background_npc": {"heal_mult": 0.4, "targets": 1},
+	# Each of its own attacks on a front-row enemy has `chance` to deal `front_mult` damage, otherwise `miss_mult`;
+	# attacks on a back-row enemy always deal `back_mult`. Ultimate French overrides this for a while.
+	&"nearsighted": {"chance": 0.5, "front_mult": 1.5, "miss_mult": 0.8, "back_mult": 0.8},
+	# Whenever any enemy falls, this unit instantly strikes a random living back-row enemy for `damage_mult` x Attack
+	# (can't miss, reduced by Defense). That enemy is Provoked: its single-target attacks must aim at this unit for its
+	# next N actions (area attacks aren't affected).
+	&"shi": {"damage_mult": 1.0, "turns": 3},
+	# After every action a living teammate takes (not this unit's own), this unit feeds it bread: heals it for `heal_mult`
+	# x this unit's Attack. Its own basic attacks deal only `damage_mult` x Attack, and `lifesteal` of the damage each
+	# one deals heals the living ally lowest on HP (share of max HP, itself included).
+	&"brotschneidemaschine": {"heal_mult": 0.2, "damage_mult": 0.6, "lifesteal": 1.0},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
 var _units: Array[Dictionary] = []  # everyone in the current battle, for effects that reach past the action
 var _countering := false  # a counterattack is resolving; counters never chain into more counters
+var _current_event := {}  # the event of the action being resolved, for effects that report from deep inside it
 var _run := {}  # the battle in progress: see begin()
 
 ## `enemies` is either one team or {"waves": [team, ...]}. Waves are fought back to back (FGO-style): the
@@ -285,6 +308,7 @@ func simulate(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerato
 func begin(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerator, record: bool = true, manual: bool = false) -> Array:
 	_acting_index = -1
 	_countering = false
+	_current_event = {}
 	var units: Array[Dictionary] = []
 	_units = units
 	var waves: Array = enemies.get("waves", [enemies])
@@ -767,6 +791,7 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	_acting_index = actor.index
 	var event := {"actor": actor.index, "kind": "attack", "skill": "", "hits": [], "heals": [],
 		"off_balance": [], "assists": [], "guard_charges": [], "drains": [], "lines": PackedStringArray()}
+	_current_event = event
 	var sleep := _flag_buff(actor, "sleep")
 	if not sleep.is_empty():
 		# e.g. Power Nap: the whole action is spent asleep (no attack, no energy), waking on the last one
@@ -826,6 +851,8 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		_tick_buffs(actor, "attacks", event, record, rng)
 		_gain_energy(actor, ENERGY_PER_ACTION)
 		_add_cancer_stack(actor)
+	if event.kind != "sleep":
+		_feed_bread(actor, event, record)
 	_bleed_tick(actor, event, record)
 	_chill_regen(actor, event, record)
 	_bird_up_regen(actor, event, record)
@@ -1031,6 +1058,24 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			event.get_or_add("snake_mode", []).append(actor.index)
 			if record:
 				event.lines.append(Terms.t("log_snake_mode", {"name": actor.name}))
+		&"french":
+			_add_buff(actor, {"id": &"french", "name": skill_name, "french": true, "front_mult": float(p.front_mult),
+				"back_mult": float(p.back_mult), "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("french", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_french", {"name": actor.name}))
+		&"deflection_counter":
+			_add_buff(actor, {"id": &"deflection_counter", "name": skill_name, "taunt": true, "deflect": true,
+				"deflect_chance": float(p.deflect_chance), "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("deflection_counter", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_deflection_counter", {"name": actor.name}))
+		&"nein":
+			if record:
+				event.lines.append(Terms.t("log_nein", {"name": actor.name}))
+			for ally in _units.filter(func(a): return a.side == actor.side and a.vanguard and _alive(a)):
+				_add_buff(ally, {"id": &"nein", "name": skill_name, "nein": true, "remaining": 1, "counts": "never"})
+				event.get_or_add("nein", []).append(ally.index)
 		&"try_finger_but_hole":
 			if record:
 				event.lines.append(Terms.t("log_try_finger", {"name": actor.name}))
@@ -1187,6 +1232,24 @@ func _wake(u: Dictionary, wake: Dictionary, event: Dictionary, record: bool) -> 
 	if record:
 		event.lines.append(Terms.t("log_wake", {"name": u.name}))
 
+## Anything a Nein! shield keeps off: debuffs, sleep and stuns, bleeds, poison, Provoke
+func _is_harmful(b: Dictionary) -> bool:
+	return _is_debuff(b) or b.get("sleep", false) or b.get("bleed", false) or b.get("poison", false) \
+		or b.get("provoked", false)
+
+## Passive Brotschneidemaschine: a teammate just acted, so every living bread-maker on its side feeds it
+func _feed_bread(actor: Dictionary, event: Dictionary, record: bool) -> void:
+	if actor.hp <= 0 or actor.hp >= actor.max_hp:
+		return
+	for u in _units:
+		var p := _passive_params(u, &"brotschneidemaschine")
+		if p.is_empty() or u.side != actor.side or u.index == actor.index or not _alive(u):
+			continue
+		event.get_or_add("bread", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_bread", {"name": u.name, "target": actor.name, "skill": u.passive.name}))
+		_heal(actor, roundi(_stat(u, "attack") * float(p.heal_mult)), event, record, u)
+
 ## A debuff only lowers stats (e.g. Hangover); mixed buffs like SelfDecaying's trade-off don't count
 func _is_debuff(b: Dictionary) -> bool:
 	var mods: Dictionary = b.get("mods", {})
@@ -1202,6 +1265,17 @@ func _passive_params(u: Dictionary, effect: StringName) -> Dictionary:
 ## (e.g. its Ultimate) doesn't tick on that action; one it gets during someone else's action (e.g. a passive
 ## triggered by an enemy's hit) counts from the unit's very next action.
 func _add_buff(u: Dictionary, buff: Dictionary) -> void:
+	# Ultimate Nein!: the shield stops a harmful effect someone else puts on the unit (its own, e.g. a Power Nap, go
+	# through), and it's used up
+	if u.index != _acting_index and _is_harmful(buff):
+		var nein := _flag_buff(u, "nein")
+		if not nein.is_empty():
+			u.buffs.erase(nein)
+			if not _current_event.is_empty():
+				_current_event.get_or_add("nein_block", []).append(u.index)
+				if _run.get("record", false):
+					_current_event.lines.append(Terms.t("log_nein_cleanse", {"target": u.name, "buff": buff.name, "skill": nein.name}))
+			return
 	buff.fresh = u.index == _acting_index
 	u.buffs = u.buffs.filter(func(b): return b.id != buff.id)
 	u.buffs.append(buff)
@@ -1291,6 +1365,7 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 	if record:
 		event.lines.append(Terms.t("log_down", {"target": target.name}))
 	_check_spotted(target, event, record)
+	_check_shi(target, event, record, rng)
 	_check_until_next_time(attacker, event, record)
 	# e.g. SelfDecaying: killing an enemy while the buff is active heals
 	for b in attacker.buffs:
@@ -1427,6 +1502,9 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 	var enemy_side: int = 1 - actor.side
 	var targets: Array = []
 	var mult := 1.0
+	var bread := _passive_params(actor, &"brotschneidemaschine")
+	if not bread.is_empty():
+		mult = float(bread.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))  # e.g. 60% of Attack, all told
 	var all_enemies := _flag_buff(actor, "all_enemies")
 	if not all_enemies.is_empty():
 		# e.g. Lucky Break: this attack hits every living enemy, back row included
@@ -1456,6 +1534,10 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 		else:
 			# Single-target attacks must go to a taunting enemy if there is one (Mid Fingered only pulls the back row)
 			var taunting := foes.filter(func(u): return _has_flag(u, "taunt") or (not actor.vanguard and _has_flag(u, "taunt_back_row")))
+			# Passive 死: a Provoked unit must go after whoever Provoked it
+			var provoker := _provoker(actor)
+			if not provoker.is_empty():
+				taunting = [provoker]
 			var pool := taunting if not taunting.is_empty() else foes
 			var target: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
 			# Passive Rat Time: the smell of cheese can pull the attack onto the rat (a taunt still comes first)
@@ -1539,6 +1621,9 @@ func _mind_rot_attack(actor: Dictionary, units: Array[Dictionary], p: Dictionary
 ## One enemy picked like a normal single-target attack: the vanguard first, and a taunt (or, for the rearguard, a
 ## back-row taunt like Mid Fingered) pulls it. {} if nobody is left.
 func _pick_target(actor: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var provoker := _provoker(actor)
+	if not provoker.is_empty():
+		return provoker
 	var foes := _targetable(_units, 1 - actor.side)
 	if foes.is_empty():
 		return {}
@@ -1605,12 +1690,24 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 			event.lines.append(Terms.t("log_nimble_dodge", {"attacker": actor.name, "target": target.name, "skill": target.passive.name}))
 		return hit
 
-	var raw := _raw_damage(actor, rng) * mult
+	var raw := _raw_damage(actor, rng) * mult * _nearsighted_mult(actor, target, rng, event)
 	hit.crit = rng.randf() < CRIT_CHANCE
 	if hit.crit:
 		raw *= CRIT_MULT
 	if target.cls == CharacterData.CharClass.TANK and raw >= target.max_hp * GUARD_HEAVY_PCT:
 		hit.guard = true
+	# Ultimate Nein!: a shield eats the whole hit, and it's used up
+	var nein := _flag_buff(target, "nein")
+	if not nein.is_empty() and actor.side != target.side:
+		target.buffs.erase(nein)
+		hit.blocked = true
+		event.get_or_add("nein_block", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_nein_block", {"attacker": actor.name, "target": target.name, "skill": nein.name}))
+		return hit
+	if _try_deflect(actor, target, raw, rng, record, event):
+		hit.deflected = true
+		return hit
 	var dealt := _mitigate(raw, target)
 	# Passive Rat Time: a chance to take part of the hit off
 	var rat := _passive_params(target, &"rat_time")
@@ -1649,6 +1746,13 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	var lifesteal := _passive_params(actor, &"power_of_baldness")
 	if not lifesteal.is_empty():
 		_heal(actor, roundi(dealt * float(lifesteal.lifesteal)), event, record)
+	# Passive Brotschneidemaschine: the poison bread's damage feeds whichever ally is worst off
+	var bread := _passive_params(actor, &"brotschneidemaschine")
+	if target.side != actor.side and not bread.is_empty():
+		var mates := _units.filter(func(a): return a.side == actor.side and _alive(a) and a.hp < a.max_hp)
+		if not mates.is_empty():
+			mates.sort_custom(func(a, b): return float(a.hp) / a.max_hp < float(b.hp) / b.max_hp)
+			_heal(mates[0], roundi(dealt * float(bread.lifesteal)), event, record, actor)
 	# Passive Blinding (e.g. Solar Flare Baldness): a chance the hit leaves the target half-blind
 	var blinding := _passive_params(actor, &"blinding")
 	if target.hp > 0 and not blinding.is_empty() and rng.randf() < float(blinding.chance):
@@ -1676,6 +1780,77 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		if record:
 			event.lines.append(Terms.t("log_off_balance", {"target": target.name}))
 	return hit
+
+# ───────── BlueFlame: Nearsighted & French ─────────
+
+## Passive Nearsighted: front-row hits are a coin flip between a big hit and a weak one, back-row hits are weak.
+## While Ultimate French lasts, front-row hits are always big and back-row hits get a bonus instead.
+func _nearsighted_mult(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, event: Dictionary) -> float:
+	var p := _passive_params(actor, &"nearsighted")
+	if p.is_empty() or target.side == actor.side:
+		return 1.0
+	var french := _flag_buff(actor, "french")
+	if not target.vanguard:
+		return float(french.back_mult) if not french.is_empty() else float(p.back_mult)
+	if not french.is_empty():
+		event.get_or_add("nearsighted_spot", []).append(target.index)
+		return float(french.front_mult)
+	if rng.randf() < float(p.chance):
+		event.get_or_add("nearsighted_spot", []).append(target.index)
+		return float(p.front_mult)
+	return float(p.miss_mult)
+
+# ───────── Shura: 死 & Deflection Counter ─────────
+
+## Passive 死: an enemy just fell, so every living unit with it on the other side strikes a back-row enemy and
+## Provokes it. Shown like a counter. A strike that knocks its target out sets off the next one.
+func _check_shi(fallen: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	for u in _units:
+		var p := _passive_params(u, &"shi")
+		if p.is_empty() or u.side == fallen.side or not _alive(u):
+			continue
+		var back := _units.filter(func(t): return t.side == fallen.side and not t.vanguard and _reachable(t))
+		if back.is_empty():
+			continue
+		var target: Dictionary = back[rng.randi_range(0, back.size() - 1)]
+		var dealt := _mitigate(_raw_damage(u, rng) * float(p.damage_mult), target)
+		event.assists.append({"actor": u.index, "target": target.index, "damage": dealt, "counter": true})
+		if record:
+			event.lines.append(Terms.t("log_shi", {"attacker": u.name, "target": target.name, "damage": dealt, "skill": u.passive.name}))
+		var was_countering := _countering
+		_countering = true
+		_apply_damage(u, target, dealt, event, record, rng)
+		_countering = was_countering
+		if target.hp > 0:
+			_add_buff(target, {"id": StringName("provoked_%d" % u.index), "name": Terms.t("buff_provoked"), "provoked": true,
+				"provoker": u.index, "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("provoked", []).append(target.index)
+
+## Passive 死: the unit that Provoked `actor`, if it's still standing (single-target attacks must go to it), else {}
+func _provoker(actor: Dictionary) -> Dictionary:
+	for b in actor.buffs:
+		if b.get("provoked", false):
+			var source: Dictionary = _units[int(b.provoker)]
+			if _reachable(source):
+				return source
+	return {}
+
+## Ultimate Deflection Counter: a chance that an enemy attack landing on the unit bounces back onto the attacker
+func _try_deflect(actor: Dictionary, target: Dictionary, raw: float, rng: RandomNumberGenerator, record: bool,
+		event: Dictionary) -> bool:
+	var buff := _flag_buff(target, "deflect")
+	if buff.is_empty() or actor.side == target.side or rng.randf() >= float(buff.deflect_chance):
+		return false
+	var dealt := _mitigate(raw, actor)
+	event.get_or_add("deflected", []).append(target.index)
+	event.assists.append({"actor": target.index, "target": actor.index, "damage": dealt, "counter": true})
+	if record:
+		event.lines.append(Terms.t("log_deflect", {"name": target.name, "target": actor.name, "damage": dealt, "skill": buff.name}))
+	var was_countering := _countering
+	_countering = true
+	_apply_damage(target, actor, dealt, event, record, rng)
+	_countering = was_countering
+	return true
 
 # ───────── Quinnester: Hat Trick & Until Next Time ─────────
 

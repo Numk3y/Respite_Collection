@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"dreamy_passive"
+display_name = "Brotschneidemaschine"
+description = "Every time a teammate acts, Dreamy feeds them bread, healing them for 8% of Dreamy's Attack. When Dreamy attacks, he feeds the enemy poison bread for 60% damage, and 20% of the damage dealt heals the teammate lowest on HP."
+effect_id = &"brotschneidemaschine"
+params = {"heal_mult": 0.08, "damage_mult": 0.6, "lifesteal": 0.2}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"dreamy_active"
+display_name = "Nein!"
+kind = 1
+description = "Dreamy casts a protection field on the front row: each of them is immune to the next attack or debuff that comes their way."
+effect_id = &"nein"
+params = {}
+
+[resource]
+script = ExtResource("1")
+id = &"dreamy"
+display_name = "Dreamy"
+char_class = 5
+rarity = 2
+hp = 85
+attack = 70
+defense = 35
+evasion = 15
+accuracy = 80
+speed = 55
+portrait_path = "res://Art/characters/Dreamy.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "Slices bread. Feeds friends. Feeds enemies too, but you don't want that bread."
+is_starter = false

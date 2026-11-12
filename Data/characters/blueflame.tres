@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"blueflame_passive"
+display_name = "Nearsighted"
+description = "BlueFlame has a 50% chance to deal 150% damage to a front-row enemy, but if he fails, he deals 80% damage. He always deals 20% less damage to back-row enemies."
+effect_id = &"nearsighted"
+params = {"chance": 0.5, "front_mult": 1.5, "miss_mult": 0.8, "back_mult": 0.8}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"blueflame_active"
+display_name = "French"
+kind = 1
+description = "He's French."
+effect_id = &"french"
+params = {"turns": 5, "front_mult": 1.5, "back_mult": 1.2}
+
+[resource]
+script = ExtResource("1")
+id = &"blueflame"
+display_name = "BlueFlame"
+char_class = 3
+rarity = 2
+hp = 80
+attack = 115
+defense = 35
+evasion = 15
+accuracy = 95
+speed = 50
+portrait_path = "res://Art/characters/Blueflame.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "A marksman who can't see very far. Or maybe he just doesn't care. He's French."
+is_starter = false

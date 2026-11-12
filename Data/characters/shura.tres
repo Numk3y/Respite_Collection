@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"shura_passive"
+display_name = "Shi"
+description = "Every time an enemy falls, Shura immediately strikes a back-row enemy, and that enemy has to aim at him for 3 turns."
+effect_id = &"shi"
+params = {"damage_mult": 1.0, "turns": 3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"shura_active"
+display_name = "Deflection Counter"
+kind = 1
+description = "Shura taunts all enemies for 2 turns, and every attack that hits him has a 50% chance to be deflected back at the attacker."
+effect_id = &"deflection_counter"
+params = {"turns": 2, "deflect_chance": 0.5}
+
+[resource]
+script = ExtResource("1")
+id = &"shura"
+display_name = "Shura"
+char_class = 0
+rarity = 2
+hp = 180
+attack = 45
+defense = 90
+evasion = 10
+accuracy = 70
+speed = 40
+portrait_path = "res://Art/characters/Shura.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "A swordsman who stands at the front and waits. Fall in front of him, and your friends in the back are next."
+is_starter = false
