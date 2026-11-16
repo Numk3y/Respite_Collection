@@ -497,7 +497,7 @@ func _banner_picture() -> Texture2D:
 		return _event.banner
 	if _event.boss_stage.background:
 		return _event.boss_stage.background
-	var chapter_bg := UITheme.background(Terms.chapter_name(_event.boss_stage.chapter).replace(" ", ""))
+	var chapter_bg := UITheme.chapter_background(_event.boss_stage.chapter)
 	return chapter_bg if chapter_bg else UITheme.background("HomeBg")
 
 ## The boss's own picture: the first enemy of the boss wave (or of the first wave)

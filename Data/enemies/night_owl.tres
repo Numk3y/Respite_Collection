@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"night_owl_passive"
+display_name = "Fourth Energy Drink"
+description = "Wired on his fourth energy drink: heals 25% of the damage he deals."
+effect_id = &"power_of_baldness"
+params = {"lifesteal": 0.25}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"night_owl_active"
+display_name = "Midnight Moon"
+kind = 1
+description = "Shoots the moon itself at one enemy for 140% of his Attack; shards splash onto 2 more for 60%, then he snipes the first one again for 80%."
+effect_id = &"moonlight_vigil"
+params = {"damage_mult": 1.4, "snipe_mult": 0.8, "splash": 0.6, "splash_targets": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"night_owl"
+display_name = "The Night Owl"
+title = "Boss"
+char_class = 3
+rarity = 3
+hp = 2000
+attack = 92
+defense = 46
+evasion = 22
+accuracy = 96
+speed = 58
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/night_owl.png"
+description = "Owner of the Midnight Bar and the last one online every single night. He's seen every sunrise from this bar, and he's not leaving before this one."

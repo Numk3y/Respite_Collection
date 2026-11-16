@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"mirror_dweller_passive"
+display_name = "Mirror Trance"
+description = "Each hit has a 15% chance to pull the target into the mirror for a turn (asleep); they take 20% more damage while they're in it."
+effect_id = &"drowsiness"
+params = {"chance": 0.15, "cooldown": 3, "damage_taken": 0.2, "self_chance": 0.0, "turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"mirror_dweller_active"
+display_name = "Stare Into the Mirror"
+kind = 1
+description = "Up to 3 enemies get pulled in front of the mirror: 100% of his Attack each, with a 60% chance to put each one to sleep."
+effect_id = &"disposing_to_sleep"
+params = {"damage_mult": 1.0, "sleep_chance": 0.6, "sleep_turns": 1, "targets": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"mirror_dweller"
+display_name = "Mirror Dweller"
+char_class = 2
+rarity = 1
+hp = 120
+attack = 72
+defense = 24
+evasion = 30
+accuracy = 88
+speed = 60
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/mirror_dweller.png"
+description = "Has been staring at himself in the bar mirror since sundown. Look at it with him for a second and you can't stop."

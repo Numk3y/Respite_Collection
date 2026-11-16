@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"owl_pendant"
+display_name = "Owl Pendant"
+slot = 2
+rarity = 3
+description = "The Night Owl's lucky charm. He'll want it back."
+evasion = 13
+accuracy = 11
+speed = 10

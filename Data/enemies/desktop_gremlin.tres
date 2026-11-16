@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"desktop_gremlin_passive"
+display_name = "Spinbot"
+description = "Gains +1.2% Attack and +1% Speed for every 1% of HP lost. Below 35% he holds down the spin key and goes Berserk: +40% Attack, -20% Defense for 2 turns."
+effect_id = &"desperate_scramble"
+params = {"attack": 0.4, "attack_per_pct": 0.012, "cooldown": 10, "defense": -0.2, "speed_per_pct": 0.01, "threshold": 0.35, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"desktop_gremlin"
+display_name = "Desktop Gremlin"
+char_class = 4
+rarity = 1
+hp = 170
+attack = 78
+defense = 22
+evasion = 38
+accuracy = 80
+speed = 92
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/desktop_gremlin.png"
+description = "Desktop mode, mouse sensitivity at maximum, spinning in circles in the middle of the bar. Impossible to hit, impossible to ignore."

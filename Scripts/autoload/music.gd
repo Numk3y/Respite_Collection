@@ -57,7 +57,9 @@ func play_home() -> void:
 	play(["home", "homepage", "homebgm"])
 
 func play_chapter(chapter: int) -> void:
-	play([Terms.chapter_name(chapter).replace(" ", ""), "battle"])
+	var tracks: Array = Terms.chapter_file_names(chapter)
+	tracks.append("battle")
+	play(tracks)
 
 ## 0 (off) to 1 (full)
 func get_volume() -> float:

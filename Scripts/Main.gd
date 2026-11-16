@@ -1243,7 +1243,7 @@ func _next_event_mission(event: EventData, stage: StageData) -> StageData:
 func _battle_background(stage: StageData) -> Texture2D:
 	if stage.background:
 		return stage.background
-	var chapter_bg := UITheme.background(Terms.chapter_name(stage.chapter).replace(" ", ""))
+	var chapter_bg := UITheme.chapter_background(stage.chapter)
 	return chapter_bg if chapter_bg else UITheme.background("battle")
 
 # ───────── Team tab ─────────

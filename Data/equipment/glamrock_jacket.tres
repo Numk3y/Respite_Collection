@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"glamrock_jacket"
+display_name = "Glamrock Jacket"
+slot = 1
+rarity = 3
+description = "Neon trim, metal studs, built for the stage and the mosh pit."
+defense = 30
+evasion = 6

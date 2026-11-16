@@ -1,0 +1,59 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/funtime_foxy.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/roxanne_wolf.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/toy_chica.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/glamrock_chica.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/mangle.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/lolbit.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/fexa.tres" id="11"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/FrennisNightClub.png" id="bg"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_paw_gloves.tres" id="gear_cat_paw_gloves"]
+[ext_resource type="Resource" path="res://Data/equipment/black_cat_hoodie.tres" id="gear_black_cat_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_ear_headset.tres" id="gear_cat_ear_headset"]
+[ext_resource type="Resource" path="res://Data/equipment/nine_lives_blade.tres" id="gear_nine_lives_blade"]
+[ext_resource type="Resource" path="res://Data/equipment/velvet_bar_coat.tres" id="gear_velvet_bar_coat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_bell_collar.tres" id="gear_lucky_bell_collar"]
+[ext_resource type="Resource" path="res://Data/equipment/mic_stand.tres" id="gear_mic_stand"]
+[ext_resource type="Resource" path="res://Data/equipment/stage_costume.tres" id="gear_stage_costume"]
+[ext_resource type="Resource" path="res://Data/equipment/faz_token_necklace.tres" id="gear_faz_token_necklace"]
+[ext_resource type="Resource" path="res://Data/equipment/pirate_hook.tres" id="gear_pirate_hook"]
+[ext_resource type="Resource" path="res://Data/equipment/glamrock_jacket.tres" id="gear_glamrock_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/backstage_pass.tres" id="gear_backstage_pass"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("8"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("11"), ExtResource("10")])
+
+[resource]
+script = ExtResource("1")
+id = &"frennis_night_club"
+display_name = "Frenni's Night Club"
+description = "The neon sign says OPEN and the animatronics are working the door. Getting in was easy. Getting past the staff is another story."
+chapter = 5
+number = 1
+recommended_level = 34
+background = ExtResource("bg")
+enemy_level = 11
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 700
+exp_reward = 300
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(4, 5), "gossip": Vector2i(2, 3), "snack": Vector2i(5, 7)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_cat_paw_gloves"), ExtResource("gear_black_cat_hoodie"), ExtResource("gear_cat_ear_headset"), ExtResource("gear_nine_lives_blade"), ExtResource("gear_velvet_bar_coat"), ExtResource("gear_lucky_bell_collar"), ExtResource("gear_mic_stand"), ExtResource("gear_stage_costume"), ExtResource("gear_faz_token_necklace"), ExtResource("gear_pirate_hook"), ExtResource("gear_glamrock_jacket"), ExtResource("gear_backstage_pass")])
+drop_chance = 0.16
+star_goal = 0
+star_goal_value = 55

@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"funtime_foxy_active"
+display_name = "SHOWTIME!"
+kind = 1
+description = "Lights, camera: +40% Attack but -40% Defense for 3 turns. Each knockout heals her 20% of her max HP."
+effect_id = &"self_decaying"
+params = {"attack": 0.4, "defense": -0.4, "kill_heal_pct": 0.2, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"funtime_foxy"
+display_name = "Funtime Foxy"
+char_class = 1
+rarity = 1
+hp = 150
+attack = 56
+defense = 30
+evasion = 32
+accuracy = 74
+speed = 74
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/funtime_foxy.png"
+description = "The club's host, all white and pink fur and a voice that fills the room. Every fight is a show, and she's the star."

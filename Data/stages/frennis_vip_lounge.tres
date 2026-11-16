@@ -1,0 +1,59 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/glamrock_chica.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/roxanne_wolf.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/fexa.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/toy_chica.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/mangle.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/funtime_foxy.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/lolbit.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/enemies/ballora.tres" id="12"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/FrennisNightClub.png" id="bg"]
+[ext_resource type="Resource" path="res://Data/equipment/mic_stand.tres" id="gear_mic_stand"]
+[ext_resource type="Resource" path="res://Data/equipment/stage_costume.tres" id="gear_stage_costume"]
+[ext_resource type="Resource" path="res://Data/equipment/faz_token_necklace.tres" id="gear_faz_token_necklace"]
+[ext_resource type="Resource" path="res://Data/equipment/pirate_hook.tres" id="gear_pirate_hook"]
+[ext_resource type="Resource" path="res://Data/equipment/glamrock_jacket.tres" id="gear_glamrock_jacket"]
+[ext_resource type="Resource" path="res://Data/equipment/backstage_pass.tres" id="gear_backstage_pass"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("10"), ExtResource("9")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("11")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("7"), ExtResource("12")])
+
+[sub_resource type="Resource" id="wave_4"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("10"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("12"), ExtResource("8"), ExtResource("7")])
+
+[resource]
+script = ExtResource("1")
+id = &"frennis_vip_lounge"
+display_name = "Frenni's VIP Lounge"
+description = "Velvet ropes, a pirate fox on every door and a waiting list you're not on. Four rounds of bouncers between you and the booths."
+chapter = 5
+number = 3
+recommended_level = 38
+background = ExtResource("bg")
+enemy_level = 9
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3"), SubResource("wave_4")])
+reward_money = 850
+exp_reward = 380
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(4, 6), "gossip": Vector2i(2, 4), "snack": Vector2i(6, 8)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_mic_stand"), ExtResource("gear_stage_costume"), ExtResource("gear_faz_token_necklace"), ExtResource("gear_pirate_hook"), ExtResource("gear_glamrock_jacket"), ExtResource("gear_backstage_pass")])
+drop_chance = 0.18
+star_goal = 2
+star_goal_value = 5

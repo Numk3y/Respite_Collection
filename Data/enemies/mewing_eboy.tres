@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"mewing_eboy_passive"
+display_name = "Jawline Check"
+description = "Hasn't unclenched his jaw since 2023: takes 12% less damage from every hit, and each attack has a 20% chance to also hit the rest of the target's row for 40% damage."
+effect_id = &"unfazed"
+params = {"cleave_chance": 0.2, "cleave_mult": 0.4, "damage_reduction": 0.12}
+
+[resource]
+script = ExtResource("1")
+id = &"mewing_eboy"
+display_name = "Mewing E-Boy"
+char_class = 1
+rarity = 1
+hp = 120
+attack = 44
+defense = 26
+evasion = 34
+accuracy = 68
+speed = 66
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/mewing_eboy.png"
+description = "Silver chain, middle part, jaw clenched so hard it hurts to look at. An E-Boy who started mewing and never stopped."

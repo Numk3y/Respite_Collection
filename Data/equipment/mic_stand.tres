@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mic_stand"
+display_name = "Mic Stand"
+slot = 0
+rarity = 2
+description = "Borrowed from the stage. Glamrock Chica wants it back."
+attack = 20
+accuracy = 5

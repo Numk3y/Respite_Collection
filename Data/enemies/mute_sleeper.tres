@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"mute_sleeper_passive"
+display_name = "Full-Body Blanket"
+description = "Tucked in for the night: starts every battle with +30% max HP."
+effect_id = &"proud_father"
+params = {"hp": 0.3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"mute_sleeper_active"
+display_name = "Power Nap"
+kind = 1
+description = "Dozes off for a turn, then wakes up at full HP with every debuff gone and +40% Attack for 3 turns."
+effect_id = &"power_nap"
+params = {"attack": 0.4, "sleep_turns": 1, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"mute_sleeper"
+display_name = "Mute Sleeper"
+char_class = 0
+rarity = 1
+hp = 340
+attack = 44
+defense = 82
+evasion = 6
+accuracy = 72
+speed = 40
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 110
+portrait_path = "res://Art/enemies/mute_sleeper.png"
+description = "Fell asleep in full-body tracking in the corner of the bar three hours ago. Still breathing into an open mic."

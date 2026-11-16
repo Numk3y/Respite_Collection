@@ -238,6 +238,14 @@ static func background(bg_name: String) -> Texture2D:
 	var path := CharacterData.find_art(BACKGROUND_DIR, bg_name)
 	return load(path) as Texture2D if not path.is_empty() else null
 
+## A chapter's background (Art/backgrounds/<chapter name>.*, see Terms.chapter_file_names), or null
+static func chapter_background(chapter: int) -> Texture2D:
+	for file_name in Terms.chapter_file_names(chapter):
+		var tex := background(file_name)
+		if tex:
+			return tex
+	return null
+
 ## The Home lobby picture: Art/backgrounds/home.* or HomeBg.*, or null if neither exists
 static func home_background() -> Texture2D:
 	var tex := background("home")

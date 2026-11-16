@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/quest_pro_kid.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/mewing_eboy.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/catgirl_egirl.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/quest3s_kid.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/soundboard_kid.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/simp_knight.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/discord_kitten.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/equipment/wet_floor_mop.tres" id="gear_wet_floor_mop"]
+[ext_resource type="Resource" path="res://Data/equipment/grease_apron.tres" id="gear_grease_apron"]
+[ext_resource type="Resource" path="res://Data/equipment/employee_badge.tres" id="gear_employee_badge"]
+[ext_resource type="Resource" path="res://Data/equipment/golden_spatula.tres" id="gear_golden_spatula"]
+[ext_resource type="Resource" path="res://Data/equipment/mascot_costume.tres" id="gear_mascot_costume"]
+[ext_resource type="Resource" path="res://Data/equipment/mystery_toy.tres" id="gear_mystery_toy"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_paw_gloves.tres" id="gear_cat_paw_gloves"]
+[ext_resource type="Resource" path="res://Data/equipment/black_cat_hoodie.tres" id="gear_black_cat_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_ear_headset.tres" id="gear_cat_ear_headset"]
+[ext_resource type="Resource" path="res://Data/equipment/nine_lives_blade.tres" id="gear_nine_lives_blade"]
+[ext_resource type="Resource" path="res://Data/equipment/velvet_bar_coat.tres" id="gear_velvet_bar_coat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_bell_collar.tres" id="gear_lucky_bell_collar"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("6"), ExtResource("10"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("11"), ExtResource("7")])
+
+[resource]
+script = ExtResource("1")
+id = &"blackcat"
+display_name = "BlackCat"
+description = "The Black Cat is packed tonight. E-Boys pose by the bar, E-Girls hold court in the booths, and somebody let the Quest kids in again."
+chapter = 4
+number = 1
+recommended_level = 25
+enemy_level = 11
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 480
+exp_reward = 200
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(3, 4), "gossip": Vector2i(1, 2), "snack": Vector2i(4, 6)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_wet_floor_mop"), ExtResource("gear_grease_apron"), ExtResource("gear_employee_badge"), ExtResource("gear_golden_spatula"), ExtResource("gear_mascot_costume"), ExtResource("gear_mystery_toy"), ExtResource("gear_cat_paw_gloves"), ExtResource("gear_black_cat_hoodie"), ExtResource("gear_cat_ear_headset"), ExtResource("gear_nine_lives_blade"), ExtResource("gear_velvet_bar_coat"), ExtResource("gear_lucky_bell_collar")])
+drop_chance = 0.15
+star_goal = 0
+star_goal_value = 55

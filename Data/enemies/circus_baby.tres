@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"circus_baby_passive"
+display_name = "Bidybab Backup"
+description = "Never attacks herself. Whenever someone damages her, one of her back-row helpers instantly hits back for 70% of their Attack."
+effect_id = &"one_above_all"
+params = {"attack_mult": 0.7}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"circus_baby_active"
+display_name = "Get Back to Work!"
+kind = 1
+description = "The ringmaster's whip: 5 lashes at random front-row enemies for 60% of her Attack each, each one healing her 3% of her max HP."
+effect_id = &"whip_crack"
+params = {"damage_mult": 0.6, "heal_pct": 0.03, "lashes": 5}
+
+[resource]
+script = ExtResource("1")
+id = &"circus_baby"
+display_name = "Circus Baby"
+title = "Mini Boss"
+char_class = 0
+rarity = 2
+hp = 900
+attack = 52
+defense = 62
+evasion = 10
+accuracy = 75
+speed = 46
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/circus_baby.png"
+description = "Runs the circus gallery at the back of the club with a big smile and an iron grip. Her Bidybabs do the dirty work."

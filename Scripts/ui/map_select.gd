@@ -278,6 +278,13 @@ func _select_chapter(chapter: int) -> void:
 	_chapter = chapter
 	if _tab_buttons.has(chapter):
 		_tab_buttons[chapter].button_pressed = true
+	# Story tabs: the open chapter spelled out, the others short ("Ch.4"), so the row fits however many there are
+	if not _event:
+		for c: int in _tab_buttons:
+			if c > 0:
+				var button: Button = _tab_buttons[c]
+				button.text = Terms.chapter_title(c) if c == chapter else Terms.t("map_tab_short", {"number": c})
+				button.tooltip_text = "" if c == chapter else Terms.chapter_title(c)
 	var stages: Array = []  # StageData or null (a map that doesn't exist yet)
 	if _event:
 		stages = _event.chapter_missions(chapter)
@@ -310,7 +317,7 @@ func _picture(stage: StageData, chapter: int) -> Texture2D:
 		return stage.background
 	if _event and _event.banner:
 		return _event.banner
-	var chapter_bg := UITheme.background(Terms.chapter_name(chapter).replace(" ", "")) if chapter > 0 else null
+	var chapter_bg := UITheme.chapter_background(chapter) if chapter > 0 else null
 	return chapter_bg if chapter_bg else UITheme.background("battle")
 
 func _select_stage(stage: StageData) -> void:

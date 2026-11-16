@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"lolbit_passive"
+display_name = "PLEASE STAND BY"
+description = "Each hit has a 15% chance to glitch the target's screen: -50% Accuracy for its next turn."
+effect_id = &"blinding"
+params = {"accuracy": -0.5, "chance": 0.15, "turns": 1}
+
+[resource]
+script = ExtResource("1")
+id = &"lolbit"
+display_name = "Lolbit"
+char_class = 2
+rarity = 1
+hp = 95
+attack = 60
+defense = 18
+evasion = 30
+accuracy = 82
+speed = 64
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/lolbit.png"
+description = "Glitches in and out of the DJ booth. Half her face is a loading screen and she thinks that's hilarious."

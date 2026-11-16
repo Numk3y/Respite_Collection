@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"fbt_kid_passive"
+display_name = "Tracker Drift"
+description = "Gains +1% Attack and +0.8% Speed for every 1% of HP lost. Below 30% his trackers drift and he flails Berserk: +35% Attack, -20% Defense for 2 turns."
+effect_id = &"desperate_scramble"
+params = {"attack": 0.35, "attack_per_pct": 0.01, "cooldown": 10, "defense": -0.2, "speed_per_pct": 0.008, "threshold": 0.3, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"fbt_kid"
+display_name = "Full-Body Kid"
+char_class = 4
+rarity = 1
+hp = 140
+attack = 60
+defense = 16
+evasion = 30
+accuracy = 70
+speed = 82
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/fbt_kid.png"
+description = "Full-body trackers strapped on wrong. His legs are in the ceiling and his fists are everywhere."

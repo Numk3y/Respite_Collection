@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bidybab"
+display_name = "Bidybab"
+char_class = 3
+rarity = 1
+hp = 70
+attack = 60
+defense = 14
+evasion = 30
+accuracy = 85
+speed = 66
+portrait_path = "res://Art/enemies/bidybab.png"
+description = "One of Circus Baby's little helpers. Small, giggly and terrifyingly accurate from under the tables."

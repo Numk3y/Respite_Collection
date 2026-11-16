@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"instance_hopper_passive"
+display_name = "Rejoin"
+description = "When a hit drops him below 30% HP he leaves and rejoins: back to 60% HP with +15% Defense for 2 turns. Needs 7 turns to do it again."
+effect_id = &"second_wind"
+params = {"cooldown": 7, "defense": 0.15, "heal_to": 0.6, "threshold": 0.3, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"instance_hopper"
+display_name = "Instance Hopper"
+char_class = 1
+rarity = 1
+hp = 180
+attack = 68
+defense = 34
+evasion = 36
+accuracy = 82
+speed = 82
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/instance_hopper.png"
+description = "Hops between twenty instances a night looking for 'the one with the vibes'. Never stays, never stays down."

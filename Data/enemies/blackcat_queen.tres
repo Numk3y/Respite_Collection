@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"blackcat_queen_passive"
+display_name = "Main Character Energy"
+description = "+12% Defense for every other enemy still standing. Every 3 turns, vote-kicks your strongest attacker: they skip their next turn rejoining."
+effect_id = &"group_owner"
+params = {"defense_per_ally": 0.12, "kick_every": 3, "kick_turns": 1}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"blackcat_queen_active"
+display_name = "Last Call"
+kind = 1
+description = "It's closing time: hits every enemy for 90% of her Attack and wipes all their buffs."
+effect_id = &"close_instance"
+params = {"damage_mult": 0.9}
+
+[resource]
+script = ExtResource("1")
+id = &"blackcat_queen"
+display_name = "Queen of the Black Cat"
+title = "Boss"
+char_class = 2
+rarity = 3
+hp = 1300
+attack = 62
+defense = 42
+evasion = 20
+accuracy = 85
+speed = 52
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 120
+portrait_path = "res://Art/enemies/blackcat_queen.png"
+description = "Owns the best seat in the Black Cat, a following of simps and the power to close the instance on anyone who looks at her wrong."

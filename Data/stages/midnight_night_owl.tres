@@ -1,0 +1,61 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/no_mic_mime.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/instance_hopper.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/desktop_gremlin.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/philosopher.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/mirror_dweller.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/mute_sleeper.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/enemies/avatar_crasher.tres" id="11"]
+[ext_resource type="Resource" path="res://Data/enemies/world_creator.tres" id="12"]
+[ext_resource type="Resource" path="res://Data/enemies/night_owl.tres" id="13"]
+[ext_resource type="Texture2D" path="res://Art/backgrounds/TheMidnightBar.png" id="bg"]
+[ext_resource type="Resource" path="res://Data/equipment/glow_stick.tres" id="gear_glow_stick"]
+[ext_resource type="Resource" path="res://Data/equipment/pajama_hoodie.tres" id="gear_pajama_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/fbt_trackers.tres" id="gear_fbt_trackers"]
+[ext_resource type="Resource" path="res://Data/equipment/moonlit_rifle.tres" id="gear_moonlit_rifle"]
+[ext_resource type="Resource" path="res://Data/equipment/weighted_blanket.tres" id="gear_weighted_blanket"]
+[ext_resource type="Resource" path="res://Data/equipment/owl_pendant.tres" id="gear_owl_pendant"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("6"), ExtResource("7")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("9")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("10")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("11"), ExtResource("12")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("7"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("12"), ExtResource("9"), ExtResource("8")])
+
+[sub_resource type="Resource" id="wave_4"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("10"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("13"), ExtResource("8")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"midnight_night_owl"
+display_name = "The Night Owl's Table"
+description = "The best table in the Midnight Bar belongs to the Night Owl. He's on his fourth energy drink and he's not letting anyone else see the sunrise."
+chapter = 6
+number = 5
+recommended_level = 54
+background = ExtResource("bg")
+enemy_level = 12
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3"), SubResource("wave_4")])
+reward_money = 2400
+exp_reward = 640
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(6, 8), "gossip": Vector2i(4, 6), "snack": Vector2i(8, 11)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_glow_stick"), ExtResource("gear_pajama_hoodie"), ExtResource("gear_fbt_trackers"), ExtResource("gear_moonlit_rifle"), ExtResource("gear_weighted_blanket"), ExtResource("gear_owl_pendant")])
+drop_chance = 0.3
+star_goal = 0
+star_goal_value = 30

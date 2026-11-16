@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"no_mic_mime_passive"
+display_name = "Silent Treatment"
+description = "Never says a word and never seems to feel a thing: takes 15% less damage, and each attack has a 15% chance to also hit the rest of the target's row for 40% damage."
+effect_id = &"unfazed"
+params = {"cleave_chance": 0.15, "cleave_mult": 0.4, "damage_reduction": 0.15}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"no_mic_mime_active"
+display_name = "Invisible Wall"
+kind = 1
+description = "Mimes a wall in front of the team: taunts every enemy and gains +45% Defense for 3 turns."
+effect_id = &"guardian"
+params = {"defense": 0.45, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"no_mic_mime"
+display_name = "No-Mic Mime"
+char_class = 1
+rarity = 1
+hp = 190
+attack = 66
+defense = 40
+evasion = 30
+accuracy = 80
+speed = 70
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/no_mic_mime.png"
+description = "No mic, only gestures. You'll understand exactly what he means when he points at you and then at the door."

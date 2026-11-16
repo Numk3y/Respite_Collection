@@ -1,0 +1,51 @@
+[gd_resource type="Resource" script_class="StageData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/stage_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="2"]
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="3"]
+[ext_resource type="Script" path="res://Scripts/resources/wave_data.gd" id="4"]
+[ext_resource type="Resource" path="res://Data/enemies/quest3s_kid.tres" id="5"]
+[ext_resource type="Resource" path="res://Data/enemies/quest_pro_kid.tres" id="6"]
+[ext_resource type="Resource" path="res://Data/enemies/soundboard_kid.tres" id="7"]
+[ext_resource type="Resource" path="res://Data/enemies/fbt_kid.tres" id="8"]
+[ext_resource type="Resource" path="res://Data/enemies/lobby_leader_kid.tres" id="9"]
+[ext_resource type="Resource" path="res://Data/enemies/clip_farmer.tres" id="10"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_paw_gloves.tres" id="gear_cat_paw_gloves"]
+[ext_resource type="Resource" path="res://Data/equipment/black_cat_hoodie.tres" id="gear_black_cat_hoodie"]
+[ext_resource type="Resource" path="res://Data/equipment/cat_ear_headset.tres" id="gear_cat_ear_headset"]
+[ext_resource type="Resource" path="res://Data/equipment/nine_lives_blade.tres" id="gear_nine_lives_blade"]
+[ext_resource type="Resource" path="res://Data/equipment/velvet_bar_coat.tres" id="gear_velvet_bar_coat"]
+[ext_resource type="Resource" path="res://Data/equipment/lucky_bell_collar.tres" id="gear_lucky_bell_collar"]
+[sub_resource type="Resource" id="wave_1"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("5"), ExtResource("6"), ExtResource("6")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_2"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("8"), ExtResource("8")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("7")])
+
+[sub_resource type="Resource" id="wave_3"]
+script = ExtResource("4")
+enemy_vanguard = Array[ExtResource("2")]([ExtResource("9"), ExtResource("5")])
+enemy_rearguard = Array[ExtResource("2")]([ExtResource("7"), ExtResource("10")])
+is_boss = true
+
+[resource]
+script = ExtResource("1")
+id = &"blackcat_lobby"
+display_name = "BlackCat Quest Lobby"
+description = "The back room has become a Quest kid party. Their Lobby Leader won't lift a finger, but hurt him and his whole squad hits back."
+chapter = 4
+number = 4
+recommended_level = 30
+enemy_level = 10
+waves = Array[ExtResource("4")]([SubResource("wave_1"), SubResource("wave_2"), SubResource("wave_3")])
+reward_money = 650
+exp_reward = 280
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(3, 5), "gossip": Vector2i(2, 3), "snack": Vector2i(5, 8)})
+equipment_drops = Array[ExtResource("3")]([ExtResource("gear_cat_paw_gloves"), ExtResource("gear_black_cat_hoodie"), ExtResource("gear_cat_ear_headset"), ExtResource("gear_nine_lives_blade"), ExtResource("gear_velvet_bar_coat"), ExtResource("gear_lucky_bell_collar")])
+drop_chance = 0.18
+star_goal = 3
+star_goal_value = 2

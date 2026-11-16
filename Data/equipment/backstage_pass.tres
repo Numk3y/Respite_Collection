@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"backstage_pass"
+display_name = "Backstage Pass"
+slot = 2
+rarity = 3
+description = "Gets you anywhere in the club. Nobody asks where you got it."
+evasion = 12
+accuracy = 10
+speed = 9

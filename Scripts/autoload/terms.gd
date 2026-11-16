@@ -94,6 +94,7 @@ const TEXT := {
 	"settings_ui_sounds": "Interface sounds",
 	"settings_ui_sounds_tip": "Clicks, tab switches and popup sounds. Game sounds (battles, casino, recruiting) follow the Sound effects volume.",
 	# Account level up celebration (Scripts/ui/level_up_banner.gd)
+	"map_tab_short": "Ch.{number}",
 	"levelup_title": "ACCOUNT LEVEL UP!",
 	"levelup_levels": "{level}{from}  >>  {level}{to}",
 	"levelup_cost": "{team} cost limit {from} > {to}",
@@ -1013,7 +1014,22 @@ const CHAPTER_NAMES := {
 	1: "Poppy Street",
 	2: "Drinking Night",
 	3: "McDonald's",  # its background is named Mcdonald.png, so each 3-x map sets it directly
+	4: "BlackCat",  # Art/backgrounds/BlackCat.* and Audio/music/BlackCat.* are picked up when added
+	5: "Frenni's Night Club",  # files: FrennisNightClub.* (the apostrophe can be left out, see chapter_file_names)
+	6: "The Midnight Bar",  # files: TheMidnightBar.*
 }
+
+## File names a chapter's background or music can have: the name without spaces, with or without apostrophes
+## ("Frenni's Night Club" -> "Frenni'sNightClub", "FrennisNightClub"); [] for chapters without a name
+func chapter_file_names(chapter: int) -> Array[String]:
+	var out: Array[String] = []
+	var base := chapter_name(chapter).replace(" ", "")
+	if base.is_empty():
+		return out
+	out.append(base)
+	if base.contains("'"):
+		out.append(base.replace("'", ""))
+	return out
 
 ## "" for chapters without a name yet
 func chapter_name(chapter: int) -> String:

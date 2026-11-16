@@ -1,14 +1,4 @@
 ﻿{
-    "poppystreet.mp3":  {
-                            "size":  1965268,
-                            "lufs":  -34.9,
-                            "peak":  -21
-                        },
-    "drinkingnight.mp3":  {
-                              "size":  5889599,
-                              "lufs":  -9.8,
-                              "peak":  0.9
-                          },
     "homepage.mp3":  {
                          "size":  5024423,
                          "lufs":  -18.5,
@@ -18,5 +8,25 @@
                                 "size":  4321625,
                                 "lufs":  -23.3,
                                 "peak":  -7.9
-                            }
+                            },
+    "frennisnightclub.mp3":  {
+                                 "size":  2961068,
+                                 "lufs":  -11.7,
+                                 "peak":  -1.6
+                             },
+    "drinkingnight.mp3":  {
+                              "size":  5889599,
+                              "lufs":  -9.8,
+                              "peak":  0.9
+                          },
+    "poppystreet.mp3":  {
+                            "size":  1965268,
+                            "lufs":  -34.9,
+                            "peak":  -21
+                        },
+    "blackcat.mp3":  {
+                         "size":  4154233,
+                         "lufs":  -11.6,
+                         "peak":  0.6
+                     }
 }

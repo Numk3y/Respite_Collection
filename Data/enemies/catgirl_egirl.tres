@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"catgirl_egirl_passive"
+display_name = "Ring Light 2.0"
+description = "Each hit has an 18% chance to Blind the target with her upgraded ring light: -50% Accuracy for 2 turns."
+effect_id = &"blinding"
+params = {"accuracy": -0.5, "chance": 0.18, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"catgirl_egirl"
+display_name = "Catgirl E-Girl"
+char_class = 2
+rarity = 1
+hp = 90
+attack = 50
+defense = 18
+evasion = 30
+accuracy = 78
+speed = 60
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/catgirl_egirl.png"
+description = "Cat ears, ring light and a headset that meows when she unmutes. She upgraded everything since McDonald's."

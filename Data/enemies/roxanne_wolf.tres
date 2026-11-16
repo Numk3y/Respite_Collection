@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"roxanne_wolf_passive"
+display_name = "You're the Best"
+description = "Gains +1.2% Attack and +0.8% Speed for every 1% of HP lost. Below 35% she loses it and goes Berserk: +40% Attack, -20% Defense for 2 turns."
+effect_id = &"desperate_scramble"
+params = {"attack": 0.4, "attack_per_pct": 0.012, "cooldown": 10, "defense": -0.2, "speed_per_pct": 0.008, "threshold": 0.35, "turns": 2}
+
+[resource]
+script = ExtResource("1")
+id = &"roxanne_wolf"
+display_name = "Roxanne Wolf"
+char_class = 1
+rarity = 1
+hp = 160
+attack = 60
+defense = 28
+evasion = 26
+accuracy = 76
+speed = 72
+passive_skill = SubResource("passive")
+portrait_path = "res://Art/enemies/roxanne_wolf.png"
+description = "Fastest racer in the building and she needs everyone to know it. Hurting her pride only makes her more dangerous."

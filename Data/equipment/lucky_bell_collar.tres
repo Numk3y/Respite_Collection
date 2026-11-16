@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"lucky_bell_collar"
+display_name = "Lucky Bell Collar"
+slot = 2
+rarity = 3
+description = "Jingles every time you dodge, which is often."
+evasion = 12
+accuracy = 8
+speed = 8

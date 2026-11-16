@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"afk_legend_passive"
+display_name = "Logged In Since Launch"
+description = "Takes 20% less damage, and his attacks reach any enemy, back row included. Gets 3% stronger with every turn he takes, so don't let it drag on."
+effect_id = &"full_metal_kit"
+params = {"damage_reduction": 0.2, "enrage": 0.03}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"afk_legend_active"
+display_name = "Nobody Kicks Me"
+kind = 1
+description = "Taunts every enemy and gains +40% Defense for 3 turns."
+effect_id = &"guardian"
+params = {"defense": 0.4, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"afk_legend"
+display_name = "The AFK Legend"
+title = "Mini Boss"
+char_class = 0
+rarity = 2
+hp = 1150
+attack = 54
+defense = 66
+evasion = 10
+accuracy = 80
+speed = 46
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+portrait_path = "res://Art/enemies/afk_legend.png"
+description = "Nobody has ever seen him move. His account was made the day the game launched, and he's been in this bar ever since."
