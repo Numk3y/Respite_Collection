@@ -84,14 +84,16 @@ func resolve_finished() -> Array[Dictionary]:
 		if worker:  # skip shifts whose friend no longer exists
 			reports.append(_pay(c, uid, worker))
 	if not reports.is_empty():
+		GameState.add_stat("shifts_done", reports.size())  # daily and weekly missions
 		GameState.save_game()
 	return reports
 
 func _pay(c: CommissionData, uid: int, worker: CharacterData) -> Dictionary:
+	# Today's day-of-week bonus (Daily) can raise the pay or the Bond
 	var report := {
-		"commission": c.display_name, "worker": worker.display_name, "money": c.reward_money,
+		"commission": c.display_name, "worker": worker.display_name, "money": roundi(c.reward_money * Daily.bonus("shift_money")),
 		"materials": {}, "exp": c.exp_reward, "credit_cards": 0, "incident": "", "level": 0,
-		"friendship": GameState.BOND_PER_SHIFT, "bond": -1,  # every finished shift builds Bond
+		"friendship": roundi(GameState.BOND_PER_SHIFT * Daily.bonus("bond")), "bond": -1,  # every finished shift builds Bond
 	}
 	for key in c.reward_materials:
 		var range_v: Vector2i = c.reward_materials[key]

@@ -9,6 +9,11 @@
 //   POST /boss/submit   {attempt_id, damage}  -> {damage, hp, defeated}
 //   POST /boss/claim                          -> {rewards: [{event_id, boss_key, defeated, damage, rank, players}]}
 //                                                (defeated events the player hit at least once; each returned once)
+//   GET  /arena                                -> {me: {rating, wins, losses, rank, fights_left, has_team} | null, top}
+//   POST /arena/team    {team, power}          -> {ok}   (the player's defense team, as the game describes it)
+//   GET  /arena/opponents                      -> {opponents: [{player_id, name, rating, power, team}]}
+//   POST /arena/start   {opponent_id}          -> {fight_id, seed, fights_left}   ("bot" = a practice team the game makes)
+//   POST /arena/submit  {fight_id, win}        -> {rating, change, wins, losses}
 //   POST /admin/start   {boss_key, max_hp, hours, attempts_per_day, max_hit}   (header X-Admin-Key)
 //   POST /admin/end                                                            (header X-Admin-Key)
 //   POST /admin/set_hp  {max_hp}   new max HP for the running event; damage already dealt still counts (X-Admin-Key)
@@ -22,6 +27,16 @@ const ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;     // attempts reset at 00:00 UTC
 const NAME_MAX = 16;
 const LIST_SIZE = 10;                   // players on the leaderboard and hits in the recent feed
+
+// Arena: players fight each other's saved teams (the game plays the fight, like the boss), Elo ratings.
+const ARENA_FIGHTS_PER_DAY = 5;         // attacks per player per day (00:00 UTC, like boss attempts)
+const ARENA_START_RATING = 1000;
+const ARENA_K = 32;                     // rating swing for the attacker; the defender moves half as much
+const ARENA_BOT_K = 12;                 // practice bots move the rating less
+const ARENA_BOT_GAP = 100;              // a bot counts as this much below the attacker's rating
+const ARENA_TEAM_MAX = 6000;            // longest team description accepted (JSON characters)
+const ARENA_POOL = 12;                  // closest-rated players considered when picking opponents
+const ARENA_OPPONENTS = 3;
 
 export default {
 	async fetch(request, env) {
@@ -62,6 +77,16 @@ export default {
 				result = await room.submit(token, body.attempt_id, body.damage);
 			} else if (route === "POST /boss/claim") {
 				result = await room.claim(token);
+			} else if (route === "GET /arena") {
+				result = await room.arenaState(token);
+			} else if (route === "POST /arena/team") {
+				result = await room.arenaTeam(token, body.team, body.power);
+			} else if (route === "GET /arena/opponents") {
+				result = await room.arenaOpponents(token);
+			} else if (route === "POST /arena/start") {
+				result = await room.arenaStart(token, body.opponent_id);
+			} else if (route === "POST /arena/submit") {
+				result = await room.arenaSubmit(token, body.fight_id, body.win);
 			}
 		}
 		result ??= fail(404, "not_found");
@@ -108,6 +133,121 @@ export class BossRoom extends DurableObject {
 		if (!columns.includes("reached_at")) {
 			this.sql.exec("ALTER TABLE contributions ADD COLUMN reached_at INTEGER NOT NULL DEFAULT 0");
 		}
+		this.sql.exec(`CREATE TABLE IF NOT EXISTS arena (
+			player_id TEXT PRIMARY KEY, team TEXT NOT NULL, power INTEGER NOT NULL DEFAULT 0,
+			rating INTEGER NOT NULL DEFAULT ${ARENA_START_RATING}, wins INTEGER NOT NULL DEFAULT 0,
+			losses INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`);
+		this.sql.exec(`CREATE TABLE IF NOT EXISTS arena_fights (
+			id TEXT PRIMARY KEY, attacker TEXT NOT NULL, defender TEXT NOT NULL, day INTEGER NOT NULL,
+			seed INTEGER NOT NULL, issued_at INTEGER NOT NULL, win INTEGER, submitted_at INTEGER)`);
+		this.sql.exec("CREATE INDEX IF NOT EXISTS arena_fights_by_attacker ON arena_fights (attacker, day)");
+	}
+
+	// ───────── Arena ─────────
+
+	_arenaRow(playerId) {
+		return this.sql.exec("SELECT * FROM arena WHERE player_id = ?", playerId).toArray()[0] || null;
+	}
+
+	_arenaFightsLeft(playerId, now) {
+		const used = this.sql.exec("SELECT COUNT(*) AS n FROM arena_fights WHERE attacker = ? AND day = ?",
+			playerId, Math.floor(now / DAY_MS)).one().n;
+		return Math.max(ARENA_FIGHTS_PER_DAY - used, 0);
+	}
+
+	arenaState(token) {
+		const top = this.sql.exec(`SELECT p.name, a.rating, a.wins, a.losses FROM arena a JOIN players p ON p.id = a.player_id
+			ORDER BY a.rating DESC, a.updated_at ASC LIMIT ?`, LIST_SIZE).toArray();
+		const player = this._player(token);
+		let me = null;
+		if (player) {
+			const row = this._arenaRow(player.id);
+			const rating = row ? row.rating : ARENA_START_RATING;
+			me = {
+				name: player.name, rating, wins: row ? row.wins : 0, losses: row ? row.losses : 0, has_team: !!row,
+				rank: row ? this.sql.exec("SELECT COUNT(*) AS n FROM arena WHERE rating > ?", rating).one().n + 1 : 0,
+				fights_left: this._arenaFightsLeft(player.id, Date.now()),
+				fights_per_day: ARENA_FIGHTS_PER_DAY,
+			};
+		}
+		return ok({ me, top, players: this.sql.exec("SELECT COUNT(*) AS n FROM arena").one().n });
+	}
+
+	// The defense team other players will fight. The game sends it before every attack, so it stays current.
+	arenaTeam(token, team, power) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		const text = JSON.stringify(Array.isArray(team) ? team : []);
+		if (text.length > ARENA_TEAM_MAX) return fail(400, "team_too_big");
+		this.sql.exec(`INSERT INTO arena (player_id, team, power, updated_at) VALUES (?, ?, ?, ?)
+			ON CONFLICT (player_id) DO UPDATE SET team = excluded.team, power = excluded.power, updated_at = excluded.updated_at`,
+			player.id, text, Math.max(Math.floor(Number(power) || 0), 0), Date.now());
+		return ok({ ok: true });
+	}
+
+	// Up to ARENA_OPPONENTS players picked at random from the ARENA_POOL closest in rating (never yourself).
+	// The game fills any gap with practice bots.
+	arenaOpponents(token) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		const mine = this._arenaRow(player.id);
+		const rating = mine ? mine.rating : ARENA_START_RATING;
+		const pool = this.sql.exec(`SELECT a.player_id, p.name, a.rating, a.power, a.team FROM arena a
+			JOIN players p ON p.id = a.player_id WHERE a.player_id != ? ORDER BY ABS(a.rating - ?) ASC LIMIT ?`,
+			player.id, rating, ARENA_POOL).toArray();
+		for (let i = pool.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[pool[i], pool[j]] = [pool[j], pool[i]];
+		}
+		const opponents = pool.slice(0, ARENA_OPPONENTS).map((o) => ({
+			player_id: o.player_id, name: o.name, rating: o.rating, power: o.power, team: JSON.parse(o.team),
+		}));
+		opponents.sort((a, b) => b.rating - a.rating);
+		return ok({ opponents });
+	}
+
+	arenaStart(token, opponentId) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		if (!this._arenaRow(player.id)) return fail(409, "no_team");
+		const defender = String(opponentId || "");
+		if (defender !== "bot" && (defender === player.id || !this._arenaRow(defender))) return fail(404, "unknown_opponent");
+		const now = Date.now();
+		const left = this._arenaFightsLeft(player.id, now);
+		if (left <= 0) return fail(409, "no_fights_left");
+		const fightId = crypto.randomUUID();
+		const seed = crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff;
+		this.sql.exec("INSERT INTO arena_fights (id, attacker, defender, day, seed, issued_at) VALUES (?, ?, ?, ?, ?, ?)",
+			fightId, player.id, defender, Math.floor(now / DAY_MS), seed, now);
+		return ok({ fight_id: fightId, seed, fights_left: left - 1 });
+	}
+
+	arenaSubmit(token, fightId, win) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		const now = Date.now();
+		const fight = this.sql.exec("SELECT * FROM arena_fights WHERE id = ? AND attacker = ?",
+			String(fightId || ""), player.id).toArray()[0];
+		if (!fight) return fail(404, "unknown_fight");
+		if (fight.submitted_at !== null) return fail(409, "already_submitted");
+		if (now - fight.issued_at > ATTEMPT_TTL_MS) return fail(409, "fight_expired");
+		const won = win === true || win === 1 || win === "true";
+		this.sql.exec("UPDATE arena_fights SET win = ?, submitted_at = ? WHERE id = ?", won ? 1 : 0, now, fight.id);
+
+		const me = this._arenaRow(player.id);
+		const bot = fight.defender === "bot";
+		const them = bot ? null : this._arenaRow(fight.defender);
+		const theirRating = them ? them.rating : me.rating - ARENA_BOT_GAP;
+		const expected = 1 / (1 + Math.pow(10, (theirRating - me.rating) / 400));
+		const k = bot ? ARENA_BOT_K : ARENA_K;
+		const change = Math.round(k * ((won ? 1 : 0) - expected));
+		const rating = Math.max(me.rating + change, 0);
+		this.sql.exec(`UPDATE arena SET rating = ?, wins = wins + ?, losses = losses + ? WHERE player_id = ?`,
+			rating, won ? 1 : 0, won ? 0 : 1, player.id);
+		if (them) {
+			this.sql.exec("UPDATE arena SET rating = MAX(rating - ?, 0) WHERE player_id = ?", Math.round(change / 2), them.player_id);
+		}
+		return ok({ rating, change, wins: me.wins + (won ? 1 : 0), losses: me.losses + (won ? 0 : 1) });
 	}
 
 	// 1 = most damage; equal damage goes to whoever reached it first

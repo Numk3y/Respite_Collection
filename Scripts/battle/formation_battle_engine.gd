@@ -145,6 +145,21 @@ const ULTIMATE_EFFECTS := {
 	# Shura: taunts for N own actions. Every attack that lands on him in that time has `deflect_chance` to be turned
 	# back: he takes nothing and the attacker takes the hit instead (reduced by the attacker's own Defense).
 	&"deflection_counter": {"turns": 2, "deflect_chance": 0.5},
+	# KeizoYama: for N own actions, enemy rearguard single-target attacks must hit the caster (a back-row-only taunt,
+	# like Mid Fingered but with no counter). Every attack that lands on him in that time has `deflect_chance` to be
+	# redirected: he takes nothing and a random living enemy front-row unit takes `deflect_mult` x the hit (reduced by
+	# its own Defense). With no enemy front row left, the attacker takes it.
+	&"i_love_gyatt": {"turns": 2, "deflect_chance": 0.35, "deflect_mult": 1.5},
+	# Ghostily: taunts every enemy and takes `damage_reduction` less damage for N own actions. If he's knocked out while
+	# it lasts, he explodes: every living enemy (both rows) takes `explode_pct` of his max HP, reduced by its Defense.
+	&"overdrive": {"turns": 3, "damage_reduction": 0.2, "explode_pct": 0.5},
+	# Noel: a long cast. The caster spends its next `charge_turns` own actions channelling (no attack, no gauge), then
+	# its following action hits every living enemy (both rows) for `damage_mult` x Attack each (not reduced like a
+	# Mage's spread).
+	&"i_am_atomic": {"charge_turns": 1, "damage_mult": 3.0},
+	# Femsui: `lashes` whip lashes, each at a random attackable enemy (the front row, or the back row once the front is
+	# down; ignores taunt) for `damage_mult` x Attack. Each lash that lands heals the caster `heal_pct` of max HP.
+	&"whip_crack": {"lashes": 4, "damage_mult": 0.5, "heal_pct": 0.03},
 	# Dreamy: every living front-row ally gets a one-time shield that stops the next enemy attack that would land on it
 	# (no damage, nothing that hit would have caused) or the next debuff/sleep/bleed/poison/Provoke put on it by
 	# someone else, whichever comes first. It stays until used.
@@ -284,6 +299,19 @@ const PASSIVE_EFFECTS := {
 	# x this unit's Attack. Its own basic attacks deal only `damage_mult` x Attack, and `lifesteal` of the damage each
 	# one deals heals the living ally lowest on HP (share of max HP, itself included).
 	&"brotschneidemaschine": {"heal_mult": 0.2, "damage_mult": 0.6, "lifesteal": 1.0},
+	# Every time an enemy damages this unit and it survives (attacks, area hits, assists and counters alike; not bleeds
+	# or poison), it heals `heal_pct` of its max HP, or `back_row_heal_pct` if the enemy fights from the back row
+	&"infinite_backshot": {"heal_pct": 0.04, "back_row_heal_pct": 0.03},
+	# Starts every battle with +`hp` max HP (and full HP to match) and +`defense` base Defense
+	&"moa": {"hp": 0.2, "defense": 0.2},
+	# A pet Capybara Marks a random living enemy (any row). Basic attacks only ever hit the Marked enemy (ignoring rows
+	# and taunts; a Mage loses its spread) for `damage_mult` x Attack, and every hit on it deals +`mark_bonus`
+	# damage. When the Marked enemy falls (to anyone), a random other living enemy takes `splash_pct` of the fallen
+	# one's max HP (reduced by Defense), and the Mark moves to a new random enemy.
+	&"capybara": {"damage_mult": 1.0, "mark_bonus": 0.25, "splash_pct": 0.15},
+	# Every own hit that lands on an enemy (Ultimate hits too) adds a Fluff stack of +`attack_per_stack` Attack, up to
+	# `max_stacks`. Taking a heavy hit from an enemy (HEAVY_HIT_PCT of max HP) drops every stack.
+	&"cotton_tail": {"attack_per_stack": 0.05, "max_stacks": 5},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -463,6 +491,12 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 			# Passive Proud Father: 650 children's worth of extra HP
 			if not passive.is_empty() and passive.effect == &"proud_father":
 				max_hp = roundi(max_hp * (1.0 + float(PASSIVE_EFFECTS[&"proud_father"].merged(passive.params, true).hp)))
+			# Passive M.O.A: he's just a Moa, built big and armoured
+			var defense := float(s.defense)
+			if not passive.is_empty() and passive.effect == &"moa":
+				var moa: Dictionary = PASSIVE_EFFECTS[&"moa"].merged(passive.params, true)
+				max_hp = roundi(max_hp * (1.0 + float(moa.hp)))
+				defense *= 1.0 + float(moa.defense)
 			units.append({
 				"index": units.size(),
 				"name": u.name,
@@ -473,7 +507,7 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"cls": cls,
 				"hp": max_hp,
 				"max_hp": max_hp,
-				"base": {"attack": float(s.attack), "defense": float(s.defense), "evasion": float(s.evasion),
+				"base": {"attack": float(s.attack), "defense": defense, "evasion": float(s.evasion),
 					"accuracy": float(s.accuracy), "speed": maxf(float(s.speed), 1.0)},
 				"timer": 0.0,
 				"energy": 0,
@@ -514,6 +548,8 @@ func _buff_names(u: Dictionary) -> PackedStringArray:
 		names.append(Terms.t("buff_mind_rot", {"stacks": u.rot_stacks}))
 	if int(u.get("nimble", 0)) > 0:
 		names.append(Terms.t("buff_nimble", {"stacks": u.nimble}))
+	if int(u.get("fluff", 0)) > 0:
+		names.append(Terms.t("buff_fluff", {"stacks": u.fluff}))
 	if _alive(u) and _hidden(u):
 		names.append(Terms.t("buff_background_npc"))
 	var six := _passive_params(u, &"six_seven")
@@ -575,7 +611,7 @@ func _targetable(units: Array[Dictionary], side: int, back_row: bool = false) ->
 ## it further down (Defense -15 with +50% -> -7.5), so they always mean the same thing.
 func _stat(u: Dictionary, stat: String) -> float:
 	var mult := 1.0 + _scramble_bonus(u, stat) + _drunk_bonus(u, stat) + _bow_wow_bonus(u, stat) + _group_bonus(u, stat) \
-		+ _horse_bonus(u, stat) + _enrage_bonus(u, stat) + _nimble_bonus(u, stat)
+		+ _horse_bonus(u, stat) + _enrage_bonus(u, stat) + _nimble_bonus(u, stat) + _fluff_bonus(u, stat)
 	for b in u.buffs:
 		mult += b.get("mods", {}).get(stat, 0.0)
 	var base: float = u.base[stat]
@@ -714,6 +750,13 @@ func _nimble_bonus(u: Dictionary, stat: String) -> float:
 	var p := _passive_params(u, &"nimble_body")
 	return 0.0 if p.is_empty() else int(u.nimble) * float(p.speed_per_stack)
 
+## Passive Cotton Tail: +Attack for every Fluff stack
+func _fluff_bonus(u: Dictionary, stat: String) -> float:
+	if stat != "attack" or int(u.get("fluff", 0)) <= 0:
+		return 0.0
+	var p := _passive_params(u, &"cotton_tail")
+	return 0.0 if p.is_empty() else int(u.fluff) * float(p.attack_per_stack)
+
 ## Passive Nimble Body: each own attack builds speed (twice as fast during Double Time)
 func _add_nimble_stack(u: Dictionary) -> void:
 	var p := _passive_params(u, &"nimble_body")
@@ -747,6 +790,9 @@ func _bleed_tick(u: Dictionary, event: Dictionary, record: bool) -> void:
 			event.lines.append(Terms.t("log_poison" if poison else "log_bleed", {"name": u.name, "amount": amount}))
 			if u.hp <= 0:
 				event.lines.append(Terms.t("log_down", {"target": u.name}))
+		_check_overdrive(u, event, record, _run.rng)
+		if u.hp <= 0:
+			_check_capybara(u, event, record, _run.rng)
 		if poison:
 			_heal(source, roundi((before - u.hp) * float(b.lifesteal)), event, record)
 
@@ -809,6 +855,22 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 				actor.sleep_immune = int(sleep.get("immune_after", 0))
 				if record:
 					event.lines.append(Terms.t(sleep.get("wake_log", "log_wake_plain"), {"name": actor.name}))
+	elif _has_flag(actor, "atomic"):
+		# Ultimate I AM ATOMIC: channel for a while (no attack, no gauge), then let it go on the whole enemy team
+		var atomic := _flag_buff(actor, "atomic")
+		if int(atomic.charge) > 0:
+			atomic.charge -= 1
+			event.kind = "charge"
+			if record:
+				event.lines.append(Terms.t("log_atomic_charge", {"name": actor.name, "skill": atomic.name}))
+		else:
+			actor.buffs.erase(atomic)
+			event.get_or_add("atomic_blast", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_atomic_blast", {"name": actor.name, "skill": atomic.name}))
+			var mult_atomic := float(atomic.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
+				event.hits.append(_attack(actor, target, rng, record, event, mult_atomic))
 	elif not actor.ultimate.is_empty() and actor.energy >= actor.energy_max and _may_fire_ultimate(actor):
 		event.kind = "ultimate"
 		event.skill = actor.ultimate.name
@@ -928,6 +990,34 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			# Taunt and harden; when it runs out, _tick_buffs sets off the shockwave
 			_add_buff(actor, {"id": &"ccp", "name": skill_name, "mods": {"defense": float(p.defense)}, "taunt": true,
 				"remaining": int(p.turns), "counts": "actions", "explode_pct": float(p.explode_pct)})
+		&"whip_crack":
+			if record:
+				event.lines.append(Terms.t("log_whip_crack", {"name": actor.name}))
+			event.get_or_add("whip_crack", []).append(actor.index)
+			var mult_lash := float(p.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
+			for i in int(p.lashes):
+				var foes := _targetable(_units, 1 - actor.side)
+				if foes.is_empty():
+					break
+				var hit := _attack(actor, foes[rng.randi_range(0, foes.size() - 1)], rng, record, event, mult_lash)
+				event.hits.append(hit)
+				if hit.hit:
+					_heal(actor, roundi(actor.max_hp * float(p.heal_pct)), event, record)
+		&"i_am_atomic":
+			# _take_turn spends the next charge_turns actions channelling, then fires the blast
+			_add_buff(actor, {"id": &"atomic", "name": skill_name, "atomic": true, "charge": int(p.charge_turns),
+				"damage_mult": float(p.damage_mult), "remaining": 1, "counts": "never"})
+			event.get_or_add("atomic", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_atomic", {"name": actor.name}))
+		&"overdrive":
+			# Taunt and soften hits; _check_overdrive sets off the blast if he falls before it runs out
+			_add_buff(actor, {"id": &"overdrive", "name": skill_name, "taunt": true,
+				"damage_reduction": float(p.damage_reduction), "death_explode_pct": float(p.explode_pct),
+				"remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("overdrive", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_overdrive", {"name": actor.name}))
 		&"lets_go_winnie":
 			# Heals now; _take_turn spends the next N actions healing while the buff lasts
 			_heal_lowest(actor, int(p.targets), roundi(_stat(actor, "attack") * float(p.heal_mult)), event, record)
@@ -1070,6 +1160,13 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			event.get_or_add("deflection_counter", []).append(actor.index)
 			if record:
 				event.lines.append(Terms.t("log_deflection_counter", {"name": actor.name}))
+		&"i_love_gyatt":
+			_add_buff(actor, {"id": &"i_love_gyatt", "name": skill_name, "taunt_back_row": true, "deflect": true,
+				"deflect_chance": float(p.deflect_chance), "deflect_front": true, "deflect_mult": float(p.deflect_mult),
+				"remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("i_love_gyatt", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_i_love_gyatt", {"name": actor.name}))
 		&"nein":
 			if record:
 				event.lines.append(Terms.t("log_nein", {"name": actor.name}))
@@ -1223,6 +1320,62 @@ func _explode(u: Dictionary, pct: float, event: Dictionary, record: bool, rng: R
 			event.lines.append(Terms.t("log_hit", {"attacker": u.name, "target": target.name, "damage": dealt}))
 		_apply_damage(u, target, dealt, event, record, rng)
 
+## Ultimate Overdrive: knocked out while the buff lasts, the unit blows up. Every living enemy takes a share of its
+## max HP (reduced by Defense). Shown as burst damage numbers, since the unit itself is already down.
+func _check_overdrive(u: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	var buff := _flag_buff(u, "death_explode_pct")
+	if buff.is_empty() or u.hp > 0:
+		return
+	u.buffs.erase(buff)  # one blast only
+	event.get_or_add("overdrive_boom", []).append(u.index)
+	if record:
+		event.lines.append(Terms.t("log_overdrive_boom", {"name": u.name, "skill": buff.name}))
+	for target in _units.filter(func(t): return t.side != u.side and _reachable(t)):
+		var dealt := _mitigate(u.max_hp * float(buff.death_explode_pct), target)
+		event.drains.append({"target": target.index, "amount": dealt, "blast": true})
+		if record:
+			event.lines.append(Terms.t("log_hit", {"attacker": u.name, "target": target.name, "damage": dealt}))
+		_apply_damage(u, target, dealt, event, record, rng)
+
+## Passive Capybara!: the enemy `u` has Marked, placing a new Mark on a random living enemy (any row) if there's none
+## standing. {} if no enemy is left to Mark.
+func _capy_mark(u: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> Dictionary:
+	var current := int(u.get("capy_mark", -1))
+	if current >= 0 and _reachable(_units[current]):
+		return _units[current]
+	var foes := _units.filter(func(t): return t.side != u.side and _reachable(t))
+	if foes.is_empty():
+		u.capy_mark = -1
+		return {}
+	var marked: Dictionary = foes[rng.randi_range(0, foes.size() - 1)]
+	u.capy_mark = marked.index
+	_add_buff(marked, {"id": StringName("capy_mark_%d" % u.index), "name": Terms.t("buff_capy_mark"), "capy_mark": true,
+		"remaining": 1, "counts": "never"})
+	event.get_or_add("capy_marked", []).append(marked.index)
+	if record:
+		event.lines.append(Terms.t("log_capy_mark", {"name": u.name, "target": marked.name, "skill": u.passive.name}))
+	return marked
+
+## Passive Capybara!: a Marked enemy fell, so the Capybara takes it out on another enemy and the Mark moves on
+func _check_capybara(fallen: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	for u in _units:
+		var p := _passive_params(u, &"capybara")
+		if p.is_empty() or u.side == fallen.side or int(u.get("capy_mark", -1)) != fallen.index:
+			continue
+		u.capy_mark = -1
+		var others := _units.filter(func(t): return t.side == fallen.side and _reachable(t))
+		if not others.is_empty():
+			var target: Dictionary = others[rng.randi_range(0, others.size() - 1)]
+			var dealt := _mitigate(fallen.max_hp * float(p.splash_pct), target)
+			event.drains.append({"target": target.index, "amount": dealt, "blast": true})
+			event.get_or_add("capy_splash", []).append(target.index)
+			if record:
+				event.lines.append(Terms.t("log_capy_splash", {"name": u.name, "target": target.name, "damage": dealt,
+					"skill": u.passive.name}))
+			_apply_damage(u, target, dealt, event, record, rng)
+		if _alive(u):
+			_capy_mark(u, event, record, rng)
+
 ## Waking from a Power Nap: full HP, debuffs gone, and an Attack buff
 func _wake(u: Dictionary, wake: Dictionary, event: Dictionary, record: bool) -> void:
 	_heal(u, u.max_hp - u.hp, event, record)
@@ -1338,6 +1491,12 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 	target.hp = maxi(target.hp - dealt, 0)
 	_count_damage(attacker, target, before - target.hp)
 	# Passive Nimble Body: getting tagged by an enemy kills the momentum
+	# Passive Cotton Tail: a heavy hit knocks the fluff flat
+	if attacker.side != target.side and int(target.get("fluff", 0)) > 0 and dealt >= target.max_hp * HEAVY_HIT_PCT:
+		target.fluff = 0
+		event.get_or_add("fluff_reset", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_fluff_reset", {"name": target.name}))
 	if attacker.side != target.side and dealt > 0 and int(target.get("nimble", 0)) > 0:
 		target.nimble = 0
 		if record:
@@ -1346,6 +1505,7 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 	_check_counter(target, attacker, event, record, rng)
 	_check_mid_finger(target, attacker, before - target.hp, event, record, rng)
 	if target.hp > 0:
+		_check_backshot(target, attacker, event, record)
 		_check_second_wind(target, event, record)
 		_check_blender(target, event, record, rng)
 		_check_its_raw(target, attacker, event, record, rng)
@@ -1364,6 +1524,8 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	if record:
 		event.lines.append(Terms.t("log_down", {"target": target.name}))
+	_check_overdrive(target, event, record, rng)
+	_check_capybara(target, event, record, rng)
 	_check_spotted(target, event, record)
 	_check_shi(target, event, record, rng)
 	_check_until_next_time(attacker, event, record)
@@ -1383,6 +1545,14 @@ func _check_second_wind(u: Dictionary, event: Dictionary, record: bool) -> void:
 	_heal(u, ceili(u.max_hp * float(p.heal_to)) - u.hp, event, record)
 	_add_buff(u, {"id": &"second_wind", "name": u.passive.name, "mods": {"defense": float(p.defense)},
 		"remaining": int(p.turns), "counts": "actions"})
+
+## Passive Infinite Backshot: every enemy hit the unit survives heals it a share of its max HP (less from the back row)
+func _check_backshot(u: Dictionary, attacker: Dictionary, event: Dictionary, record: bool) -> void:
+	var p := _passive_params(u, &"infinite_backshot")
+	if p.is_empty() or attacker.side == u.side:
+		return
+	var pct := float(p.heal_pct if attacker.vanguard else p.back_row_heal_pct)
+	_heal(u, roundi(u.max_hp * pct), event, record)
 
 ## Passive One Above All: a random living rearguard ally hits back at whoever damaged this unit.
 ## Shown like an assist (the ally leaps in), flagged "counter" for its own banner.
@@ -1407,7 +1577,7 @@ func _check_counter(u: Dictionary, attacker: Dictionary, event: Dictionary, reco
 ## heals a share of the damage it took. Shown like a counter assist.
 func _check_mid_finger(u: Dictionary, attacker: Dictionary, taken: int, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
 	var buff := _flag_buff(u, "taunt_back_row")
-	if buff.is_empty() or _countering or u.hp <= 0 or attacker.side == u.side or attacker.hp <= 0:
+	if buff.is_empty() or not buff.has("counter_heal") or _countering or u.hp <= 0 or attacker.side == u.side or attacker.hp <= 0:
 		return
 	_heal(u, roundi(taken * float(buff.counter_heal)), event, record)
 	var dealt := _mitigate(_raw_damage(u, rng), attacker)
@@ -1514,6 +1684,13 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 			event.lines.append(Terms.t("log_all_enemies", {"attacker": actor.name}))
 	elif not _locked_target(actor).is_empty():
 		targets = [_locked_target(actor)]  # Hat Trick: every shot goes to the locked enemy
+	elif not _passive_params(actor, &"capybara").is_empty():
+		# Passive Capybara!: only ever the Marked enemy
+		var marked := _capy_mark(actor, event, record, rng)
+		if marked.is_empty():
+			return
+		targets = [marked]
+		mult = float(_passive_params(actor, &"capybara").damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
 	else:
 		var foes := _targetable(units, enemy_side, _has_flag(actor, "back_row"))
 		if not _passive_params(actor, &"full_metal_kit").is_empty():
@@ -1669,6 +1846,8 @@ func _mitigate(raw: float, target: Dictionary) -> int:
 	var kit := _passive_params(target, &"full_metal_kit")
 	if not kit.is_empty():
 		damage *= 1.0 - float(kit.damage_reduction)
+	# e.g. Ultimate Overdrive: a buff that softens every hit
+	damage *= 1.0 - float(_flag_buff(target, "damage_reduction").get("damage_reduction", 0.0))
 	return maxi(roundi(damage), 1)
 
 func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, record: bool, event: Dictionary, mult: float = 1.0) -> Dictionary:
@@ -1691,6 +1870,10 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		return hit
 
 	var raw := _raw_damage(actor, rng) * mult * _nearsighted_mult(actor, target, rng, event)
+	# Passive Capybara!: the Marked enemy takes extra damage from its marker (Ultimate hits too)
+	var capy := _passive_params(actor, &"capybara")
+	if not capy.is_empty() and int(actor.get("capy_mark", -1)) == target.index:
+		raw *= 1.0 + float(capy.mark_bonus)
 	hit.crit = rng.randf() < CRIT_CHANCE
 	if hit.crit:
 		raw *= CRIT_MULT
@@ -1722,6 +1905,10 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		var key := "log_crit" if hit.crit else "log_hit"
 		event.lines.append(Terms.t(key, {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
+	# Passive Cotton Tail: every hit that lands fluffs up another stack of Attack
+	var cotton := _passive_params(actor, &"cotton_tail")
+	if not cotton.is_empty() and target.side != actor.side and actor.hp > 0:
+		actor.fluff = mini(int(actor.get("fluff", 0)) + 1, int(cotton.max_stacks))
 	_add_hat(actor, target, event, record, rng)
 	_check_back_row_splash(actor, target, mult, rng, record, event)
 	# Passive Bow Wow: the hit opens a bleed (one per attacker; a new hit refreshes it)
@@ -1841,14 +2028,20 @@ func _try_deflect(actor: Dictionary, target: Dictionary, raw: float, rng: Random
 	var buff := _flag_buff(target, "deflect")
 	if buff.is_empty() or actor.side == target.side or rng.randf() >= float(buff.deflect_chance):
 		return false
-	var dealt := _mitigate(raw, actor)
+	# Ultimate I LOVE GYATT: the blow goes to a random enemy front-row unit instead (the attacker if none is left)
+	var victim := actor
+	if buff.get("deflect_front", false):
+		var front := _units.filter(func(t): return t.side == actor.side and t.vanguard and _reachable(t))
+		if not front.is_empty():
+			victim = front[rng.randi_range(0, front.size() - 1)]
+	var dealt := _mitigate(raw * float(buff.get("deflect_mult", 1.0)), victim)
 	event.get_or_add("deflected", []).append(target.index)
-	event.assists.append({"actor": target.index, "target": actor.index, "damage": dealt, "counter": true})
+	event.assists.append({"actor": target.index, "target": victim.index, "damage": dealt, "counter": true})
 	if record:
-		event.lines.append(Terms.t("log_deflect", {"name": target.name, "target": actor.name, "damage": dealt, "skill": buff.name}))
+		event.lines.append(Terms.t("log_deflect", {"name": target.name, "target": victim.name, "damage": dealt, "skill": buff.name}))
 	var was_countering := _countering
 	_countering = true
-	_apply_damage(target, actor, dealt, event, record, rng)
+	_apply_damage(target, victim, dealt, event, record, rng)
 	_countering = was_countering
 	return true
 

@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"femsui_passive"
+display_name = "Cotton picker"
+description = "Every hit Femsui lands adds a Fluff stack: +5% Attack, up to 5 stacks. Taking a heavy hit knocks every stack off."
+effect_id = &"cotton_tail"
+params = {"attack_per_stack": 0.05, "max_stacks": 5}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"femsui_active"
+display_name = "Whip master"
+kind = 1
+description = "Femsui lashes out 4 times at random front-row enemies for 50% damage each. Every lash that lands heals Femsui 3% of max HP."
+effect_id = &"whip_crack"
+params = {"lashes": 4, "damage_mult": 0.5, "heal_pct": 0.03}
+
+[resource]
+script = ExtResource("1")
+id = &"femsui"
+display_name = "Femsui"
+char_class = 4
+rarity = 2
+hp = 120
+attack = 125
+defense = 20
+evasion = 20
+accuracy = 75
+speed = 85
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 150
+description = "A fluffy fox with a whip and a very short temper."
+is_starter = false

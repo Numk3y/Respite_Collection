@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="GachaPool" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/gacha_pool.gd" id="1"]
+[ext_resource type="Resource" path="res://Data/pools/common_pool.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"weekly_pickup"
+display_name = "Weekly Pick Up"
+theme_color = Color(0.92, 0.25, 0.55, 1)
+cost = 150
+pity_threshold = 80
+weight_r = 82
+weight_sr = 14
+weight_ssr = 4
+rate_up_share = 0.5
+weekly_rotation = true
+entries_from = ExtResource("2")

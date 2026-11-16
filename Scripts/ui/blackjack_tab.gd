@@ -207,6 +207,7 @@ func _deal() -> void:
 		_result.add_theme_color_override("font_color", UITheme.TEXT_DIM)
 		return
 	_staked = _bet_row.bet
+	GameState.add_stat("casino_games")  # daily and weekly missions
 	_game = BlackjackGame.new()
 	_hole_card = null
 	for row in [_dealer_cards, _player_cards]:
@@ -216,6 +217,7 @@ func _deal() -> void:
 	_busy = true
 	_set_phase_playing()
 	_say("deal")
+	Sound.play("chips")
 
 	await _give(true, true)
 	await _give(false, true)
@@ -244,6 +246,7 @@ func _give(to_player: bool, face_up: bool) -> PlayingCard:
 	node.rotation = deg_to_rad(-25.0)
 	node.scale = Vector2(0.8, 0.8)
 	_deck.pulse()
+	Sound.play("card")
 	var tw := node.create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(node, "position", landing, DEAL_TIME * 1.6)
 	tw.tween_property(node, "rotation", 0.0, DEAL_TIME * 1.6)
@@ -279,6 +282,7 @@ func _double() -> void:
 	if _busy or _game.player.size() != 2 or not GameState.try_spend(_staked):
 		return
 	_staked *= 2
+	Sound.play("chips")
 	_busy = true
 	_refresh_controls()
 	await _give(true, true)
@@ -298,6 +302,7 @@ func _reveal_hole() -> void:
 	if _hole_card == null or _hole_card.face_up:
 		return
 	var tw := _hole_card.create_tween()
+	Sound.play("flip")
 	tw.tween_property(_hole_card, "scale:x", 0.0, 0.12)
 	tw.tween_callback(_hole_card.set_face_up.bind(true))
 	tw.tween_property(_hole_card, "scale:x", 1.0, 0.12)
@@ -315,6 +320,12 @@ func _finish() -> void:
 	var color := UITheme.GOLD if outcome in WIN_RESULTS else (UITheme.TEXT if outcome == "push" else Color("#F87171"))
 	_result.add_theme_color_override("font_color", color)
 	_celebrate(outcome)
+	if outcome in WIN_RESULTS:
+		Sound.play("win", 2.0 if outcome == "player_blackjack" else 0.0)
+	elif outcome != "push":
+		Sound.play("lose")
+	else:
+		Sound.play("chips")  # the bet slides back
 	if outcome == "player_blackjack":
 		_say("blackjack")
 	elif outcome in WIN_RESULTS:

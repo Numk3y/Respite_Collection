@@ -458,7 +458,7 @@ func _action(text: String, primary: bool) -> Button:
 func _upgrade(uid: int) -> void:
 	_pop_selected = true
 	if GameState.upgrade_equipment(uid):
-		Sound.play("crystal", -2.0, 1.3)
+		Sound.play("forge")
 	else:
 		_pop_selected = false
 
@@ -484,11 +484,15 @@ func _confirm_scrap(uid: int) -> void:
 		return
 	# Plain R +0 pieces go straight away; anything rarer or upgraded asks first
 	if e.rarity <= CharacterData.Rarity.R and GameState.get_plus(uid) == 0:
-		GameState.scrap_equipment(uid)
+		_scrap(uid)
 		return
 	_confirm(Terms.t("workshop_scrap_title"), Terms.t("workshop_scrap_text", {
 		"item": CharacterDetail.gear_name(e, GameState.get_plus(uid)), "p": GameState.scrap_value(uid)}),
-		func(): GameState.scrap_equipment(uid))
+		_scrap.bind(uid))
+
+func _scrap(uid: int) -> void:
+	if GameState.scrap_equipment(uid) >= 0:
+		Sound.play("scrap")
 
 func _confirm_scrap_spare() -> void:
 	var spare := _spare_r()
@@ -503,6 +507,7 @@ func _confirm_scrap_spare() -> void:
 func _scrap_all(uids: Array[int]) -> void:
 	for uid in uids:
 		GameState.scrap_equipment(uid)
+	Sound.play("scrap")
 
 func _confirm(title: String, text: String, action: Callable) -> void:
 	var dialog := ConfirmationDialog.new()

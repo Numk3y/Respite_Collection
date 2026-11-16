@@ -11,6 +11,7 @@ var stages: Array[StageData] = []
 var commissions: Array[CommissionData] = []
 var events: Dictionary[StringName, EventData] = {}  # id -> event; Data/events/<id>/event.tres
 var combos: Dictionary[StringName, ComboData] = {}  # id -> combo attack; Data/combos/*.tres
+var synergies: Array[SynergyData] = []  # team synergies; Data/synergies/*.tres (friend groups first)
 
 func _ready() -> void:
 	for res in _load_all("res://Data/characters/"):
@@ -31,6 +32,16 @@ func _ready() -> void:
 		var p := res as GachaPool
 		if p:
 			pools.append(p)
+	for p in pools:
+		if p.entries_from and p.entries_from != p:
+			p.entries = p.entries_from.entries  # the same lineup (weekly banners share the Common Pool's)
+	# Beginner pool first, then the always-open pools by file name, weekly banners last
+	pools.sort_custom(func(a: GachaPool, b: GachaPool) -> bool:
+		if a.beginner != b.beginner:
+			return a.beginner
+		if a.weekly_rotation != b.weekly_rotation:
+			return b.weekly_rotation
+		return String(a.id) < String(b.id))
 	for res in _load_all("res://Data/stages/"):
 		var s := res as StageData
 		if s:
@@ -55,6 +66,17 @@ func _ready() -> void:
 			continue
 		events[ev.id] = ev
 	_load_combos()
+	for res in _load_all("res://Data/synergies/"):
+		var syn := res as SynergyData
+		if syn and syn.enabled:
+			if syn.tier_bonuses.size() != syn.tiers.size():
+				push_warning("Synergy %s has %d tiers but %d tier bonuses." % [syn.id, syn.tiers.size(), syn.tier_bonuses.size()])
+			for m in syn.members:
+				if not characters.has(m):
+					push_warning("Synergy %s: unknown member '%s'." % [syn.id, m])
+			synergies.append(syn)
+	synergies.sort_custom(func(a: SynergyData, b: SynergyData) -> bool:
+		return a.rule < b.rule if a.rule != b.rule else String(a.id) < String(b.id))
 	# Maps outside the story first, then story order: 1-1 ... 1-5, 2-1 ...
 	stages.sort_custom(func(a, b): return a.chapter < b.chapter or (a.chapter == b.chapter and a.number < b.number))
 

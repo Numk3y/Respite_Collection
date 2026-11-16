@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"underdogs"
+display_name = "Underdogs"
+description = "Three or more R friends in the team: everyone gets +6% HP, Attack, Defense and Speed."
+rule = 2
+rarity = 1
+tiers = Array[int]([3])
+tier_bonuses = Array[Dictionary]([{"hp": 0.06, "attack": 0.06, "defense": 0.06, "speed": 0.06}])
+target = 1

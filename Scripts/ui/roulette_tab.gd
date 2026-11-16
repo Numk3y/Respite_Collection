@@ -246,6 +246,7 @@ func _start() -> void:
 		_result.add_theme_color_override("font_color", UITheme.TEXT_DIM)
 		return
 	_staked = _bet_row.bet
+	GameState.add_stat("casino_games")  # daily and weekly missions
 	_game = RouletteGame.new(_bullets)
 	_cylinder.reset()
 	_log.text = ""
@@ -256,7 +257,9 @@ func _start() -> void:
 	_busy = true
 	_set_phase_playing()
 	_say("load")
+	Sound.play("chips")
 	# Spin the cylinder before the first pull
+	Sound.play("cylinder")
 	_cylinder.spin = TAU * 3
 	var tw := _cylinder.create_tween()
 	tw.tween_property(_cylinder, "spin", 0.0, 1.1).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -301,6 +304,7 @@ func _fire(by_player: bool) -> void:
 	var seat_center := _fx.to_local_center(seat, seat.size)
 	if _game.pull():
 		_cylinder.set_state(chamber, RevolverCylinder.State.FIRED)
+		Sound.play("gunshot")
 		_log.text = Terms.t("rr_bang")
 		_log.add_theme_color_override("font_color", Color("#F87171"))
 		_turn_label.text = ""
@@ -318,12 +322,14 @@ func _fire(by_player: bool) -> void:
 		_finish(not by_player)
 		return
 	_cylinder.set_state(chamber, RevolverCylinder.State.EMPTY)
+	Sound.play("dry_click")
 	_log.text = Terms.t("rr_click_you" if by_player else "rr_click_host")
 	_log.add_theme_color_override("font_color", UITheme.TEXT)
 	_fx.smoke(_gun_hammer(), 0.35)
 	_fx.relief(seat_center)
 	_pop_text(seat_center, Terms.t("rr_safe"), Color("#86efac"), 30)
 	var turn := _cylinder.create_tween()
+	Sound.play("click", -6.0, 0.7)  # the cylinder advancing one chamber
 	turn.tween_property(_cylinder, "spin", -_game.position * TAU / RouletteGame.CHAMBERS, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await turn.finished
 	await create_tween().tween_interval(0.35).finished
@@ -338,6 +344,7 @@ func _finish(won: bool) -> void:
 	var paid := RouletteGame.payout(won, _staked, _game.bullets)
 	if paid > 0:
 		GameState.add_money(paid)
+	Sound.play("win" if won else "lose")
 	if won:
 		_result.text = Terms.t("rr_result_win", {"amount": paid - _staked})
 		_result.add_theme_color_override("font_color", UITheme.GOLD)

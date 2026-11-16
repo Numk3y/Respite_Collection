@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CommissionData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/mirror_sleep.tres" id="3"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/vip_donation.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"overnight_sleep_stream"
+display_name = "Overnight Sleep Stream"
+description = "Fall asleep in full-body tracking while chat watches all night. Start it before bed and collect in the morning. Nobody knows why people pay for this."
+duration_seconds = 28800
+status_tag = 1
+required_class = -1
+required_stat = ""
+required_value = 0
+reward_money = 5000
+reward_materials = Dictionary[String, Vector2i]({"snack": Vector2i(4, 8), "coffee": Vector2i(2, 4), "gossip": Vector2i(2, 4)})
+exp_reward = 700
+credit_card_chance = 0.06
+incident_chance = 0.35
+incidents = Array[ExtResource("2")]([ExtResource("3"), ExtResource("4")])

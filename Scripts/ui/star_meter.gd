@@ -28,9 +28,12 @@ func pop(new_stars: Array) -> void:
 	if not _scales.has(0.0):
 		return  # nothing new (an empty tween would complain)
 	var t := create_tween()
+	var n := 0
 	for i in earned.size():
 		if _scales[i] == 0.0:
+			t.tween_callback(Sound.play.bind("star", -2.0, 1.0 + 0.12 * n))  # each new star a step higher
 			t.tween_method(_set_scale.bind(i), 0.0, 1.0, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			n += 1
 	queue_redraw()
 
 func _set_scale(value: float, i: int) -> void:

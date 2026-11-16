@@ -500,6 +500,9 @@ func _animate(event: Dictionary) -> void:
 	elif event.kind == "idle":
 		_float_text(actor, Terms.t("battle_idle"), Color("#fde68a"), 30)
 		await _flash(actor.body, Color(1.6, 1.3, 0.6), 2)
+	elif event.kind == "charge":
+		_float_text(actor, Terms.t("battle_atomic_charge"), Color("#c084fc"), 30)
+		await _flash(actor.body, Color(1.3, 0.9, 1.8), 2)
 	elif event.kind == "heal":
 		_float_text(actor, Terms.t("battle_heal_turn"), Color("#86efac"), 30)
 		await _flash(actor.body, Color(0.8, 1.7, 1.0), 2)
@@ -555,7 +558,8 @@ func _animate(event: Dictionary) -> void:
 	for target in event.get("blinded", []):
 		_float_text(_views[target], Terms.t("battle_blinded"), Color("#fde047"), 60)
 	for drain in event.get("drains", []):
-		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#84cc16") if drain.get("poison", false) else Color("#c084fc")
+		var drain_color := Color("#dc2626") if drain.get("bleed", false) else Color("#84cc16") if drain.get("poison", false) \
+			else Color("#fb923c") if drain.get("blast", false) else Color("#c084fc")
 		Sound.play("hit", -7.0, 0.8)  # a softer, duller hit for damage over time
 		_fx.hit(_center(_views[drain.target]), drain_color)
 		_float_text(_views[drain.target], "-%d" % drain.amount, drain_color, 30)
@@ -618,6 +622,26 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[ally], Terms.t("battle_bread"), Color("#d6a35c"), 34)
 	for shura in event.get("deflection_counter", []):
 		_float_text(_views[shura], Terms.t("battle_deflection_counter"), Color("#f87171"), 60, 30)
+	for yama in event.get("i_love_gyatt", []):
+		_float_text(_views[yama], Terms.t("battle_i_love_gyatt"), Color("#f472b6"), 60, 30)
+	for fox in event.get("whip_crack", []):
+		_float_text(_views[fox], Terms.t("battle_whip_crack"), Color("#fb923c"), 60, 30)
+	for fox in event.get("fluff_reset", []):
+		_float_text(_views[fox], Terms.t("battle_fluff_reset"), Color("#e5e7eb"), 34)
+	for noel in event.get("atomic", []):
+		_float_text(_views[noel], Terms.t("battle_atomic"), Color("#c084fc"), 60, 30)
+	for noel in event.get("atomic_blast", []):
+		_float_text(_views[noel], Terms.t("battle_atomic_blast"), Color("#f0abfc"), 60, 36)
+		_fx.shake(_arena, 10.0, 0.4)
+	for target in event.get("capy_marked", []):
+		_float_text(_views[target], Terms.t("battle_capy_mark"), Color("#d6a35c"), 60)
+	for target in event.get("capy_splash", []):
+		_float_text(_views[target], Terms.t("battle_capy_splash"), Color("#d6a35c"), 60, 30)
+	for ghost in event.get("overdrive", []):
+		_float_text(_views[ghost], Terms.t("battle_overdrive"), Color("#38bdf8"), 60, 30)
+	for ghost in event.get("overdrive_boom", []):
+		_float_text(_views[ghost], Terms.t("battle_overdrive_boom"), Color("#fb923c"), 60, 36)
+		_fx.shake(_arena, 10.0, 0.4)
 	for target in event.get("provoked", []):
 		_float_text(_views[target], Terms.t("battle_provoked"), Color("#ef4444"), 60)
 	for target in event.get("nearsighted_spot", []):
@@ -899,6 +923,8 @@ func _finish() -> void:
 			lines.append(Terms.t("battle_new_stars", {"amount": report.star_cards, "card_word": Terms.credit_card_word(report.star_cards)}))
 		if report.card_drops > 0:
 			lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
+		if not String(report.get("daily_bonus", "")).is_empty():
+			lines.append(report.daily_bonus)
 	elif report.card_drops > 0:  # beat the animatronics, then lost a later wave: their card still counts
 		lines.append(Terms.t("battle_defeat_partial"))
 		lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))

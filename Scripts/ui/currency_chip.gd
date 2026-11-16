@@ -18,6 +18,7 @@ var value_label: Label
 
 func _init(kind: String, tooltip: String) -> void:
 	var color: Color = KIND_COLORS.get(kind, UITheme.CYAN)
+	_color = color
 	var style := UITheme.box(Color(UITheme.INSET, 0.85), Color(color, 0.55), 1, 18)
 	style.content_margin_left = 4
 	style.content_margin_right = 14
@@ -40,8 +41,54 @@ func _init(kind: String, tooltip: String) -> void:
 	value_label.add_theme_color_override("font_color", color.lightened(0.35) if kind == "credit_card" else UITheme.TEXT)
 	row.add_child(value_label)
 
+var _amount := -1  # -1 until the first set_amount (which shows the value straight away)
+var _shown := 0.0
+var _count_tween: Tween
+var _color := UITheme.CYAN
+
+## Shows a new amount. A change after the first counts up or down to it, the chip flashes, and the difference
+## floats off it ("+600" rising in gold, "-150" sinking in red)
 func set_amount(amount: int) -> void:
-	value_label.text = _group(amount)
+	if _amount < 0 or not is_inside_tree():
+		_amount = amount
+		_shown = amount
+		value_label.text = _group(amount)
+		return
+	if amount == _amount:
+		return
+	var delta := amount - _amount
+	_amount = amount
+	if _count_tween:
+		_count_tween.kill()
+	_count_tween = create_tween()
+	_count_tween.tween_method(_show_value, _shown, float(amount), 0.45).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	modulate = Color(1.45, 1.4, 1.2) if delta > 0 else Color(1.35, 0.8, 0.8)
+	create_tween().tween_property(self, "modulate", Color.WHITE, 0.5)
+	_float_delta(delta)
+
+func _show_value(value: float) -> void:
+	_shown = value
+	value_label.text = _group(roundi(value))
+
+## The change as a little label drifting away from the chip (top level, so the header's container can't move it)
+func _float_delta(delta: int) -> void:
+	var label := Label.new()
+	label.text = ("+" if delta > 0 else "-") + _group(absi(delta))
+	label.top_level = true
+	label.z_index = 50
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", _color.lightened(0.3) if delta > 0 else Color("#f87171"))
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	label.add_theme_constant_override("outline_size", 5)
+	add_child(label)
+	label.reset_size()
+	var start := global_position + Vector2(size.x - label.size.x - 10.0, size.y - 4.0)
+	label.global_position = start
+	var t := label.create_tween().set_parallel()
+	t.tween_property(label, "global_position:y", start.y + (14.0 if delta > 0 else 22.0), 0.9).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.tween_property(label, "modulate:a", 0.0, 0.5).set_delay(0.6)
+	t.chain().tween_callback(label.queue_free)
 
 ## 12500 -> "12,500"
 static func _group(n: int) -> String:

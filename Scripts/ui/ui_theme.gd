@@ -206,10 +206,14 @@ static func glow_box(bg: Color, radius: int, margin: float = -1, glow: Color = C
 	s.shadow_size = 6
 	return s
 
-## A small rounded status chip, e.g. [In World]
-static func tag(text: String, color: Color) -> PanelContainer:
+## A small rounded status chip, e.g. [In World]. `solid` fills it (white text on the colour) so it reads over
+## pictures, e.g. "In Team" on a portrait.
+static func tag(text: String, color: Color, solid: bool = false) -> PanelContainer:
 	var chip := PanelContainer.new()
-	var style := box(Color(color, 0.15), color, 1, 10)
+	var style := box(color.darkened(0.25) if solid else Color(color, 0.15), color.lightened(0.3) if solid else color, 1, 10)
+	if solid:
+		style.shadow_color = Color(0, 0, 0, 0.55)
+		style.shadow_size = 4
 	style.content_margin_left = 8
 	style.content_margin_right = 8
 	style.content_margin_top = 2
@@ -218,7 +222,7 @@ static func tag(text: String, color: Color) -> PanelContainer:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_font_size_override("font_size", 13)
-	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_color", Color.WHITE if solid else color)
 	chip.add_child(label)
 	return chip
 

@@ -11,7 +11,8 @@ const BUS := &"SFX"
 const DEFAULT_VOLUME := 0.7
 const VOICES := 12
 const MIN_GAP_MS := 50  # the same sound at most this often (one hit sound for a multi-target attack, not five)
-const STEADY := ["ultimate", "wave", "jumpscare", "victory", "defeat"]  # never pitch-varied
+const STEADY := ["ultimate", "wave", "jumpscare", "victory", "defeat", "charge", "reveal_sr", "reveal_ssr",
+	"account_up", "level_up", "win", "lose", "cylinder", "gunshot", "star", "tab"]  # never pitch-varied
 const BATTLE := ["swing", "shoot", "hit", "crit", "miss", "heal", "knockout", "ultimate", "wave", "jumpscare", "puke",
 	"victory", "defeat"]
 

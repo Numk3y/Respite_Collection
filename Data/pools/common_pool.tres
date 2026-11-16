@@ -23,6 +23,10 @@
 [ext_resource type="Resource" path="res://Data/characters/globox.tres" id="26"]
 [ext_resource type="Resource" path="res://Data/characters/quinnester.tres" id="27"]
 [ext_resource type="Resource" path="res://Data/characters/storm.tres" id="28"]
+[ext_resource type="Resource" path="res://Data/characters/keizoyama.tres" id="29"]
+[ext_resource type="Resource" path="res://Data/characters/ghostily.tres" id="30"]
+[ext_resource type="Resource" path="res://Data/characters/noel.tres" id="31"]
+[ext_resource type="Resource" path="res://Data/characters/femsui.tres" id="32"]
 
 [sub_resource type="Resource" id="entry_gobby"]
 script = ExtResource("2")
@@ -108,6 +112,22 @@ character = ExtResource("27")
 script = ExtResource("2")
 character = ExtResource("28")
 
+[sub_resource type="Resource" id="entry_keizoyama"]
+script = ExtResource("2")
+character = ExtResource("29")
+
+[sub_resource type="Resource" id="entry_ghostily"]
+script = ExtResource("2")
+character = ExtResource("30")
+
+[sub_resource type="Resource" id="entry_noel"]
+script = ExtResource("2")
+character = ExtResource("31")
+
+[sub_resource type="Resource" id="entry_femsui"]
+script = ExtResource("2")
+character = ExtResource("32")
+
 [resource]
 script = ExtResource("1")
 id = &"common_pool"
@@ -117,4 +137,4 @@ cost = 150
 weight_r = 83
 weight_sr = 14
 weight_ssr = 3
-entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki"), SubResource("entry_shadowkittay"), SubResource("entry_globox"), SubResource("entry_quinnester"), SubResource("entry_storm")])
+entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki"), SubResource("entry_shadowkittay"), SubResource("entry_globox"), SubResource("entry_quinnester"), SubResource("entry_storm"), SubResource("entry_keizoyama"), SubResource("entry_ghostily"), SubResource("entry_noel"), SubResource("entry_femsui")])

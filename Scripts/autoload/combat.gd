@@ -13,6 +13,7 @@ var _rng := RandomNumberGenerator.new()
 var _live_stage: StageData  # the map of the live battle in progress (see start_sortie)
 var _live_animatronics := false
 var _live_exp_mult := 1.0  # share of the usual friend and account EXP this battle pays (Auto Run: AUTO_RUN_EXP)
+var _live_arena := false  # the live battle is an Arena fight (start_arena): Arena pays it, no map rewards
 
 func _ready() -> void:
 	_rng.randomize()
@@ -21,6 +22,7 @@ func _ready() -> void:
 ## player can fire Ultimates by hand (`manual`). Returns the unit snapshot. Rewards come from finish_sortie().
 func start_sortie(stage: StageData, manual: bool, exp_mult: float = 1.0) -> Array:
 	_live_exp_mult = exp_mult
+	_live_arena = false
 	var enemies := stage.get_enemy_team()
 	_live_animatronics = false
 	if enemies.waves.size() > ANIMATRONIC_WAVE_INDEX and (force_animatronics or _rng.randf() < GameState.ANIMATRONIC_WAVE_CHANCE):
@@ -34,6 +36,15 @@ func start_sortie(stage: StageData, manual: bool, exp_mult: float = 1.0) -> Arra
 		team.force_combos = true
 	return engine.begin(team, enemies, _rng, true, manual)
 
+## Starts a live Arena fight against another player's team (Arena.enemy_team). Same flow as start_sortie:
+## next_event() to play it, finish_sortie() at the end, which pays the Arena reward instead of map rewards.
+func start_arena(enemy: Dictionary, manual: bool) -> Array:
+	_live_exp_mult = 1.0
+	_live_animatronics = false
+	_live_stage = null
+	_live_arena = true
+	return engine.begin(GameState.get_battle_team(), {"waves": [enemy]}, _rng, true, manual)
+
 ## The live battle's next event, or {} once it's over
 func next_event() -> Dictionary:
 	return engine.step()
@@ -44,7 +55,22 @@ func finish_sortie() -> Dictionary:
 		engine.step()  # nothing should be left, but never hand out rewards for half a battle
 	var result := engine.result()
 	GameState.add_stat("manual_ultimates", int(result.get("manual_ultimates", 0)))  # beginner missions
+	if _live_arena:
+		_live_arena = false
+		result.report = {"arena": true, "won": result.win, "money": Arena.grant(result.win), "materials": {}, "drops": [],
+			"exp": 0, "level_ups": [], "first_clear_cards": 0, "card_drops": 0, "bond_ups": [], "daily_bonus": ""}
+		GameState.add_stat("battles")
+		if result.win:
+			GameState.add_stat("wins")
+		GameState.save_game()
+		return result
 	result.report = _grant_rewards(_live_stage, result)
+	# Daily and weekly missions
+	GameState.add_stat("battles")
+	if result.win:
+		GameState.add_stat("wins")
+		if result.report.stars[1]:  # ★2 = nobody knocked out
+			GameState.add_stat("flawless_wins")
 	# Beating the animatronics pays out even if a later wave is lost
 	if _live_animatronics and result.waves_cleared > ANIMATRONIC_WAVE_INDEX:
 		result.report.card_drops = GameState.ANIMATRONIC_CREDIT_CARDS
@@ -118,17 +144,20 @@ func _grant_rewards(stage: StageData, result: Dictionary) -> Dictionary:
 		"bond_ups": [],  # [{name, bond}] friends whose Bond level rose
 		"account_exp": 0, "account_first_clear": false, "account_level_up": 0,  # account_level_up: the new account level, 0 if it didn't rise
 		"stars": [false, false, false], "new_stars": [false, false, false], "star_cards": 0,  # see GameState.stars_for
+		"daily_bonus": "",  # today's day-of-week bonus line (Daily) when it raised this battle's rewards
 	}
-	# Fighting together builds Bond, a little even in a loss
+	# Fighting together builds Bond, a little even in a loss (doubled on Bond day)
+	var bond_gain := roundi((GameState.BOND_PER_WIN if won else GameState.BOND_PER_LOSS) * Daily.bonus("bond"))
 	for uid in GameState.team_members():
-		var bond := GameState.add_friendship(uid, GameState.BOND_PER_WIN if won else GameState.BOND_PER_LOSS)
+		var bond := GameState.add_friendship(uid, bond_gain)
 		if bond > 0:
 			report.bond_ups.append({"name": GameState.get_character(uid).display_name, "bond": bond})
 	if not won:
 		return report
 
-	report.money = stage.reward_money
-	report.exp = _scaled_exp(stage.exp_reward)
+	report.daily_bonus = Daily.battle_bonus_line()
+	report.money = roundi(stage.reward_money * Daily.bonus("money"))
+	report.exp = _scaled_exp(roundi(stage.exp_reward * Daily.bonus("exp")))  # friend EXP only, never account EXP
 	# Every friend in the team earns EXP, including any who were knocked out
 	for uid in GameState.team_members():
 		if GameState.add_exp(uid, report.exp) > 0:
@@ -154,8 +183,8 @@ func _grant_rewards(stage: StageData, result: Dictionary) -> Dictionary:
 		report.account_level_up = GameState.get_account_level()
 	for key in stage.reward_materials:
 		var range_v: Vector2i = stage.reward_materials[key]
-		report.materials[key] = _rng.randi_range(range_v.x, range_v.y)
-	if not stage.equipment_drops.is_empty() and _rng.randf() < stage.drop_chance:
+		report.materials[key] = roundi(_rng.randi_range(range_v.x, range_v.y) * Daily.bonus("materials"))
+	if not stage.equipment_drops.is_empty() and _rng.randf() < minf(stage.drop_chance * Daily.bonus("drops"), 1.0):
 		var drop := _roll_drop(stage.equipment_drops)
 		if drop:
 			GameState.add_equipment(drop)

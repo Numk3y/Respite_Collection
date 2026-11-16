@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bald_squad"
+display_name = "Bald Squad"
+description = "Bald Ramsay, Baldguy and BaldVegeta, together again. 2: Attack +5%. All 3: Attack +12%."
+rule = 0
+members = Array[StringName]([&"bald_ramsay", &"baldguy", &"baldvegeta"])
+tiers = Array[int]([2, 3])
+tier_bonuses = Array[Dictionary]([{"attack": 0.05}, {"attack": 0.12}])
+target = 0

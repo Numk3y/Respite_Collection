@@ -172,7 +172,7 @@ func open(results: Array[Dictionary], notes: Array[String]) -> void:
 	blink.tween_property(_hint, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
 	modulate.a = 0.0
 	create_tween().tween_property(self, "modulate:a", 1.0, 0.25)
-	Sound.prepare(["crystal", "ultimate"])
+	Sound.prepare(["crystal", "ultimate", "charge", "reveal_sr", "reveal_ssr"])
 	if results.size() > 1:
 		_start_lineup()
 	else:
@@ -343,8 +343,11 @@ func _next() -> void:
 	# The crystal drops in
 	_step.tween_property(_crystal, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_step.parallel().tween_property(_crystal, "position:y", center.y - _crystal.size.y / 2.0, 0.3)
-	# Light streams in while it charges up (an SSR shakes the screen as it builds)
-	_step.tween_callback(func(): _stream.emitting = true)
+	# Light streams in while it charges up (an SSR shakes the screen as it builds). The 1 s "charge" riser is
+	# pitched so it ends right at the burst: lower and longer for an SSR.
+	_step.tween_callback(func():
+		_stream.emitting = true
+		Sound.play("charge", -4.0, 1.0 / charge))
 	_step.tween_property(_crystal, "charge", 1.0, charge).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_step.parallel().tween_property(_bg, "intensity", 1.0, charge)
 	if ssr:
@@ -373,6 +376,13 @@ func _next() -> void:
 func _burst(r: Dictionary) -> void:
 	var color: Color = COLORS.get(int(r.rarity), Color.WHITE)
 	var center := size / 2.0
+	match int(r.rarity):
+		CharacterData.Rarity.SSR:
+			Sound.play("reveal_ssr")
+		CharacterData.Rarity.SR:
+			Sound.play("reveal_sr")
+		_:
+			Sound.play("crystal", 0.0, 0.85)
 	_crystal.modulate.a = 0.0
 	_fx.hit(center, color, true)
 	_fx._ring(center, Color.WHITE, 260.0, 0.5)

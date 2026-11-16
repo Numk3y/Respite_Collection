@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"astolfo_brothers"
+display_name = "Astolfo Brothers"
+description = "Spijette and Gobby back each other up. Both: Attack and Defense +5%."
+rule = 0
+members = Array[StringName]([&"spijette", &"gobby"])
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"attack": 0.05, "defense": 0.05}])
+target = 0

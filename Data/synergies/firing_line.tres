@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"firing_line"
+display_name = "Firing Line"
+description = "Two or more Marksmen: every Marksman gets Accuracy +10% and Attack +4%."
+rule = 1
+classes = Array[int]([3])
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"accuracy": 0.1, "attack": 0.04}])
+target = 0

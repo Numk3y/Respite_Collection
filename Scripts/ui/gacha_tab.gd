@@ -12,6 +12,7 @@ var _pool_buttons: Dictionary = {}  # index in DB.pools -> Button (a used-up Beg
 var _balance_label: Label
 var _banner: GachaBanner
 var _pull_buttons: Dictionary = {}  # count -> Button
+var _free_button: Button  # the free daily recruit
 var _message: Label
 
 func _ready() -> void:
@@ -51,6 +52,15 @@ func _build_top_bar() -> void:
 	bar.add_child(_balance_label)
 
 func _build_pull_buttons() -> void:
+	# The free daily recruit (Daily.free_pull_available) sits first while it's waiting
+	_free_button = Button.new()
+	_free_button.custom_minimum_size = Vector2(180, 62)
+	_free_button.add_theme_font_size_override("font_size", 17)
+	_free_button.theme_type_variation = &"PrimaryButton"
+	_free_button.add_theme_color_override("font_color", Color("#3b0764"))
+	_free_button.text = Terms.t("gacha_free_daily")
+	_free_button.pressed.connect(_on_free_pull)
+	_banner.button_row.add_child(_free_button)
 	for count in [1, 10]:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(210, 62)
@@ -59,6 +69,7 @@ func _build_pull_buttons() -> void:
 		button.pressed.connect(_on_pull.bind(count))
 		_banner.button_row.add_child(button)
 		_pull_buttons[count] = button
+	Daily.changed.connect(_refresh_money)
 	_message = _centered_label("", 15)
 	add_child(_message)
 
@@ -89,6 +100,10 @@ func _select_pool(index: int) -> void:
 	_pool = DB.pools[index]
 	_pool_buttons[index].button_pressed = true
 	var rates := Terms.t("gacha_beginner_rates") if _pool.beginner else Terms.t("gacha_rates", {"rates": _rate_text(_pool)})
+	if not _pool.beginner and _pool.rate_up_share > 0.0 and not _pool.featured_characters().is_empty():
+		rates += "\n" + Terms.t("gacha_rate_up", {"share": roundi(_pool.rate_up_share * 100)})
+	if _pool.weekly_rotation:
+		rates += "\n" + Terms.t("gacha_weekly_ends", {"time": Daily.format_time(GachaPool.seconds_to_next_week())})
 	_banner.set_pool(_pool, rates)
 	_message.text = ""
 	_refresh_money()
@@ -97,6 +112,7 @@ func _refresh_money() -> void:
 	_balance_label.text = Terms.t("gacha_balance", {"amount": GameState.get_money(), "cards": GameState.get_credit_cards()})
 	if _pool == null:
 		return
+	_free_button.visible = not _pool.beginner and Daily.free_pull_available()
 	if _pool.beginner:
 		_pull_buttons[10].visible = false
 		_pull_buttons[1].text = Terms.t("gacha_beginner_pull")
@@ -200,6 +216,17 @@ func _rate_text(pool: GachaPool) -> String:
 		if weights.get(rarity, 0) > 0:
 			parts.append("%s %.1f%%" % [Terms.rarity_name(rarity), weights[rarity] * 100.0 / total])
 	return " · ".join(parts)
+
+## Today's free recruit from the banner on show
+func _on_free_pull() -> void:
+	if _pool == null or _pool.beginner:
+		return
+	var results := Gacha.pull(_pool, 1, true)
+	if results.is_empty():
+		return
+	_message.text = ""
+	_refresh_money()
+	_show_results(results)
 
 func _on_pull(count: int) -> void:
 	if _pool.beginner:

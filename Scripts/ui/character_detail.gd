@@ -404,7 +404,8 @@ func _page_level() -> Control:
 		if levels == 1:
 			button.theme_type_variation = &"PrimaryButton"
 		button.pressed.connect(func():
-			GameState.buy_levels(_uid, levels)
+			if GameState.buy_levels(_uid, levels):
+				Sound.play("level_up")
 			_refresh(true))
 		buy.add_child(button)
 		_buy_buttons[levels] = button
@@ -430,7 +431,11 @@ func _page_level() -> Control:
 			button.custom_minimum_size = Vector2(84, 36)
 			button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			button.pressed.connect(func():
-				GameState.feed_material(_uid, key, count)
+				var gained := GameState.feed_material(_uid, key, count)
+				if gained > 0:
+					Sound.play("level_up")
+				elif gained == 0:
+					Sound.play("coin", -4.0, 0.8)  # fed, EXP up, no new level yet
 				_refresh(true))
 			row.add_child(button)
 			ui[count] = button
@@ -456,7 +461,8 @@ func _page_gear() -> Control:
 		option.focus_mode = Control.FOCUS_NONE
 		_fill_equipment_options(option, slot_key)
 		option.item_selected.connect(func(index: int):
-			GameState.equip(_uid, slot_key, option.get_item_metadata(index))
+			if GameState.equip(_uid, slot_key, option.get_item_metadata(index)):
+				Sound.play("equip")
 			_refresh())
 		row.add_child(option)
 	page.add_child(_section(Terms.t("details_stats")))

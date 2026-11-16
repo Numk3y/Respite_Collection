@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"noel_passive"
+display_name = "Capybara !"
+description = "Noel's pet Capybara Marks a random enemy. Until it falls, Noel only attacks the Marked enemy and deals 25% more damage to it. When the Marked enemy falls, the Capybara hits a random enemy for 15% of the fallen one's max HP, and the Mark moves to another enemy."
+effect_id = &"capybara"
+params = {"damage_mult": 1.0, "mark_bonus": 0.25, "splash_pct": 0.15}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"noel_active"
+display_name = "I AM ATOMIC"
+kind = 1
+description = "Noel begins a long cast and stays idle on the next turn. On the turn after that, Noel deals 300% damage to the whole enemy team."
+effect_id = &"i_am_atomic"
+params = {"charge_turns": 1, "damage_mult": 3.0}
+
+[resource]
+script = ExtResource("1")
+id = &"noel"
+display_name = "Noel"
+char_class = 2
+rarity = 2
+hp = 80
+attack = 80
+defense = 35
+evasion = 20
+accuracy = 85
+speed = 55
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+ultimate_max = 100
+description = "A mage with a capybara who picks the target. Noel just does what the capybara says."
+is_starter = false

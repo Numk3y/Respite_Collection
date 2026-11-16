@@ -31,6 +31,11 @@ var _menu_pictures := {}  # file name -> Texture2D, so refreshing the tiles does
 var _coach: Coach  # the tutorial's speech bubble, above every screen
 var _auto_run := {}  # the Auto Run series in progress (see _start_auto_run); {} when none
 var _mirror_room: MirrorRoom
+var _toast: Toast  # "Daily mission complete" notices over every screen
+var _known_account_level := 0  # to notice account level ups (celebrated when the player is back Home)
+var _level_up_from := 0  # the level before an uncelebrated level up; 0 = none waiting
+var _badge_dot: Texture2D  # the red dot shown on tabs with something waiting
+var _daily_prompted_day := -1  # the Daily window opens by itself once a day, on the first visit Home
 # Team
 var _team_tab: TeamTab
 # Friends tab (the friend list)
@@ -47,16 +52,51 @@ func _ready() -> void:
 	_coach = Coach.new()
 	add_child(_coach)
 	_coach.skip_pressed.connect(_skip_tutorial)
+	_toast = Toast.new()
+	add_child(_toast)
+	Daily.mission_completed.connect(func(mission: String, points: int):
+		_toast.show_toast(Terms.t("daily_toast_title"), Terms.t("daily_toast_points", {"title": mission, "points": points})))
+	Daily.weekly_completed.connect(func(mission: String):
+		_toast.show_toast(Terms.t("daily_toast_weekly"), mission, Color("#fb7185")))
+	Daily.achievement_reached.connect(func(goal: String):
+		_toast.show_toast(Terms.t("ach_toast"), goal, UITheme.CYAN_BRIGHT))
+	Daily.changed.connect(_refresh_home_tiles)  # the check-in can unlock the free daily recruit, etc.
 	GameState.stats_changed.connect(_refresh_beginner)
 	GameState.money_changed.connect(func(_value): _refresh_status())
 	GameState.materials_changed.connect(_refresh_status)
 	GameState.credit_cards_changed.connect(func(_value): _refresh_status())
 	GameState.account_changed.connect(_refresh_status)
 	GameState.roster_changed.connect(_queue_roster_refresh)
+	_known_account_level = GameState.get_account_level()
+	GameState.account_changed.connect(_on_account_changed)
+	# Build the interface sounds now (one per frame), so the first click or level up never hitches
+	Sound.prepare(["click", "hover", "tab", "open", "error", "claim", "toast", "coin", "level_up", "account_up"])
+	# Shifts finish while the game is open: keep the tabs' red dots current
+	var badge_timer := Timer.new()
+	badge_timer.wait_time = 5.0
+	badge_timer.autostart = true
+	badge_timer.timeout.connect(_refresh_tab_badges)
+	add_child(badge_timer)
 	if GameState.data.starter_chosen:
 		_show_main()
 	else:
 		_show_starter_select()
+
+## Keyboard: 1-9 jump to the Home screen's tabs; Esc leaves the map screen
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or key.ctrl_pressed or key.alt_pressed or key.meta_pressed:
+		return
+	if is_instance_valid(_tabs) and _tabs.is_visible_in_tree() and key.keycode >= KEY_1 and key.keycode <= KEY_9:
+		var index := key.keycode - KEY_1
+		if index < _tabs.get_tab_count():
+			_tabs.current_tab = index
+			get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_ESCAPE and is_instance_valid(_screen):
+		var maps := _screen.find_children("*", "", true, false).filter(func(n): return n is MapSelect)
+		if not maps.is_empty():
+			maps[0].back_pressed.emit()
+			get_viewport().set_input_as_handled()
 
 func _notification(what: int) -> void:
 	match what:
@@ -83,6 +123,9 @@ func _new_screen() -> VBoxContainer:
 		margin.add_theme_constant_override("margin_" + side, 16)
 	add_child(margin)
 	_screen = margin
+	# Every new screen fades in instead of popping
+	margin.modulate.a = 0.0
+	margin.create_tween().tween_property(margin, "modulate:a", 1.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 12)
 	margin.add_child(root)
@@ -256,6 +299,10 @@ func _show_main(tab: int = 0) -> void:
 	tabs.add_child(casino)
 	tabs.add_child(_build_collection_tab())
 	tabs.add_child(_build_event_tab())
+	var arena := ArenaTab.new()
+	arena.name = Terms.term("tab_arena")
+	arena.fight_pressed.connect(_start_arena)
+	tabs.add_child(arena)
 	tabs.current_tab = tab
 	# Home: the lobby picture fills the whole window, blurred and darkened behind the menus; the Mirror Room
 	# card shows the same picture sharp and in full colour (Scripts/ui/mirror_room.gd)
@@ -270,7 +317,60 @@ func _show_main(tab: int = 0) -> void:
 	var reports := Commissions.resolve_finished()
 	if not reports.is_empty():
 		CommissionTab.show_reports(self, reports)
+	elif tab == 0:
+		_prompt_daily()
 	_collect_event_rewards()
+	_fetch_arena_state()
+	# A level up from the battle just played gets its celebration now that the player is back
+	if _level_up_from > 0:
+		var banner := LevelUpBanner.new()
+		add_child(banner)
+		banner.open(_level_up_from, GameState.get_account_level())
+		_level_up_from = 0
+
+func _on_account_changed() -> void:
+	var level := GameState.get_account_level()
+	if level > _known_account_level and _known_account_level > 0 and _level_up_from == 0:
+		_level_up_from = _known_account_level
+	_known_account_level = level
+
+## Red dots on the tabs that have something waiting: Home (Daily or Beginner rewards), Team (can't battle),
+## Recruit (a free pull), Commissions (finished shifts), Arena (fights left today)
+func _refresh_tab_badges() -> void:
+	if not is_instance_valid(_tabs):
+		return
+	if _badge_dot == null:
+		var image := Image.create(14, 14, false, Image.FORMAT_RGBA8)
+		for y in 14:
+			for x in 14:
+				var d := Vector2(x + 0.5, y + 0.5).distance_to(Vector2(7, 7))
+				var edge := clampf(6.0 - d, 0.0, 1.0)
+				var ring := clampf(d - 4.6, 0.0, 1.0)
+				image.set_pixel(x, y, Color(1, 1, 1, edge).lerp(Color(HomeTile.BADGE_COLOR, edge), 1.0 - ring * 0.5))
+		_badge_dot = ImageTexture.create_from_image(image)
+	var finished := 0
+	for c in DB.commissions:
+		if Commissions.is_active(c) and Commissions.time_left(c) <= 0:
+			finished += 1
+	var me = Arena.last_state.get("me")
+	var waiting := {
+		Terms.term("tab_home"): Daily.claimable_count() > 0 or BeginnerMissions.claimable_count() > 0,
+		Terms.term("tab_team"): _team_problem() != "",
+		Terms.term("tab_gacha"): Gacha.beginner_available() or Daily.free_pull_available(),
+		Terms.term("tab_commission"): finished > 0,
+		Terms.term("tab_arena"): Arena.is_unlocked() and me is Dictionary and int(me.fights_left) > 0,
+	}
+	for i in _tabs.get_tab_count():
+		var tab_name := String(_tabs.get_tab_control(i).name)
+		_tabs.set_tab_icon(i, _badge_dot if waiting.get(tab_name, false) and i != _tabs.current_tab else null)
+
+## The Arena tile shows rating and fights left; ask the server once (later the Arena tab keeps it current)
+func _fetch_arena_state() -> void:
+	if not Arena.last_state.is_empty() or not WorldBoss.is_registered() or not Arena.is_unlocked():
+		return
+	var r := await Arena.fetch_state()
+	if r.ok:
+		_refresh_home_tiles()
 
 func _refresh_status() -> void:
 	if not is_instance_valid(_money_chip):
@@ -343,9 +443,13 @@ func _build_home_tab() -> Control:
 	_home_hint.add_theme_constant_override("outline_size", 5)
 	_home_hint.visible = false
 	_home_menu.add_child(_home_hint)
-	# Beginner Missions: gone once everything (and the free SSR) is claimed
+	# Daily (check-in, missions, today's bonus), then Beginner Missions, which goes away once everything (and the
+	# free SSR) is claimed
+	var daily := _home_tile("daily", Terms.t("home_daily"), _open_daily, Color("#fb7185"), 20)
+	daily.custom_minimum_size.y = 54
+	_home_menu.add_child(daily)
 	_beginner_button = _home_tile("missions", Terms.t("beginner_button"), _open_beginner, UITheme.GOLD, 20)
-	_beginner_button.custom_minimum_size.y = 58
+	_beginner_button.custom_minimum_size.y = 54
 	_home_menu.add_child(_beginner_button)
 
 	var grid := GridContainer.new()
@@ -356,10 +460,11 @@ func _build_home_tab() -> Control:
 	grid.size_flags_stretch_ratio = 2.0
 	_home_menu.add_child(grid)
 	for spec in [["recruit", "tab_gacha", UITheme.GOLD], ["team", "tab_team", UITheme.CYAN],
-			["commissions", "tab_commission", UITheme.TEAL], ["casino", "tab_casino", Color("#c084fc")]]:
+			["commissions", "tab_commission", UITheme.TEAL], ["casino", "tab_casino", Color("#c084fc")],
+			["arena", "tab_arena", ArenaTab.ACCENT], ["workshop", "tab_workshop", Color("#f59e0b")]]:
 		var tab_name := Terms.term(spec[1])
-		var tile := _home_tile(spec[0], tab_name, _go_to_tab.bind(tab_name), spec[2], 26)
-		tile.custom_minimum_size = Vector2(0, 86)
+		var tile := _home_tile(spec[0], tab_name, _go_to_tab.bind(tab_name), spec[2], 24)
+		tile.custom_minimum_size = Vector2(0, 64)
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		grid.add_child(tile)
@@ -410,9 +515,12 @@ func _refresh_home_tiles() -> void:
 	var recruit: HomeTile = _home_tiles.recruit
 	var pool := _main_pool()
 	var free := Gacha.beginner_available()
-	recruit.badge = Terms.t("home_badge_free") if free else ""
+	var daily_free := Daily.free_pull_available()
+	recruit.badge = Terms.t("home_badge_free") if free or daily_free else ""
 	if free:
 		recruit.subtitle = Terms.t("home_recruit_free")
+	elif daily_free:
+		recruit.subtitle = Terms.t("home_recruit_daily_free")
 	elif pool and pool.pity_threshold > 0:
 		recruit.subtitle = Terms.t("home_recruit_pity", {"count": pool.pity_threshold - GameState.get_pity(pool.id)})
 	else:
@@ -451,6 +559,49 @@ func _refresh_home_tiles() -> void:
 	casino.subtitle = Terms.t("home_casino_sub")
 	casino.picture = _menu_picture("MM_Casino", "JustBClub")
 	casino.picture_focus = Vector2(0.35, 0.45)  # the slot machines
+	# Arena: rating and fights left as last heard from the server, or how to unlock it
+	var arena: HomeTile = _home_tiles.arena
+	arena.picture = _menu_picture("MM_Arena", "DrinkingNight")
+	var me = Arena.last_state.get("me")
+	if not Arena.is_unlocked():
+		arena.subtitle = Terms.t("home_arena_locked", {"lv": Arena.MIN_ACCOUNT_LEVEL})
+		arena.badge = ""
+	elif me is Dictionary:
+		arena.subtitle = Terms.t("home_arena_rating", {"rating": int(me.rating), "left": int(me.fights_left)})
+		arena.badge = str(int(me.fights_left)) if int(me.fights_left) > 0 else ""
+	else:
+		arena.subtitle = Terms.t("home_arena_sub")
+		arena.badge = ""
+	var workshop: HomeTile = _home_tiles.workshop
+	workshop.picture = _menu_picture("MM_Workshop", "Mcdonald")
+	workshop.subtitle = Terms.t("home_workshop_sub", {"amount": Terms.number(GameState.get_parts())})
+	_refresh_daily_tile()
+	_refresh_tab_badges()
+
+## The Daily tile: what's waiting (the check-in, chests, weekly rewards) or today's activity, plus today's bonus
+func _refresh_daily_tile() -> void:
+	if not _home_tiles.has("daily") or not is_instance_valid(_home_tiles.daily):
+		return
+	var tile: HomeTile = _home_tiles.daily
+	var waiting := Daily.claimable_count()
+	tile.badge = str(waiting) if waiting > 0 else ""
+	if not Daily.checked_in_today():
+		tile.subtitle = Terms.t("home_daily_checkin")
+	elif waiting > 0:
+		tile.subtitle = Terms.t("home_daily_ready", {"count": waiting, "bonus": Daily.bonus_text()})
+	else:
+		tile.subtitle = Terms.t("home_daily_points", {"points": Daily.points(), "max": Daily.MAX_POINTS, "bonus": Daily.bonus_text()})
+
+func _open_daily() -> void:
+	_daily_prompted_day = Daily.today()
+	_popup(DailyWindow.new())
+
+## Opens the Daily window by itself the first time Home shows each day while the check-in is waiting (not during
+## the tutorial, which has its own pointers to follow)
+func _prompt_daily() -> void:
+	if GameState.tutorial_step() < GameState.Tutorial.DONE or Daily.checked_in_today() or _daily_prompted_day == Daily.today():
+		return
+	_open_daily.call_deferred()
 
 ## A Home tile picture from Art/backgrounds/, else a fallback background (loaded once)
 func _menu_picture(file: String, fallback: String) -> Texture2D:
@@ -494,6 +645,7 @@ func _pool_star(pool: GachaPool) -> CharacterData:
 ## the other tabs keep the usual cyber backdrop and solid panels
 func _on_main_tab_changed(index: int) -> void:
 	var home := index == 0
+	_refresh_tab_badges()  # the open tab never shows its own dot
 	_update_home_tutorial.call_deferred()  # after the tab has laid out, so the arrow lands on the button
 	if home:
 		_refresh_home_tiles()  # shifts may have finished, pity moved, etc. while on another tab
@@ -576,6 +728,8 @@ func _restore_backup(text: String) -> void:
 		dialog.dialog_text = error
 		_popup(dialog)
 		return
+	_known_account_level = GameState.get_account_level()  # a restored save's level isn't a level up
+	_level_up_from = 0
 	_show_main()
 	_show_message(Terms.t("backup_restored"))
 
@@ -615,6 +769,12 @@ func _open_settings() -> void:
 	dialog.add_child(box)
 	_volume_row(box, Terms.t("settings_music"), Music.get_volume(), Music.set_volume)
 	_volume_row(box, Terms.t("settings_sfx"), Sound.get_volume(), Sound.set_volume, Sound.play.bind("hit"))
+	var ui_sounds := CheckButton.new()
+	ui_sounds.text = Terms.t("settings_ui_sounds")
+	ui_sounds.tooltip_text = Terms.t("settings_ui_sounds_tip")
+	ui_sounds.button_pressed = UiSound.enabled()
+	ui_sounds.toggled.connect(func(on: bool): GameState.set_setting("ui_sounds", on))
+	box.add_child(ui_sounds)
 	# Save data: backups, reset, and test mode where it's allowed
 	box.add_child(HSeparator.new())
 	var heading := Label.new()
@@ -1170,6 +1330,12 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 		lines.append(Terms.t("in_team", {"row": Terms.row_name(current)}))
 	elif not fits and GameState.can_place(uid, slot):
 		lines.append(Terms.t("picker_over_cost"))
+	# Synergies this friend would switch on here
+	var gains := GameState.synergy_gains(uid, slot) if not tile.disabled and current < 0 else PackedStringArray()
+	var synergy_line := -1
+	if not gains.is_empty():
+		synergy_line = lines.size()
+		lines.append(Terms.t("picker_synergy", {"names": ", ".join(gains)}))
 	for i in lines.size():
 		var label := Label.new()
 		label.text = lines[i]
@@ -1178,6 +1344,10 @@ func _picker_tile(uid: int, slot: int, group: ButtonGroup) -> Button:
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if i == 0:
 			label.add_theme_color_override("font_color", CharArt.RARITY_COLORS[c.rarity])
+		elif i == synergy_line:
+			label.add_theme_color_override("font_color", UITheme.GOLD)
+			label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			label.custom_minimum_size.x = 116  # wraps at the tile's width, not at zero
 		elif i == 2:
 			label.add_theme_color_override("font_color", UITheme.CYAN if current >= 0 else Color("#fca5a5"))
 		box.add_child(label)
@@ -1243,6 +1413,63 @@ func _start_world_boss(event: EventData) -> void:
 		view.set_note(Terms.t("boss_sent_kill"))
 	else:
 		view.set_note(Terms.t("boss_sent", {"hp": Terms.number(int(answer.hp))}))
+
+## ───────── Arena (Scripts/ui/arena_tab.gd, Arena autoload) ─────────
+
+var _arena_starting := false
+
+func _show_arena_tab() -> void:
+	_show_main()
+	_go_to_tab(Terms.term("tab_arena"))
+
+## Asks the server for a fight (uses one of today's), plays it live against the opponent's team, then reports
+## the result; the new rating shows under the results
+func _start_arena(opponent: Dictionary) -> void:
+	if _arena_starting:
+		return
+	if not GameState.can_battle():
+		_show_message(_team_problem())
+		return
+	_arena_starting = true
+	var r := await Arena.start_fight(opponent)
+	_arena_starting = false
+	if not r.ok:
+		_show_arena_tab()
+		var reason := str(r.data.get("error", ""))
+		_show_message(Terms.t("arena_no_fights" if reason == "no_fights_left" else "arena_offline"))
+		return
+	var fight_id := str(r.data.fight_id)
+	var stage := StageData.new()
+	stage.display_name = Terms.t("arena_stage", {"name": str(opponent.name)})
+	stage.chapter = 0
+	stage.background = UITheme.background("Arena")
+	if stage.background == null:
+		stage.background = UITheme.background("DrinkingNight")
+	var manual := not bool(GameState.get_setting("auto_ultimate", true))
+	var units := Combat.start_arena(Arena.enemy_team(opponent.get("team", [])), manual)
+	Music.play_chapter(0)
+	var root := _new_screen()
+	_set_screen_background(_battle_background(stage))
+	var view := BattleView.new()
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(view)
+	view.again_pressed.connect(_show_arena_tab)  # a new fight means a new opponent pick
+	view.home_pressed.connect(_show_arena_tab)
+	view.battle_finished.connect(func(report: Dictionary): _report_arena(view, fight_id, bool(report.get("won", false)), int(report.get("money", 0))))
+	view.start_live(stage, units, manual)
+
+func _report_arena(view: BattleView, fight_id: String, win: bool, money: int) -> void:
+	view.set_note(Terms.t("boss_sending"))
+	var answer := await Arena.report_fight(fight_id, win)
+	if not is_instance_valid(view):
+		return
+	# A win's Money is already in the reward line; a loss only says Defeat, so name the consolation Money here
+	var paid := "" if win else Terms.t("arena_paid", {"amount": money}) + "   "
+	if answer.is_empty():
+		view.set_note(paid + Terms.t("arena_send_later"))
+	else:
+		view.set_note(paid + Terms.t("arena_result", {"rating": int(answer.rating),
+			"change": ("+%d" if int(answer.change) >= 0 else "%d") % int(answer.change)}))
 
 ## Pays out finished events this player hit (WorldBoss grants them) and lists what came in
 func _collect_event_rewards() -> void:

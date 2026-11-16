@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"front_line"
+display_name = "Front Line"
+description = "Two or more Warriors: every Warrior gets Attack +6% and HP +4%."
+rule = 1
+classes = Array[int]([1])
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"attack": 0.06, "hp": 0.04}])
+target = 0

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"field_medic"
+display_name = "Field Medic"
+description = "A Healer with a Tank to look after: every Healer and Tank gets HP +6%."
+rule = 1
+classes = Array[int]([5, 0])
+need_each_class = true
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"hp": 0.06}])
+target = 0

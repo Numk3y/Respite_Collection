@@ -18,10 +18,11 @@ func money_cost(pool: GachaPool, count: int) -> int:
 func card_cost(count: int) -> int:
 	return GameState.CREDIT_CARDS_PER_PULL * count
 
-## Each pull costs the pool's Money price AND Credit Cards.
+## Each pull costs the pool's Money price AND Credit Cards; `free` is the free daily recruit (one pull, no cost,
+## see Daily.free_pull_available). Pity and the pool's rate-up work as usual.
 ## Returns [{character, rarity, is_new, uid, result: "new" | "ascend" | "overflow", rank, money}];
-## empty if either currency is short or the pool is empty
-func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
+## empty if either currency is short, the free pull is used up, or the pool is empty
+func pull(pool: GachaPool, count: int, free: bool = false) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
 	# Group by rarity, keeping only enabled characters with weight > 0
@@ -35,7 +36,11 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 		push_warning("Gacha pool %s has no characters to pull" % pool.id)
 		return results
 
-	if not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
+	if free:
+		count = 1
+		if not Daily.use_free_pull():
+			return results
+	elif not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
 		return results
 	GameState.add_stat("pulls", count)  # beginner missions
 
@@ -55,7 +60,7 @@ func pull(pool: GachaPool, count: int) -> Array[Dictionary]:
 			elif rarities.has(top):
 				rarity = top
 		got_sr = got_sr or rarity >= CharacterData.Rarity.SR
-		var entry: PoolEntry = _weighted_pick(by_rarity[rarity], func(e): return e.weight)
+		var entry := _pick_entry(pool, by_rarity[rarity], rarity)
 		since_top = 0 if rarity == top else since_top + 1
 		GameState.add_pull_history(entry.character, rarity, pool.id)
 
@@ -98,6 +103,16 @@ func beginner_pull(pool: GachaPool) -> Array[Dictionary]:
 	GameState.save_game()
 	pulled.emit(results)
 	return results
+
+## Which friend of a rarity comes out. When the pool has a rate-up friend of that rarity (GachaPool.featured_characters),
+## they get GachaPool.rate_up_share of the pulls of their rarity; the rest go by the entries' weights as usual.
+func _pick_entry(pool: GachaPool, entries: Array, rarity: int) -> PoolEntry:
+	var featured: Array = pool.featured_characters().filter(func(c): return c.rarity == rarity)
+	if not featured.is_empty() and pool.rate_up_share > 0.0 and _rng.randf() < pool.rate_up_share:
+		var picks := entries.filter(func(e): return featured.has(e.character))
+		if not picks.is_empty():
+			return picks[_rng.randi_range(0, picks.size() - 1)]
+	return _weighted_pick(entries, func(e): return e.weight)
 
 func _weighted_pick(items: Array, weight_of: Callable) -> Variant:
 	var total := 0

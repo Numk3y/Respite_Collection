@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"iron_wall"
+display_name = "Iron Wall"
+description = "Two or more Tanks: every Tank gets Defense +8%."
+rule = 1
+classes = Array[int]([0])
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"defense": 0.08}])
+target = 0

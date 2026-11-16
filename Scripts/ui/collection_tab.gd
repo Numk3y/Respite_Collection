@@ -246,10 +246,10 @@ func _card(uid: int, c: CharacterData) -> Control:
 	# In Team / Working tags, stacked above the name plate
 	var tags: Array[Control] = []
 	if GameState.team_slot_of(uid) >= 0:
-		tags.append(UITheme.tag(Terms.t("collection_in_team"), UITheme.CYAN))
+		tags.append(UITheme.tag(Terms.t("collection_in_team"), UITheme.CYAN.darkened(0.2), true))
 	var job := Commissions.worker_commission(uid)
 	if job:
-		var working := UITheme.tag(Terms.t("team_working"), UITheme.TEAL)
+		var working := UITheme.tag(Terms.t("team_working"), UITheme.TEAL, true)
 		working.tooltip_text = Terms.t("card_on_shift", {"job": job.display_name})
 		tags.append(working)
 	for i in tags.size():

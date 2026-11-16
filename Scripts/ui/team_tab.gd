@@ -18,6 +18,7 @@ const REARGUARD_COLOR := Color("#59b8ff")
 const CLASS_LETTERS := ["T", "W", "M", "S", "B", "H"]  # CharClass order: tank, warrior, mage, shooter, berserker, healer
 
 var _summary: Label
+var _synergy_row: HFlowContainer
 var _stage: Stage
 var _slots: Array[Control] = []  # one holder per team slot; its child is the card that moves
 var _last_uids: Array[int] = []  # to pop the card of a newly assigned friend
@@ -31,6 +32,11 @@ func _init() -> void:
 	page.add_theme_constant_override("separation", 10)
 	add_child(page)
 	page.add_child(_build_header())
+	# Synergies: a chip per synergy the team touches, lit when on, dim with "1/2" when a friend short
+	_synergy_row = HFlowContainer.new()
+	_synergy_row.add_theme_constant_override("h_separation", 6)
+	_synergy_row.add_theme_constant_override("v_separation", 4)
+	page.add_child(_synergy_row)
 
 	_stage = Stage.new()
 	_stage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -121,7 +127,7 @@ func refresh() -> void:
 	var best := {}
 	for uid in uids:
 		if GameState.get_character(uid):
-			stats_of[uid] = GameState.get_unit_stats(uid)
+			stats_of[uid] = GameState.get_team_unit_stats(uid)  # with the team's synergies
 			for stat in BAR_STATS:
 				best[stat] = maxi(best.get(stat, 1), stats_of[uid][stat])
 
@@ -143,6 +149,7 @@ func refresh() -> void:
 		"cost": cost, "limit": limit,
 		"hp": CurrencyChip._group(total_hp), "atk": CurrencyChip._group(total_atk),
 		"lv": roundi(float(levels) / stats_of.size()) if not stats_of.is_empty() else 0})
+	_refresh_synergies()
 
 	for slot in GameState.TEAM_SLOTS:
 		var holder := _slots[slot]
@@ -159,6 +166,32 @@ func refresh() -> void:
 		if joined:
 			_pop(card)
 	_last_uids = uids
+
+## The synergy chips: "SYNERGIES" then one chip each, lit gold/cyan when on ("Bald Squad 2/3"), dim when short.
+## Hover a chip for what it does.
+func _refresh_synergies() -> void:
+	for child in _synergy_row.get_children():
+		child.queue_free()
+	var list := GameState.team_synergies()
+	var head := _label(Terms.t("synergy_title"), 14, UITheme.TEXT_DIM)
+	head.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.mouse_filter = Control.MOUSE_FILTER_STOP
+	head.tooltip_text = Terms.t("synergy_tip", {"cap": roundi(GameState.SYNERGY_CAP * 100)})
+	_synergy_row.add_child(head)
+	if list.is_empty():
+		_synergy_row.add_child(_label(Terms.t("synergy_none"), 14, UITheme.TEXT_DIM))
+		return
+	for s: Dictionary in list:
+		var syn: SynergyData = s.data
+		var on: bool = s.tier > 0
+		var friends := syn.rule == SynergyData.Rule.FRIENDS
+		var color := (UITheme.GOLD if friends else UITheme.CYAN_BRIGHT) if on else UITheme.TEXT_DIM
+		var chip := UITheme.tag("%s  %d/%d" % [syn.display_name, s.count, s.need], color)
+		chip.mouse_filter = Control.MOUSE_FILTER_STOP
+		chip.tooltip_text = syn.description
+		if not on:
+			chip.modulate.a = 0.7
+		_synergy_row.add_child(chip)
 
 func _member_card(slot: int, uid: int, stats: Dictionary, best: Dictionary) -> Control:
 	var c := GameState.get_character(uid)
@@ -217,7 +250,7 @@ func _member_card(slot: int, uid: int, stats: Dictionary, best: Dictionary) -> C
 	art_holder.add_child(level)
 	var job := Commissions.worker_commission(uid)
 	if job:
-		var working := UITheme.tag(Terms.t("team_working"), UITheme.TEAL)
+		var working := UITheme.tag(Terms.t("team_working"), UITheme.TEAL, true)
 		working.position = Vector2(6, ART_SIZE.y - 58)
 		working.tooltip_text = Terms.t("card_on_shift", {"job": job.display_name})
 		art_holder.add_child(working)

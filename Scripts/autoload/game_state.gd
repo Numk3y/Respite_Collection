@@ -8,6 +8,7 @@ signal gear_changed  # gear crafted, upgraded or scrapped, or Parts changed (gea
 signal credit_cards_changed(value: int)
 signal account_changed  # account level or account EXP changed
 signal stats_changed  # a lifetime counter (data.stats) or beginner mission state changed
+signal stat_added(key: String, amount: int)  # a lifetime counter went up (daily and weekly missions count these)
 
 # On the web, user:// is an IndexedDB-backed folder that every Godot game on the same site shares
 # (all GitHub Pages projects of one account are the same site), so keep the save in our own subfolder.
@@ -152,7 +153,12 @@ func _new_save() -> Dictionary:
 		# World boss: the server account, fights not yet reported, results whose event isn't in this build; see WorldBoss
 		"world_boss": {"player_id": "", "token": "", "name": "", "pending": [], "unclaimed": []},
 		"settings": {},
-		"stats": {},  # lifetime counters: "pulls", "manual_ultimates", "commissions"
+		# Lifetime counters: "pulls", "manual_ultimates", "commissions" (shifts started), "shifts_done", "battles",
+		# "wins", "flawless_wins", "casino_games", "power_ups", "gear_work", "crafts", "checkins", "full_days"
+		"stats": {},
+		"daily": {},  # check-in, daily and weekly missions; see the Daily autoload
+		"achievements": {},  # achievement id -> tiers claimed; see Scripts/achievements.gd
+		"arena": {},  # arena rating and today's fights as last heard from the server; see the Arena autoload
 		"tutorial": Tutorial.HOME_BATTLE,
 		# See BeginnerMissions; pool_pulled = the one free Beginner pool pull is used (Gacha.beginner_pull)
 		"beginner": {"claimed": {}, "ssr_claimed": false, "pool_pulled": false},
@@ -684,6 +690,7 @@ func feed_material(uid: int, key: String, count: int) -> int:
 	if count <= 0:
 		return -1
 	add_material(key, -count)
+	add_stat("power_ups")
 	return add_exp(uid, count * int(MATERIAL_EXP[key]))
 
 ## Spend Money to instantly gain levels (up to the level cap). Returns false if they can't afford it.
@@ -692,6 +699,7 @@ func buy_levels(uid: int, levels: int = 1) -> bool:
 	if cost <= 0 or not try_spend(cost):
 		return false
 	add_exp(uid, cost / GOLD_PER_EXP)
+	add_stat("power_ups")
 	return true
 
 # ───────── Test mode ─────────
@@ -715,6 +723,7 @@ func add_stat(key: String, amount: int = 1) -> void:
 	if amount <= 0:
 		return
 	data.stats[key] = get_stat(key) + amount
+	stat_added.emit(key, amount)
 	stats_changed.emit()
 	request_save()
 
@@ -883,9 +892,86 @@ func get_battle_team(index: int = 0) -> Dictionary:
 		if c == null:
 			continue
 		var row := "vanguard" if is_vanguard_slot(slot) else "rearguard"
-		team[row].append(c.battle_unit(get_unit_stats(uid)))
+		team[row].append(c.battle_unit(get_team_unit_stats(uid, index)))
 	team.combos = active_combos(index).map(func(combo: ComboData): return combo.battle_dict())
 	return team
+
+# ───────── Team synergies (Data/synergies, SynergyData) ─────────
+
+const SYNERGY_CAP := 0.15  # the most all synergies together can add to one stat of one friend
+
+## The team's friends; with `swap_slot`, as if `swap_uid` were put there (a friend already in the team only swaps
+## places, which changes nothing here)
+func _team_characters(index: int = 0, swap_slot: int = -1, swap_uid: int = 0) -> Array:
+	var out := []
+	var joining := swap_slot >= 0 and team_slot_of(swap_uid, index) < 0
+	for slot in TEAM_SLOTS:
+		var c := get_character(swap_uid if joining and slot == swap_slot else team_uid(slot, index))
+		if c:
+			out.append(c)
+	return out
+
+## Every synergy with at least one friend counted, for the Team tab: [{data, count, tier, need}] where `need` is
+## the count for the next tier (or the top tier's once maxed). Active ones (tier >= 1) first.
+func team_synergies(index: int = 0) -> Array[Dictionary]:
+	var team := _team_characters(index)
+	var out: Array[Dictionary] = []
+	for syn in DB.synergies:
+		var n := syn.count(team)
+		if n <= 0:
+			continue
+		var tier := syn.tier_for(n)
+		var need: int = syn.tiers[tier] if tier < syn.tiers.size() else syn.top_need()
+		out.append({"data": syn, "count": n, "tier": tier, "need": need})
+	out.sort_custom(func(a, b): return a.tier > 0 and b.tier <= 0)
+	return out
+
+## Each friend's synergy bonuses as {uid: {stat: share}}, capped at SYNERGY_CAP per stat
+func synergy_bonuses(index: int = 0) -> Dictionary:
+	var team := _team_characters(index)
+	var uid_of := {}
+	for uid in team_members(index):
+		uid_of[get_character(uid)] = uid
+	var out := {}
+	for syn in DB.synergies:
+		var tier := syn.tier_for(syn.count(team))
+		if tier <= 0:
+			continue
+		var targets: Array = team if syn.target == SynergyData.Target.TEAM else syn.counted(team)
+		for c in targets:
+			var mods: Dictionary = out.get_or_add(uid_of[c], {})
+			var b := syn.bonus(tier)
+			for stat in b:
+				mods[stat] = minf(float(mods.get(stat, 0.0)) + float(b[stat]), SYNERGY_CAP)
+	return out
+
+## A team member's stats with the team's synergies on top (what they fight with)
+func get_team_unit_stats(uid: int, index: int = 0) -> Dictionary:
+	var stats := get_unit_stats(uid)
+	var mods: Dictionary = synergy_bonuses(index).get(uid, {})
+	for stat in mods:
+		if stats.has(stat) and stats[stat] > 0:
+			stats[stat] = roundi(stats[stat] * (1.0 + float(mods[stat])))
+	return stats
+
+## Synergy names that putting `uid` into `slot` would switch on or raise a tier (for the team picker)
+func synergy_gains(uid: int, slot: int, index: int = 0) -> PackedStringArray:
+	var before := _team_characters(index)
+	var after := _team_characters(index, slot, uid)
+	var out := PackedStringArray()
+	for syn in DB.synergies:
+		if syn.tier_for(syn.count(after)) > syn.tier_for(syn.count(before)):
+			out.append(syn.display_name)
+	return out
+
+## A rough single number for how strong the team is (shown in the Arena)
+func team_power(index: int = 0) -> int:
+	var total := 0.0
+	for uid in team_members(index):
+		var s := get_team_unit_stats(uid, index)
+		total += s.hp * 0.3 + s.attack + s.defense * 0.7 + s.speed * 0.5 + (s.evasion + s.accuracy) * 0.2
+		total += int(get_owned(uid).level) * 2
+	return roundi(total)
 
 ## Combos whose members are all in team `index` (the battle still checks that each one actually fights)
 func active_combos(index: int = 0) -> Array[ComboData]:
@@ -999,6 +1085,7 @@ func upgrade_equipment(equip_uid: int) -> bool:
 	add_parts(-int(cost.parts))
 	var entry := _equipment_entry(equip_uid)
 	entry.plus = get_plus(equip_uid) + 1
+	add_stat("gear_work")
 	roster_changed.emit()  # the wearer's stats changed
 	return true
 
@@ -1034,6 +1121,7 @@ func craft_equipment(e: EquipmentData) -> Dictionary:
 	add_money(-int(cost.money))
 	add_parts(-int(cost.parts))
 	add_stat("crafts")
+	add_stat("gear_work")
 	return add_equipment(e)
 
 ## The crafting minigame's result: free upgrade levels on the piece just made (capped at GEAR_MAX_PLUS)

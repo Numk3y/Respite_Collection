@@ -8,6 +8,7 @@ extends Node
 ##   Godot_v4.7.2-stable_win64.exe --headless --path . res://Tools/balance_check.tscn -- perby
 ##   ... -- perby retinazer      several friends
 ##   ... -- all                  every friend outside the benchmark (the default)
+##   ... -- synergies            team synergies: each one's bonuses, and the most any friend could stack
 ##
 ## Two measurements, each also taken for the four benchmark friends so there's something to compare with:
 ## - Duel: 1-on-1 against each benchmark friend at DUEL_LEVEL, both sides of the field. Win rate, 50% = even.
@@ -54,6 +55,10 @@ func _ready() -> void:
 			get_tree().quit(1)
 			return
 
+	if OS.get_cmdline_user_args() == PackedStringArray(["synergies"]):
+		_synergy_report()
+		get_tree().quit()
+		return
 	var targets := _targets(OS.get_cmdline_user_args())
 	if targets.is_empty():
 		get_tree().quit(1)
@@ -174,6 +179,45 @@ func _verdict(c: CharacterData, m: Dictionary, refs: Dictionary) -> String:
 		duel_note = ", duels far below"
 	return "%s for %s (team %+d%% vs %s%s)" % [verdict, Terms.rarity_name(c.rarity), roundi((team_ratio - 1.0) * 100),
 		" & ".join(ref_ids.map(func(id): return DB.characters[id].display_name)), duel_note]
+
+## Every synergy's tiers, then each friend's worst case: the top tier of every synergy they could be part of at once
+## (their friend groups, their class sets and Underdogs), before and after GameState.SYNERGY_CAP. A friend whose
+## stack goes past the cap is listed, since that's where synergies start to decide fights.
+func _synergy_report() -> void:
+	print("\nSYNERGIES (cap %d%% per stat)" % roundi(GameState.SYNERGY_CAP * 100))
+	for syn in DB.synergies:
+		var tiers := PackedStringArray()
+		for i in syn.tiers.size():
+			tiers.append("%d: %s" % [syn.tiers[i], _bonus_text(syn.bonus(i + 1))])
+		print("  %-18s %s" % [syn.display_name, "   ".join(tiers)])
+	print("\nWorst-case stack per friend (only those reaching the cap):")
+	var any := false
+	for c: CharacterData in DB.characters.values():
+		if not c.enabled or BENCHMARK.has(c.id):
+			continue
+		var total := {}
+		var names := PackedStringArray()
+		for syn in DB.synergies:
+			var member := syn.target == SynergyData.Target.TEAM or not syn.counted([c]).is_empty()
+			if not member:
+				continue
+			names.append(syn.display_name)
+			var top := syn.bonus(syn.tiers.size())
+			for stat in top:
+				total[stat] = float(total.get(stat, 0.0)) + float(top[stat])
+		var capped := total.keys().filter(func(s): return total[s] > GameState.SYNERGY_CAP + 0.0001)
+		if not capped.is_empty():
+			any = true
+			print("  %-20s %s  (%s)" % [c.display_name.left(20), _bonus_text(total), ", ".join(names)])
+	if not any:
+		print("  nobody: every stack stays within the cap")
+	print("")
+
+func _bonus_text(b: Dictionary) -> String:
+	var parts := PackedStringArray()
+	for stat in b:
+		parts.append("%s +%d%%" % [Terms.stat_short(stat), roundi(float(b[stat]) * 100)])
+	return ", ".join(parts)
 
 func _print_header() -> void:
 	print("  %-20s %-4s %-10s %6s %6s   %s" % ["Friend", "Rar", "Class", "Duel", "Team", "Verdict"])

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="CommissionData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/commission_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/commission_incident.gd" id="2"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/vip_donation.tres" id="3"]
+[ext_resource type="Resource" path="res://Data/commissions/incidents/polygon_crash.tres" id="4"]
+
+[resource]
+script = ExtResource("1")
+id = &"convention_booth"
+display_name = "VR Convention Booth"
+description = "Four hours behind a virtual booth handing out free avatar bases and answering \"how do I get full-body tracking\" for the hundredth time. Send them off for the afternoon."
+duration_seconds = 14400
+status_tag = 2
+required_class = -1
+required_stat = "hp"
+required_value = 200
+reward_money = 3000
+reward_materials = Dictionary[String, Vector2i]({"coffee": Vector2i(2, 4), "gossip": Vector2i(1, 3)})
+exp_reward = 400
+credit_card_chance = 0.03
+incident_chance = 0.3
+incidents = Array[ExtResource("2")]([ExtResource("3"), ExtResource("4")])

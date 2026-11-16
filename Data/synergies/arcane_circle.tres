@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="SynergyData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/synergy_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"arcane_circle"
+display_name = "Arcane Circle"
+description = "Two or more Mages: every Mage gets Attack +8%."
+rule = 1
+classes = Array[int]([2])
+tiers = Array[int]([2])
+tier_bonuses = Array[Dictionary]([{"attack": 0.08}])
+target = 0
