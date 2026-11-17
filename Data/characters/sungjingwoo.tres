@@ -7,11 +7,11 @@
 script = ExtResource("2")
 id = &"sungjingwoo_passive"
 display_name = "Maybe I Am the Protagonist"
-description = "Once the battle is 10 turns in (anyone's turns), SungJingWoo transforms on his next turn for the rest of the battle:
-25%: Real SungJingWoo. Passive Arise: up to 3 times, a fallen front-row friend is revived with 25% HP. Unlocks his Ultimate.
-75%: Fent Posing. Passive Fent Posing: deals only 70% damage, and every attack has a 30% chance to hit himself."
+description = "After each of his turns, SungJingWoo has a chance to transform for the rest of the battle: 10% after his first turn, +15% after each one after that.
+33%: Real SungJingWoo. Passive Arise: up to 3 times, a fallen front-row friend is revived with 25% HP. Unlocks his Ultimate.
+67%: Fent Posing. Passive Fent Posing: deals only 70% damage, and every attack has a 30% chance to hit himself."
 effect_id = &"protagonist"
-params = {"turns": 10, "real_chance": 0.25, "revives": 3, "revive_pct": 0.25, "fent_damage": 0.7, "fent_self_chance": 0.3}
+params = {"start_chance": 0.1, "chance_step": 0.15, "real_chance": 0.33, "revives": 3, "revive_pct": 0.25, "fent_damage": 0.7, "fent_self_chance": 0.3}
 
 [sub_resource type="Resource" id="active"]
 script = ExtResource("2")

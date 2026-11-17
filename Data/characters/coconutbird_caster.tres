@@ -9,12 +9,12 @@ id = &"coconutbird_caster_passive"
 display_name = "Sus Green Plants"
 description = "Never attacks. Every turn, it heals the front-row teammate with the lowest HP for 35% of its own Attack (the back row once the front row is healthy or down)."
 effect_id = &"sus_green_plants"
-params = {"heal_mult": 0.35}
+params = {"heal_mult": 0.}
 
 [resource]
 script = ExtResource("1")
 id = &"coconutbird_caster"
-display_name = "CoconutBird_Caster"
+display_name = "CoconutBird Caster"
 char_class = 5
 rarity = 1
 hp = 70

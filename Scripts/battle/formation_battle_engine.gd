@@ -167,6 +167,9 @@ const ULTIMATE_EFFECTS := {
 	# SungJingWoo (only once he's the Real one, see passive Protagonist; until then the gauge stays empty): every
 	# living ally deals +`damage` damage and gets +`defense` Defense for its next N actions
 	&"shadow_realm": {"damage": 0.2, "defense": 0.2, "turns": 3, "requires_form": "real"},
+	# Penguin: his next N own actions each heal the first `targets` allies in healing order for `heal_mult` x Attack
+	# (instead of his passive's smaller heal). No heal on the cast itself; those actions don't charge the gauge.
+	&"explosive_diarrhea": {"heal_mult": 0.2, "targets": 3, "turns": 3},
 }
 
 ## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
@@ -325,11 +328,11 @@ const PASSIVE_EFFECTS := {
 	# `row` ("front" or "back"; not the one just hit) for `splash` of the hit's damage before crits (can't miss,
 	# reduced by Defense)
 	&"domain_expansion": {"splash": 0.17, "targets": 2, "row": "front"},
-	# SungJingWoo: on its first own action once the battle is `turns` actions in (anyone's actions, both sides), it
-	# transforms for the rest of the battle: `real_chance` to become the
+	# SungJingWoo: after each own action it rolls to transform for the rest of the battle, `start_chance` on the
+	# first action and `chance_step` more on each one after. On success: `real_chance` to become the
 	# Real one (passive becomes Arise, the Ultimate unlocks, picture `real_art`), otherwise Fent Posing (passive
 	# becomes Fent Posing, picture `fent_art`). The new passive's params are copied from here.
-	&"protagonist": {"turns": 10, "real_chance": 0.25, "real_art": "SungJingWoo_ShadowMonarch",
+	&"protagonist": {"start_chance": 0.1, "chance_step": 0.15, "real_chance": 0.33, "real_art": "SungJingWoo_ShadowMonarch",
 		"fent_art": "SungJingWoo_FentPosing", "real_name": "Arise", "fent_name": "Fent Posing",
 		"revives": 3, "revive_pct": 0.25, "fent_damage": 0.7, "fent_self_chance": 0.3},
 	# Up to `revives` times per battle, a front-row ally that falls is brought straight back with `revive_pct` of max HP
@@ -340,6 +343,9 @@ const PASSIVE_EFFECTS := {
 	# Every single-target attack fires `shots` shots at the same enemy, each `damage_mult` of a normal hit (each rolls
 	# to hit and crit on its own; stops early if the enemy drops)
 	&"texas_smash": {"shots": 3, "damage_mult": 0.4},
+	# Never attacks. Each own action heals the first `targets` allies in healing order (hurt vanguard first, lowest
+	# HP share first) for `heal_mult` x Attack.
+	&"fart": {"heal_mult": 0.1, "targets": 2},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -925,6 +931,15 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		if record:
 			event.lines.append(Terms.t("log_heal_turn", {"name": actor.name, "skill": healing.name}))
 		_heal_lowest(actor, int(healing.heal_targets), roundi(_stat(actor, "attack") * float(healing.heal_mult)), event, record)
+	elif not _passive_params(actor, &"fart").is_empty():
+		# e.g. Penguin never attacks; every turn he farts on the friends worst off, which somehow heals them
+		event.kind = "heal"
+		var fart := _passive_params(actor, &"fart")
+		event.get_or_add("fart", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_fart", {"name": actor.name, "skill": actor.passive.name}))
+		_heal_lowest(actor, int(fart.targets), maxi(roundi(_stat(actor, "attack") * float(fart.heal_mult)), 1), event, record)
+		_gain_energy(actor, ENERGY_PER_ACTION)
 	elif not _passive_params(actor, &"sus_green_plants").is_empty():
 		# e.g. CoconutBird never attacks; every turn goes to healing whoever is worst off
 		event.kind = "heal"
@@ -990,13 +1005,16 @@ func _ultimate_locked(u: Dictionary) -> bool:
 	var need := str(ULTIMATE_EFFECTS.get(u.ultimate.effect, {}).merged(u.ultimate.params, true).get("requires_form", ""))
 	return not need.is_empty() and str(u.get("form", "")) != need
 
-## Passive Protagonist: after enough own actions, SungJingWoo becomes the Real one or starts Fent Posing for good
+## Passive Protagonist: each own action rolls a growing chance; on success SungJingWoo becomes the Real one or
+## starts Fent Posing for good
 func _check_protagonist(u: Dictionary, rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
 	var p := _passive_params(u, &"protagonist")
 	if p.is_empty() or u.hp <= 0:
 		return
-	if int(_run.get("actions", 0)) < int(p.turns):
-		return  # counts every action in the battle (both sides), not just his own
+	var rolls := int(u.get("protagonist_rolls", 0))
+	u.protagonist_rolls = rolls + 1
+	if rng.randf() >= float(p.start_chance) + float(p.chance_step) * rolls:
+		return  # e.g. 10%, 25%, 40%, ... on his 1st, 2nd, 3rd action
 	var real := rng.randf() < float(p.real_chance)
 	u.form = "real" if real else "fent"
 	u.form_art = str(p.real_art if real else p.fent_art)
@@ -1109,6 +1127,11 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			_heal_lowest(actor, int(p.targets), roundi(_stat(actor, "attack") * float(p.heal_mult)), event, record)
 			_add_buff(actor, {"id": &"lets_go_winnie", "name": skill_name, "healing": true, "remaining": int(p.turns),
 				"counts": "actions", "heal_mult": float(p.heal_mult), "heal_targets": int(p.targets)})
+		&"explosive_diarrhea":
+			# No heal right now: _take_turn spends the next N actions on the bigger heals while the buff lasts
+			_add_buff(actor, {"id": &"explosive_diarrhea", "name": skill_name, "healing": true, "remaining": int(p.turns),
+				"counts": "actions", "heal_mult": float(p.heal_mult), "heal_targets": int(p.targets)})
+			event.get_or_add("diarrhea", []).append(actor.index)
 		&"shadow_realm":
 			for ally in _units.filter(func(a): return a.side == actor.side and _alive(a)):
 				_add_buff(ally, {"id": &"shadow_realm", "name": skill_name, "mods": {"defense": float(p.defense)},

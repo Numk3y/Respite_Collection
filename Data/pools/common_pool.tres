@@ -42,6 +42,7 @@
 [ext_resource type="Resource" path="res://Data/characters/slimsukuna.tres" id="45"]
 [ext_resource type="Resource" path="res://Data/characters/sungjingwoo.tres" id="46"]
 [ext_resource type="Resource" path="res://Data/characters/allmight.tres" id="47"]
+[ext_resource type="Resource" path="res://Data/characters/penguin.tres" id="48"]
 
 [sub_resource type="Resource" id="entry_gobby"]
 script = ExtResource("2")
@@ -203,6 +204,10 @@ character = ExtResource("46")
 script = ExtResource("2")
 character = ExtResource("47")
 
+[sub_resource type="Resource" id="entry_penguin"]
+script = ExtResource("2")
+character = ExtResource("48")
+
 [resource]
 script = ExtResource("1")
 id = &"common_pool"
@@ -212,4 +217,4 @@ cost = 150
 weight_r = 83
 weight_sr = 14
 weight_ssr = 3
-entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki"), SubResource("entry_shadowkittay"), SubResource("entry_globox"), SubResource("entry_quinnester"), SubResource("entry_storm"), SubResource("entry_keizoyama"), SubResource("entry_ghostily"), SubResource("entry_noel"), SubResource("entry_femsui"), SubResource("entry_answer"), SubResource("entry_blueflame"), SubResource("entry_commissargrey"), SubResource("entry_dreamy"), SubResource("entry_erik"), SubResource("entry_goodname"), SubResource("entry_lag"), SubResource("entry_shigemori"), SubResource("entry_shura"), SubResource("entry_imsad"), SubResource("entry_gragussy"), SubResource("entry_fatsukuna"), SubResource("entry_slimsukuna"), SubResource("entry_sungjingwoo"), SubResource("entry_allmight")])
+entries = Array[ExtResource("2")]([SubResource("entry_gobby"), SubResource("entry_justbyluck"), SubResource("entry_spijette"), SubResource("entry_retinazer"), SubResource("entry_baldvegeta"), SubResource("entry_baldguy"), SubResource("entry_bald_ramsay"), SubResource("entry_buffed_steve"), SubResource("entry_the_greatest_xi"), SubResource("entry_sillvania"), SubResource("entry_coconutbird_caster"), SubResource("entry_drowsy"), SubResource("entry_jimmysmooth"), SubResource("entry_perby"), SubResource("entry_muni"), SubResource("entry_strea"), SubResource("entry_roki"), SubResource("entry_shadowkittay"), SubResource("entry_globox"), SubResource("entry_quinnester"), SubResource("entry_storm"), SubResource("entry_keizoyama"), SubResource("entry_ghostily"), SubResource("entry_noel"), SubResource("entry_femsui"), SubResource("entry_answer"), SubResource("entry_blueflame"), SubResource("entry_commissargrey"), SubResource("entry_dreamy"), SubResource("entry_erik"), SubResource("entry_goodname"), SubResource("entry_lag"), SubResource("entry_shigemori"), SubResource("entry_shura"), SubResource("entry_imsad"), SubResource("entry_gragussy"), SubResource("entry_fatsukuna"), SubResource("entry_slimsukuna"), SubResource("entry_sungjingwoo"), SubResource("entry_allmight"), SubResource("entry_penguin")])

@@ -621,6 +621,10 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[sung], Terms.t("battle_shadow_realm"), Color("#a78bfa"), 60, 30)
 	for sung in event.get("fent_self", []):
 		_float_text(_views[sung], Terms.t("battle_fent_self"), Color("#a3e635"), 60, 30)
+	for penguin in event.get("fart", []):
+		_float_text(_views[penguin], Terms.t("battle_fart"), Color("#bef264"), 60, 30)
+	for penguin in event.get("diarrhea", []):
+		_float_text(_views[penguin], Terms.t("battle_diarrhea"), Color("#a16207"), 60, 30)
 	for might in event.get("texas_smash", []):
 		_float_text(_views[might], Terms.t("battle_texas_smash"), Color("#facc15"), 60, 30)
 	for target in event.get("domain_splash", []):
