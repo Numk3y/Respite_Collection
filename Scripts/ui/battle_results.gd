@@ -42,8 +42,9 @@ func _init() -> void:
 	_rays.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_rays)
 
-## Builds and plays the screen. `lines` are the reward/level-up lines already written for the footer.
-func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> void:
+## Builds and plays the screen. `items` are the rewards as icon cards ({kind, amount, label, note?, tint?, gear?},
+## see RewardCard); `lines` the rest (level ups, Bond, the daily bonus...) as short text under them.
+func open(battle: Dictionary, stage_name: String, lines: PackedStringArray, items: Array[Dictionary] = []) -> void:
 	global_position = Vector2.ZERO
 	size = get_viewport_rect().size
 	var boss: bool = battle.report.get("world_boss", false)
@@ -69,11 +70,11 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 	_content.alignment = BoxContainer.ALIGNMENT_CENTER
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_content.add_theme_constant_override("separation", 6)
+	_content.add_theme_constant_override("separation", 4)
 	scroll.add_child(_content)
 
 	var title_key := "results_world_boss" if boss else ("results_victory" if win else "results_defeat")
-	var title := _label(Terms.t(title_key), 52, GOLD if win else DEFEAT_RED)
+	var title := _label(Terms.t(title_key), 46, GOLD if win else DEFEAT_RED)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_constant_override("outline_size", 18)
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
@@ -91,8 +92,19 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray) -> v
 		var meter := StarMeter.new(34.0, battle.report.stars)
 		star_row.add_child(meter)
 		meter.pop.call_deferred(battle.report.get("new_stars", []))
+	# What was won: a row of icon cards that pop in one after another, numbers counting up
+	if not items.is_empty():
+		var row := HFlowContainer.new()
+		row.alignment = FlowContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("h_separation", 10)
+		row.add_theme_constant_override("v_separation", 8)
+		_content.add_child(row)
+		for i in items.size():
+			var card := RewardCard.new(items[i])
+			row.add_child(card)
+			card.play(0.45 + 0.12 * i)
 	if not lines.is_empty():
-		var rewards := _label(" · ".join(lines), 22 if boss else 14, GOLD if boss else UITheme.TEXT)
+		var rewards := _label(" · ".join(lines), 22 if boss else 14, GOLD if boss else UITheme.TEXT_DIM.lightened(0.25))
 		rewards.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		rewards.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_content.add_child(rewards)
@@ -176,7 +188,7 @@ func _award_card(title: String, color: Color, winner: Dictionary, key: String) -
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	var art := CharArt.new()
-	art.custom_minimum_size = Vector2(58, 72)
+	art.custom_minimum_size = Vector2(50, 62)
 	if not winner.is_empty() and winner.data:
 		art.set_character(winner.data)
 	else:
@@ -188,7 +200,7 @@ func _award_card(title: String, color: Color, winner: Dictionary, key: String) -
 	row.add_child(lines)
 	lines.add_child(_label(title.to_upper(), 14, color))
 	lines.add_child(_label(winner.name if not winner.is_empty() else Terms.t("results_nobody"), 20, Color.WHITE))
-	var amount := _label("0" if not winner.is_empty() else "-", 26, color.lightened(0.25))
+	var amount := _label("0" if not winner.is_empty() else "-", 23, color.lightened(0.25))
 	amount.add_theme_constant_override("outline_size", 8)
 	lines.add_child(amount)
 	if not winner.is_empty():
@@ -213,7 +225,7 @@ func _breakdown(friends: Array[Dictionary], best: Dictionary) -> Control:
 		grid.add_child(head)
 	for i in friends.size():
 		var f := friends[i]
-		var name_label := _label(f.name, 16, Color.WHITE)
+		var name_label := _label(f.name, 15, Color.WHITE)
 		name_label.custom_minimum_size = Vector2(170, 0)
 		name_label.clip_text = true
 		grid.add_child(name_label)
@@ -293,6 +305,95 @@ func _confetti() -> void:
 	add_child(p)
 	move_child(p, 2)  # behind the text, above the rays
 
+## One reward: its icon (CurrencyChip.draw_kind, or the gear tile for a gear drop) over the amount in big numbers,
+## the name under it, and a small gold tag for where it came from ("First clear", "New stars"). It fades and rises in
+## at its turn with a coin tick while the number counts up. Built from {kind, amount, label, note?, tint?, gear?}.
+class RewardCard extends PanelContainer:
+	var _amount := 0
+	var _amount_label: Label
+	var _icon: Control
+
+	func _init(item: Dictionary) -> void:
+		_amount = int(item.get("amount", 0))
+		var gear: EquipmentData = item.get("gear")
+		var tint: Color = item.get("tint", Color(0, 0, 0, 0))
+		var color: Color = CharArt.RARITY_COLORS.get(gear.rarity, UITheme.CYAN) if gear \
+			else (tint if tint.a > 0.0 else CurrencyChip.KIND_COLORS.get(str(item.get("kind", "")), UITheme.CYAN))
+		var style := UITheme.box(Color(0.04, 0.06, 0.11, 0.94), Color(color, 0.75), 1, 10, 6)
+		style.content_margin_left = 10
+		style.content_margin_right = 10
+		style.shadow_color = Color(color, 0.25)
+		style.shadow_size = 8
+		add_theme_stylebox_override("panel", style)
+		custom_minimum_size = Vector2(0, 64)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Wide and low: the icon on the left, the tag / amount / name stacked beside it
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(row)
+		if gear:
+			var tile := GearIcon.new()
+			tile.set_gear(gear)
+			tile.custom_minimum_size = Vector2(44, 50)
+			tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_icon = tile
+		else:
+			var icon := KindIcon.new(str(item.get("kind", "")), tint)
+			icon.custom_minimum_size = Vector2(42, 42)
+			_icon = icon
+		_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(_icon)
+		var box := VBoxContainer.new()
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		box.add_theme_constant_override("separation", 0)
+		box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(box)
+		var note := str(item.get("note", ""))
+		if not note.is_empty():
+			var tag := UITheme.tag(note, UITheme.GOLD, true)
+			tag.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			box.add_child(tag)
+		_amount_label = Label.new()
+		_amount_label.text = ("x%s" if gear else "+%s") % CurrencyChip._group(_amount)
+		_amount_label.add_theme_font_size_override("font_size", 21)
+		_amount_label.add_theme_color_override("font_color", Color.WHITE)
+		_amount_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		_amount_label.add_theme_constant_override("outline_size", 6)
+		box.add_child(_amount_label)
+		var name_label := Label.new()
+		name_label.text = str(item.get("label", ""))
+		name_label.add_theme_font_size_override("font_size", 13)
+		name_label.add_theme_color_override("font_color", color.lightened(0.35))
+		name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		name_label.add_theme_constant_override("outline_size", 4)
+		box.add_child(name_label)
+
+	## Waits `delay`, then fades in (the row is a container, so it's a fade, not a slide) with the number counting up
+	func play(delay: float) -> void:
+		modulate.a = 0.0
+		var gear := _amount_label.text.begins_with("x")
+		var t := create_tween()
+		t.tween_interval(delay)
+		t.tween_callback(Sound.play.bind("coin", -6.0))
+		t.tween_property(self, "modulate:a", 1.0, 0.2)
+		if not gear and _amount > 1:
+			t.parallel().tween_method(func(v: float): _amount_label.text = "+" + CurrencyChip._group(roundi(v)),
+				0.0, float(_amount), 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+## A reward kind's icon (CurrencyChip.draw_kind), for RewardCard
+class KindIcon extends Control:
+	var _kind := ""
+	var _tint := Color(0, 0, 0, 0)
+
+	func _init(kind: String, tint: Color) -> void:
+		_kind = kind
+		_tint = tint
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		CurrencyChip.draw_kind(self, size * 0.5, minf(size.x, size.y) * 0.5, _kind, _tint)
+
 ## Slowly turning light rays behind the title
 class Rays extends Control:
 	var color := Color.WHITE
@@ -362,7 +463,7 @@ class StatBar extends Control:
 
 	func _init(color: Color) -> void:
 		_color = color
-		custom_minimum_size = Vector2(150, 20)
+		custom_minimum_size = Vector2(150, 18)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func set_amount(value: float) -> void:

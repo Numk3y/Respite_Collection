@@ -536,43 +536,7 @@ class CheckinCell extends Control:
 ## Draws a reward kind's icon (the same pictures as the header's currency chips)
 class RewardIcon extends RefCounted:
 	static func draw_icon(ci: CanvasItem, center: Vector2, radius: float, kind: String) -> void:
-		var color: Color = CurrencyChip.KIND_COLORS.get(kind, UITheme.CYAN)
-		ci.draw_circle(center, radius, Color(color, 0.22))
-		ci.draw_arc(center, radius - 1, 0, TAU, 32, Color(color, 0.85), 2.0, true)
-		var r := radius
-		var c := center
-		var ink := color.lightened(0.2)
-		match kind:
-			"money":
-				ci.draw_circle(c, r * 0.58, ink)
-				ci.draw_arc(c, r * 0.4, 0, TAU, 24, Color(0, 0, 0, 0.35), 1.5, true)
-				ci.draw_line(c + Vector2(0, -r * 0.25), c + Vector2(0, r * 0.25), Color(0, 0, 0, 0.45), 2.0)
-			"credit_card":
-				var card := Rect2(c.x - r * 0.62, c.y - r * 0.4, r * 1.24, r * 0.8)
-				ci.draw_rect(card, ink)
-				ci.draw_rect(Rect2(card.position.x, card.position.y + r * 0.14, card.size.x, r * 0.16), Color(0, 0, 0, 0.5))
-				ci.draw_rect(Rect2(card.position.x + r * 0.14, card.position.y + r * 0.42, r * 0.26, r * 0.2), Color("#B45309"))
-			"snack":
-				ci.draw_circle(c, r * 0.58, ink)
-				for p in [Vector2(-0.22, -0.18), Vector2(0.2, -0.1), Vector2(-0.05, 0.22), Vector2(0.25, 0.25)]:
-					ci.draw_circle(c + p * r, r * 0.09, Color("#4A2C0A"))
-			"coffee":
-				var cup := Rect2(c.x - r * 0.42, c.y - r * 0.12, r * 0.64, r * 0.55)
-				ci.draw_rect(cup, ink)
-				ci.draw_arc(c + Vector2(r * 0.26, r * 0.14), r * 0.17, -PI / 2, PI / 2, 12, ink, 2.0, true)
-				for dx in [-0.22, 0.02]:
-					ci.draw_line(c + Vector2(dx * r, -r * 0.24), c + Vector2(dx * r + r * 0.06, -r * 0.48), Color(ink, 0.8), 1.5, true)
-			"parts":
-				ci.draw_circle(c, r * 0.5, ink)
-				for i in 8:
-					var a := TAU * i / 8.0
-					ci.draw_circle(c + Vector2.from_angle(a) * r * 0.55, r * 0.13, ink)
-				ci.draw_circle(c, r * 0.18, Color(0, 0, 0, 0.55))
-			"gossip":
-				ci.draw_circle(c + Vector2(0, -r * 0.05), r * 0.52, ink)
-				ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-r * 0.3, r * 0.25), c + Vector2(-r * 0.05, r * 0.4), c + Vector2(-r * 0.45, r * 0.62)]), ink)
-				for dx in [-0.22, 0.0, 0.22]:
-					ci.draw_circle(c + Vector2(dx * r, -r * 0.05), r * 0.07, Color(0, 0, 0, 0.55))
+		CurrencyChip.draw_kind(ci, center, radius, kind)
 
 ## The activity bar: a track that fills with today's points and five chests along it. A chest that's ready bobs
 ## and glows (click it to open); an opened one sits with its lid up and a tick. Under each: its points and reward.

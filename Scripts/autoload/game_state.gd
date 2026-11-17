@@ -150,8 +150,10 @@ func _new_save() -> Dictionary:
 		"pull_history": [],  # newest last, at most PULL_HISTORY_MAX: {char_id, rarity, pool, time}
 		"starter_chosen": false,
 		"commissions": {},  # commission_id -> {"uid", "started_at"}; see Commissions autoload
-		# World boss: the server account, fights not yet reported, results whose event isn't in this build; see WorldBoss
-		"world_boss": {"player_id": "", "token": "", "name": "", "pending": [], "unclaimed": []},
+		# The server account (World Boss, Arena, cloud save): the player's name (picked before the starter), id, token,
+		# recovery code; fights not yet reported; results whose event isn't in this build. See WorldBoss and CloudSave.
+		"world_boss": {"player_id": "", "token": "", "name": "", "recovery_code": "", "pending": [], "unclaimed": []},
+		"updated_at": 0,  # unix time the content last changed (see save_game)
 		"settings": {},
 		# Lifetime counters: "pulls", "manual_ultimates", "commissions" (shifts started), "shifts_done", "battles",
 		# "wins", "flawless_wins", "casino_games", "power_ups", "gear_work", "crafts", "checkins", "full_days"
@@ -159,6 +161,9 @@ func _new_save() -> Dictionary:
 		"daily": {},  # check-in, daily and weekly missions; see the Daily autoload
 		"achievements": {},  # achievement id -> tiers claimed; see Scripts/achievements.gd
 		"arena": {},  # arena rating and today's fights as last heard from the server; see the Arena autoload
+		"tickets": {},  # "recruit_ticket" / "sr_ticket" -> how many (from event shops; used on the Recruit tab)
+		"event_currency": {},  # event id -> amount (EventShop)
+		"event_shop": {},  # event id -> {item index: times bought} (EventShop)
 		"tutorial": Tutorial.HOME_BATTLE,
 		# See BeginnerMissions; pool_pulled = the one free Beginner pool pull is used (Gacha.beginner_pull)
 		"beginner": {"claimed": {}, "ssr_claimed": false, "pool_pulled": false},
@@ -176,9 +181,31 @@ func _empty_equips() -> Dictionary:
 		equips[key] = 0
 	return equips
 
+## data.updated_at moves only when the save's content actually changed (the 30 s autosave writes the same data
+## again), so cloud save can tell "changed since the last upload" from "saved again"
+var _content_hash := 0
+
+## A hash of the save's content: everything except updated_at itself and CloudSave's own bookkeeping ("cloud")
+func _hash_content() -> int:
+	var copy := data.duplicate(false)
+	copy.erase("updated_at")
+	copy.erase("cloud")
+	return JSON.stringify(copy).hash()
+
+func _stamp_if_changed() -> void:
+	var h := _hash_content()
+	if h != _content_hash:
+		_content_hash = h
+		data.updated_at = int(Time.get_unix_time_from_system())
+
+## The save's content changed at this unix time (0 for a save that never changed since it was made)
+func updated_at() -> int:
+	return int(data.get("updated_at", 0))
+
 # Write a temp file first, then swap it in, so a crash mid-save can't corrupt the save.
 # On the web, Godot copies user:// to IndexedDB on the next frame after a file is written.
 func save_game() -> void:
+	_stamp_if_changed()
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	var f := FileAccess.open(SAVE_DIR + TMP_FILE, FileAccess.WRITE)
 	if f == null:
@@ -203,9 +230,14 @@ func load_game() -> bool:
 		var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if parsed is Dictionary:
 			data = _migrate(parsed)
+			_remember_content()
 			return true
 		push_warning("Save file is corrupted: %s" % path)
 	return false
+
+## Takes the loaded save's content as "unchanged", keeping its updated_at
+func _remember_content() -> void:
+	_content_hash = _hash_content()
 
 # ───────── Backup export / import ─────────
 # Browser storage can be wiped (clearing site data, Safari dropping data for sites not visited in a while),
@@ -221,6 +253,7 @@ func import_text(text: String) -> String:
 	if not (parsed is Dictionary and parsed.has("owned") and parsed.has("money")):
 		return Terms.t("backup_invalid")
 	data = _migrate(parsed)
+	_remember_content()  # a restored save keeps its own updated_at, so it isn't mistaken for a newer one
 	_fix_team_rows()
 	_grant_free_friends()
 	save_game()
@@ -437,6 +470,21 @@ func is_stage_unlocked(stage: StageData) -> bool:
 		return true
 	var previous := DB.get_map(stage.chapter, stage.number - 1)
 	return previous != null and is_stage_cleared(previous.id)
+
+## Recruit tickets: "recruit_ticket" (one free pull) and "sr_ticket" (one pull that's always an SR)
+func get_tickets(kind: String) -> int:
+	return int(data.get_or_add("tickets", {}).get(kind, 0))
+
+func add_tickets(kind: String, amount: int) -> void:
+	data.get_or_add("tickets", {})[kind] = maxi(get_tickets(kind) + amount, 0)
+	materials_changed.emit()
+
+## Uses one ticket; false if there's none
+func use_ticket(kind: String) -> bool:
+	if get_tickets(kind) <= 0:
+		return false
+	add_tickets(kind, -1)
+	return true
 
 func get_material(key: String) -> int:
 	return int(data.materials.get(key, 0))

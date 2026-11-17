@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dtg0ude77ly56"
+path="res://.godot/imported/FNAF Power Outage.mp3-7ffae301f60d7da748da7f23eae25bd4.mp3str"
+
+[deps]
+
+source_file="res://Audio/sfx/FNAF Power Outage.mp3"
+dest_files=["res://.godot/imported/FNAF Power Outage.mp3-7ffae301f60d7da748da7f23eae25bd4.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

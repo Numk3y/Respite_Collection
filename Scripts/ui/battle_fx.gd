@@ -215,6 +215,109 @@ func aura(pos: Vector2) -> void:
 	_ring(pos, Color.WHITE, 90.0, 0.35)
 	_burst(pos, 28, 1.2, [CRIT_FX, Color.WHITE, Color("#ffb347")], false)
 
+const SHADOW_FX := Color("#8b5cf6")
+const SHADOW_SMOKE := [Color("#4c1d95"), Color("#2e1065"), Color("#6d28d9"), Color("#1e1038")]
+
+## Passive Arise (SungJingWoo): a shadow soldier rises. A dark portal opens under the card, black smoke boils up
+## through it with violet sparks, and violet rings pulse out. `card_size` sizes the portal and smoke.
+func shadow_rise(pos: Vector2, card_size: Vector2) -> void:
+	var feet := pos + Vector2(0, card_size.y * 0.42)
+	var portal := Portal.new()
+	portal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portal.setup(feet, card_size.x * 0.6)
+	add_child(portal)
+	var t := portal.create_tween()
+	t.tween_property(portal, "progress", 1.0, _d(0.35)).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	t.tween_interval(_d(0.7))
+	t.tween_property(portal, "progress", 0.0, _d(0.45)).set_ease(Tween.EASE_IN)
+	t.tween_callback(portal.queue_free)
+	# Black smoke boiling up out of the portal
+	var smoke := CPUParticles2D.new()
+	smoke.position = feet
+	smoke.one_shot = true
+	smoke.explosiveness = 0.35
+	smoke.amount = 46
+	smoke.lifetime = 1.3
+	smoke.speed_scale = speed
+	smoke.texture = _dot_texture
+	smoke.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	smoke.emission_rect_extents = Vector2(card_size.x * 0.45, 6)
+	smoke.direction = Vector2.UP
+	smoke.spread = 12.0
+	smoke.gravity = Vector2(0, -40)
+	smoke.initial_velocity_min = 60.0
+	smoke.initial_velocity_max = 150.0
+	smoke.scale_amount_min = 1.6
+	smoke.scale_amount_max = 3.2
+	var offsets := PackedFloat32Array()
+	for i in SHADOW_SMOKE.size():
+		offsets.append(float(i) / SHADOW_SMOKE.size())
+	var ramp := Gradient.new()
+	ramp.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	ramp.offsets = offsets
+	ramp.colors = PackedColorArray(SHADOW_SMOKE)
+	smoke.color_initial_ramp = ramp
+	smoke.color_ramp = _fade_ramp(0.9)
+	add_child(smoke)
+	smoke.emitting = true
+	smoke.finished.connect(smoke.queue_free)
+	# Violet sparks streaking up through the smoke
+	var sparks := CPUParticles2D.new()
+	sparks.position = feet
+	sparks.one_shot = true
+	sparks.explosiveness = 0.5
+	sparks.amount = 30
+	sparks.lifetime = 0.9
+	sparks.speed_scale = speed
+	sparks.texture = _spark_texture
+	sparks.particle_flag_align_y = true
+	sparks.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	sparks.emission_rect_extents = Vector2(card_size.x * 0.4, 4)
+	sparks.direction = Vector2.UP
+	sparks.spread = 8.0
+	sparks.gravity = Vector2.ZERO
+	sparks.initial_velocity_min = 180.0
+	sparks.initial_velocity_max = 360.0
+	sparks.damping_min = 120.0
+	sparks.damping_max = 220.0
+	sparks.scale_amount_min = 0.8
+	sparks.scale_amount_max = 1.6
+	sparks.color = SHADOW_FX.lightened(0.3)
+	sparks.color_ramp = _fade_ramp()
+	sparks.material = _additive()
+	add_child(sparks)
+	sparks.emitting = true
+	sparks.finished.connect(sparks.queue_free)
+	_ring(pos, SHADOW_FX, 120.0, 0.6)
+	var late := create_tween()
+	late.tween_interval(_d(0.3))
+	late.tween_callback(_ring.bind(pos, Color("#c4b5fd"), 160.0, 0.7))
+
+## Shadow wisps that keep drifting off a card for the rest of the fight (a soldier raised by Arise). Returns the
+## emitter so the caller can stop it if the soldier falls again; it's a child of `card`, so it moves with it.
+func shadow_wisps(card: Control, card_size: Vector2) -> CPUParticles2D:
+	var p := CPUParticles2D.new()
+	p.position = card_size / 2.0
+	p.amount = 14
+	p.lifetime = 1.6
+	p.speed_scale = speed
+	p.texture = _dot_texture
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	p.emission_rect_extents = card_size / 2.0
+	p.direction = Vector2.UP
+	p.spread = 20.0
+	p.gravity = Vector2(0, -25)
+	p.initial_velocity_min = 8.0
+	p.initial_velocity_max = 25.0
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.2
+	p.color = SHADOW_FX
+	p.color_ramp = _fade_ramp(0.6)
+	p.material = _additive()
+	p.local_coords = false  # the wisps trail behind when the card lunges
+	card.add_child(p)
+	return p
+
 ## Moves `target` around for a moment and puts it back
 func shake(target: Control, strength: float, seconds: float) -> void:
 	var origin := target.position
@@ -312,6 +415,36 @@ class Ring extends Control:
 	func _draw() -> void:
 		var fade := 1.0 - progress
 		draw_arc(_center, lerpf(_reach * 0.15, _reach, progress), 0.0, TAU, 48, Color(_color, fade), 2.0 + 8.0 * fade, true)
+
+## A flat dark portal on the ground (an ellipse with a glowing violet rim) that opens as progress goes 0 -> 1
+class Portal extends Control:
+	var progress := 0.0:
+		set(value):
+			progress = value
+			queue_redraw()
+	var _center := Vector2.ZERO
+	var _width := 100.0
+
+	func setup(center: Vector2, width: float) -> void:
+		_center = center
+		_width = width
+
+	func _draw() -> void:
+		var rx := _width * maxf(progress, 0.0)
+		if rx < 1.0:
+			return
+		var ry := rx * 0.28
+		for layer in [[1.25, Color(0.55, 0.36, 0.96, 0.25)], [1.0, Color(0.04, 0.02, 0.1, 0.8)], [0.7, Color(0.12, 0.06, 0.22, 0.8)]]:
+			var points := PackedVector2Array()
+			for i in 40:
+				var a := TAU * i / 40.0
+				points.append(_center + Vector2(cos(a) * rx * layer[0], sin(a) * ry * layer[0]))
+			draw_colored_polygon(points, layer[1])
+		var rim := PackedVector2Array()
+		for i in 41:
+			var a := TAU * i / 40.0
+			rim.append(_center + Vector2(cos(a) * rx, sin(a) * ry))
+		draw_polyline(rim, Color("#a78bfa"), 2.5, true)
 
 ## A bright diagonal streak that sweeps across and fades
 class Slash extends Control:

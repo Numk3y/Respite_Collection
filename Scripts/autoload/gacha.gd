@@ -18,11 +18,18 @@ func money_cost(pool: GachaPool, count: int) -> int:
 func card_cost(count: int) -> int:
 	return GameState.CREDIT_CARDS_PER_PULL * count
 
-## Each pull costs the pool's Money price AND Credit Cards; `free` is the free daily recruit (one pull, no cost,
-## see Daily.free_pull_available). Pity and the pool's rate-up work as usual.
+## How a pull is paid for: the usual Money + Credit Cards, the free daily recruit (Daily.free_pull_available), or a
+## ticket from an event shop ("recruit_ticket": one pull; "sr_ticket": one pull that's always an SR)
+const PAID := "paid"
+const DAILY_FREE := "daily_free"
+const RECRUIT_TICKET := "recruit_ticket"
+const SR_TICKET := "sr_ticket"
+
+## Each pull costs the pool's Money price AND Credit Cards, unless `payment` says otherwise (one pull each for the
+## free daily recruit and tickets). Pity and the pool's rate-up work as usual.
 ## Returns [{character, rarity, is_new, uid, result: "new" | "ascend" | "overflow", rank, money}];
-## empty if either currency is short, the free pull is used up, or the pool is empty
-func pull(pool: GachaPool, count: int, free: bool = false) -> Array[Dictionary]:
+## empty if the payment can't be made or the pool is empty
+func pull(pool: GachaPool, count: int, payment: String = PAID) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
 
 	# Group by rarity, keeping only enabled characters with weight > 0
@@ -36,12 +43,22 @@ func pull(pool: GachaPool, count: int, free: bool = false) -> Array[Dictionary]:
 		push_warning("Gacha pool %s has no characters to pull" % pool.id)
 		return results
 
-	if free:
-		count = 1
-		if not Daily.use_free_pull():
-			return results
-	elif not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
-		return results
+	var force_sr := false
+	match payment:
+		DAILY_FREE:
+			count = 1
+			if not Daily.use_free_pull():
+				return results
+		RECRUIT_TICKET, SR_TICKET:
+			count = 1
+			if payment == SR_TICKET and not by_rarity.has(CharacterData.Rarity.SR):
+				return results  # nothing to guarantee: keep the ticket
+			if not GameState.use_ticket(payment):
+				return results
+			force_sr = payment == SR_TICKET
+		_:
+			if not GameState.try_spend_pull(money_cost(pool, count), card_cost(count)):
+				return results
 	GameState.add_stat("pulls", count)  # beginner missions
 
 	var top := CharacterData.Rarity.SSR
@@ -53,6 +70,8 @@ func pull(pool: GachaPool, count: int, free: bool = false) -> Array[Dictionary]:
 			rarity = top
 		else:
 			rarity = _weighted_pick(rarities, func(r): return pool.weight_for(r))
+		if force_sr:
+			rarity = CharacterData.Rarity.SR
 		# A pull of GUARANTEE_PULLS or more always has an SR or better: if none came up, the last one becomes SR
 		if count >= GUARANTEE_PULLS and i == count - 1 and not got_sr and rarity < CharacterData.Rarity.SR:
 			if rarities.has(CharacterData.Rarity.SR):

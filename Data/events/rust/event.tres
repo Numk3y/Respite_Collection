@@ -12,6 +12,56 @@
 [ext_resource type="Script" path="res://Scripts/resources/event_reward.gd" id="10_hb2to"]
 [ext_resource type="Script" path="res://Scripts/resources/event_data.gd" id="11_e7aqe"]
 [ext_resource type="Texture2D" path="res://Art/backgrounds/Rust_Event.png" id="bg"]
+[ext_resource type="Script" path="res://Scripts/resources/event_shop_item.gd" id="shop_item"]
+
+[sub_resource type="Resource" id="shop_sr_ticket"]
+script = ExtResource("shop_item")
+kind = "sr_ticket"
+amount = 1
+cost = 3000
+stock = 1
+
+[sub_resource type="Resource" id="shop_recruit_ticket"]
+script = ExtResource("shop_item")
+kind = "recruit_ticket"
+amount = 1
+cost = 300
+stock = 10
+
+[sub_resource type="Resource" id="shop_netherite"]
+script = ExtResource("shop_item")
+kind = "gossip"
+amount = 1
+cost = 150
+stock = 10
+
+[sub_resource type="Resource" id="shop_diamond"]
+script = ExtResource("shop_item")
+kind = "coffee"
+amount = 1
+cost = 60
+stock = 20
+
+[sub_resource type="Resource" id="shop_iron"]
+script = ExtResource("shop_item")
+kind = "snack"
+amount = 5
+cost = 40
+stock = 30
+
+[sub_resource type="Resource" id="shop_money"]
+script = ExtResource("shop_item")
+kind = "money"
+amount = 1000
+cost = 50
+stock = 20
+
+[sub_resource type="Resource" id="shop_parts"]
+script = ExtResource("shop_item")
+kind = "parts"
+amount = 10
+cost = 80
+stock = 10
 
 [sub_resource type="Resource" id="reward_all"]
 script = ExtResource("10_hb2to")
@@ -51,3 +101,8 @@ boss_matches_team_level = true
 max_damage_per_fight = 100000
 reward_all = SubResource("reward_all")
 reward_top = Array[ExtResource("10_hb2to")]([SubResource("reward_1st"), SubResource("reward_2nd"), SubResource("reward_3rd")])
+currency_name = "Scraps"
+currency_color = Color(0.85, 0.55, 0.25, 1)
+currency_drops = Array[Vector2i]([Vector2i(10, 14), Vector2i(14, 20), Vector2i(18, 26), Vector2i(22, 32), Vector2i(30, 45)])
+boss_currency = 40
+shop = Array[ExtResource("shop_item")]([SubResource("shop_sr_ticket"), SubResource("shop_recruit_ticket"), SubResource("shop_netherite"), SubResource("shop_diamond"), SubResource("shop_iron"), SubResource("shop_money"), SubResource("shop_parts")])

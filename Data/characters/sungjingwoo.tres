@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"sungjingwoo_passive"
+display_name = "Maybe I Am the Protagonist"
+description = "Once the battle is 10 turns in (anyone's turns), SungJingWoo transforms on his next turn for the rest of the battle:
+25%: Real SungJingWoo. Passive Arise: up to 3 times, a fallen front-row friend is revived with 25% HP. Unlocks his Ultimate.
+75%: Fent Posing. Passive Fent Posing: deals only 70% damage, and every attack has a 30% chance to hit himself."
+effect_id = &"protagonist"
+params = {"turns": 10, "real_chance": 0.25, "revives": 3, "revive_pct": 0.25, "fent_damage": 0.7, "fent_self_chance": 0.3}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"sungjingwoo_active"
+display_name = "Shadow Realm"
+kind = 1
+description = "Only as Real SungJingWoo (the gauge stays empty until then): all friends deal +20% damage and get +20% Defense for 3 turns."
+effect_id = &"shadow_realm"
+params = {"damage": 0.2, "defense": 0.2, "turns": 3}
+
+[resource]
+script = ExtResource("1")
+id = &"sungjingwoo"
+display_name = "SungJingWoo"
+char_class = 2
+rarity = 1
+hp = 80
+attack = 72
+defense = 35
+evasion = 25
+accuracy = 85
+speed = 65
+portrait_path = "res://Art/characters/SungJingWoo_OneLeg.png"
+cutin_path = "res://Art/cutins/RealSungJingWoo.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "One leg. Main character energy. Probably."
+is_starter = false

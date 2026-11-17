@@ -369,6 +369,12 @@ func _select_stage(stage: StageData) -> void:
 	for child in _rewards.get_children():
 		child.queue_free()
 	_rewards.add_child(_reward_line(Terms.t("map_reward_money", {"amount": stage.reward_money}), UITheme.GOLD))
+	# Event missions: the event's currency first, it's what players replay them for
+	var event := DB.event_of(stage)
+	if event and event.has_shop():
+		var drop := event.currency_drop(stage)
+		_rewards.add_child(_reward_line(Terms.t("map_reward_material", {"material": event.currency_name, "min": drop.x,
+			"max": drop.y}), event.currency_color.lightened(0.25)))
 	for key in stage.reward_materials:
 		var range_v: Vector2i = stage.reward_materials[key]
 		_rewards.add_child(_reward_line(Terms.t("map_reward_material", {"material": Terms.material_name(key), "min": range_v.x, "max": range_v.y}), UITheme.TEXT))

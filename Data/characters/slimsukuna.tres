@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"slimsukuna_passive"
+display_name = "Domain Expansion"
+description = "Every attack that lands also hits up to 3 other enemies in the back row for 12% of the damage (can't miss)."
+effect_id = &"domain_expansion"
+params = {"splash": 0.12, "targets": 3, "row": "back"}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"slimsukuna_active"
+display_name = "None"
+kind = 1
+description = "Slim Sukuna has no Ultimate."
+
+[resource]
+script = ExtResource("1")
+id = &"slimsukuna"
+display_name = "Slim Sukuna"
+char_class = 2
+rarity = 1
+hp = 80
+attack = 72
+defense = 35
+evasion = 25
+accuracy = 85
+speed = 65
+portrait_path = "res://Art/characters/SlimSukuna.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "Fat Sukuna after the diet."
+is_starter = false

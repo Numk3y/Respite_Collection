@@ -1,4 +1,9 @@
 ﻿{
+    "themidnightbar.mp3":  {
+                               "size":  6275794,
+                               "lufs":  -8.9,
+                               "peak":  1.8
+                           },
     "homepage.mp3":  {
                          "size":  5024423,
                          "lufs":  -18.5,
@@ -14,6 +19,11 @@
                                  "lufs":  -11.7,
                                  "peak":  -1.6
                              },
+    "rust.mp3":  {
+                     "size":  3952797,
+                     "lufs":  -17.8,
+                     "peak":  -5.2
+                 },
     "drinkingnight.mp3":  {
                               "size":  5889599,
                               "lufs":  -9.8,

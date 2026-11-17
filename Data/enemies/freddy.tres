@@ -36,5 +36,5 @@ speed = 35
 passive_skill = SubResource("passive")
 active_skill = SubResource("active")
 ultimate_max = 100
-portrait_path = "res://Art/enemies/freddy.png"
+portrait_path = "res://Art/enemies/FreddyFazBear.png"
 description = "The band's frontman. Wanders off the stage after closing and hums to himself in the dark."

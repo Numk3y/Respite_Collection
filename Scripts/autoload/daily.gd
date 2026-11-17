@@ -451,6 +451,8 @@ static func grant(reward: Array) -> void:
 				GameState.add_credit_cards(amount)
 			"parts":
 				GameState.add_parts(amount)
+			"recruit_ticket", "sr_ticket":
+				GameState.add_tickets(kind, amount)
 			_:
 				GameState.add_material(kind, amount)
 
@@ -466,8 +468,10 @@ static func item_text(item: Array) -> String:
 			word = Terms.credit_card_word(amount)
 		"parts":
 			word = Terms.term("parts")
+		"recruit_ticket", "sr_ticket":
+			word = Terms.t(kind + ("_one" if amount == 1 else "_many"))
 		_:
-			word = Terms.material_name(kind)
+			word = Terms.material_name(kind, amount)
 	return "%s %s" % [Terms.number(amount), word]
 
 static func reward_text(reward: Array) -> String:

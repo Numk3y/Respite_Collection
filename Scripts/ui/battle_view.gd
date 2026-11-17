@@ -452,6 +452,7 @@ func _animate_wave(event: Dictionary) -> void:
 ## Lights out, then the scare: while the title slams in, every arriving card springs out of nowhere, glowing
 ## red-hot, each with its own burst of sparks
 func _jumpscare_entrance(arriving: Array[Dictionary], title: String, subtitle: String) -> void:
+	Sound.play("fnaf power outage")  # Audio/sfx/FNAF Power Outage.mp3, as the lights flicker out
 	await _jumpscare.blackout(_speed)
 	Sound.play("jumpscare")
 	var total := _jumpscare.reveal(title, subtitle, _jumpscare.get_parent())
@@ -610,6 +611,22 @@ func _animate(event: Dictionary) -> void:
 		_float_text(_views[shige], Terms.t("battle_mind_rot"), Color("#a3e635"), 60, 30)
 	for target in event.get("pool_splash", []):
 		_float_text(_views[target], Terms.t("battle_pool_splash"), Color("#38bdf8"), 60)
+	for form in event.get("protagonist", []):
+		var real: bool = form.real
+		_float_text(_views[int(form.unit)], Terms.t("battle_protagonist_real" if real else "battle_protagonist_fent"),
+			Color("#a78bfa") if real else Color("#a3e635"), 60, 30)
+	for revived in event.get("arise", []):
+		_shadow_soldier(_views[revived])
+	for sung in event.get("shadow_realm", []):
+		_float_text(_views[sung], Terms.t("battle_shadow_realm"), Color("#a78bfa"), 60, 30)
+	for sung in event.get("fent_self", []):
+		_float_text(_views[sung], Terms.t("battle_fent_self"), Color("#a3e635"), 60, 30)
+	for might in event.get("texas_smash", []):
+		_float_text(_views[might], Terms.t("battle_texas_smash"), Color("#facc15"), 60, 30)
+	for target in event.get("domain_splash", []):
+		_float_text(_views[target], Terms.t("battle_domain_splash"), Color("#c084fc"), 60)
+	for visit in event.get("mom_visit", []):
+		_float_text(_views[int(visit.target)], Terms.t("battle_mom_visit", {"visit": int(visit.visit)}), Color("#f9a8d4"), 60)
 	for snake in event.get("snake_mode", []):
 		_float_text(_views[snake], Terms.t("battle_snake_mode"), Color("#a3a3a3"), 60, 30)
 	for flame in event.get("french", []):
@@ -824,6 +841,14 @@ func _apply_state(event: Dictionary) -> void:
 			elif s.hp > 0:
 				view.slot.modulate.a = 1.0
 			view.hp = s.hp
+		var form_art: String = s.get("form_art", "")
+		if form_art != view.get("form_art", "") and view.data != null:
+			# A permanent transformation (e.g. SungJingWoo's Protagonist): swap in that form's picture
+			view.form_art = form_art
+			var path := CharacterData.find_art(CharacterData.ART_DIR, form_art)
+			view.art.set_character(view.data, load(path) as Texture2D if not path.is_empty() else null)
+			_fx.aura(_center(view))
+			_flash(view.body, Color(2.0, 1.6, 2.0), 2)
 		var alt: bool = s.get("alt", false)
 		view.horse = s.get("horse", false)  # the horse pukes instead of slashing
 		if alt != view.get("alt", false):
@@ -850,7 +875,30 @@ func _transform(view: Dictionary, on: bool) -> void:
 	_fx.aura(_center(view))
 	_flash(view.body, Color(2.0, 1.6, 2.0) if on else Color(1.6, 1.6, 1.6), 2)
 
+## Passive Arise (SungJingWoo): the fallen friend rises as a shadow soldier. A portal and black smoke under the card,
+## the card climbs out of a pitch-black silhouette, and for the rest of the fight it keeps a violet tint, a violet
+## border and shadow wisps drifting off it.
+func _shadow_soldier(view: Dictionary) -> void:
+	Sound.play("okiro_solo_leveling")
+	view.slot.modulate.a = 1.0
+	_fx.shadow_rise(_center(view), CARD_SIZE)
+	view.body.modulate = Color(0, 0, 0, 1)
+	var t := create_tween()
+	t.tween_property(view.body, "modulate", Color(0.35, 0.2, 0.6), _dur(0.6))
+	t.tween_property(view.body, "modulate", Color.WHITE, _dur(0.6))
+	# The tint lives on the portrait (flashes only reset the card's own colour) and the border
+	view.art.modulate = Color(0.62, 0.5, 1.0)
+	view.style.border_color = Color("#8b5cf6")
+	view.style.shadow_color = Color(0.55, 0.36, 0.96, 0.6)
+	view.style.shadow_size = 10
+	if not is_instance_valid(view.get("wisps")):
+		view.wisps = _fx.shadow_wisps(view.body, CARD_SIZE)
+	view.wisps.emitting = true
+	_float_text(view, Terms.t("battle_arise"), Color("#c4b5fd"), 30, 28)
+
 func _knockout(view: Dictionary) -> void:
+	if is_instance_valid(view.get("wisps")):
+		view.wisps.emitting = false
 	Sound.play("knockout")
 	_fx.knockout(_center(view), BattleFX.ALLY_FX if view.side == 0 else BattleFX.ENEMY_FX)
 	var t := create_tween().set_parallel()
@@ -895,41 +943,52 @@ func _finish() -> void:
 	_log.append_text("[center][b][font_size=18][color=%s]%s[/color][/font_size][/b][/center]" % [
 		"#fde047" if win else "#f87171", "\n".join(_battle.end_lines).replace("[", "[lb]")])
 	var report: Dictionary = _battle.report
-	var lines := PackedStringArray()  # rewards and the rest, for the results screen
+	# The results screen shows what was won as icon cards (`items`, see BattleResults.RewardCard) and everything
+	# else that happened as short lines of text under them (`lines`)
+	var lines := PackedStringArray()
+	var items: Array[Dictionary] = []
 	if report.get("world_boss", false):
 		lines.append(Terms.t("boss_result_damage", {"damage": Terms.number(report.damage)}))
 	elif win:
-		var extras := ""
+		if int(report.money) > 0:
+			items.append({"kind": "money", "amount": int(report.money), "label": Terms.term("money")})
 		for key in report.materials:
-			if report.materials[key] > 0:
-				extras += Terms.t("report_material", {"material": Terms.material_name(key), "amount": report.materials[key]})
-		var drops := ""
-		for item in report.drops:
-			drops += Terms.t("report_drop", {"item": item})
-		lines.append(Terms.t("battle_rewards", {"amount": report.money, "materials": extras, "drops": drops}))
+			if int(report.materials[key]) > 0:
+				items.append({"kind": key, "amount": int(report.materials[key]), "label": Terms.material_name(key, int(report.materials[key]))})
+		for e: EquipmentData in report.get("drop_gear", []):
+			items.append({"gear": e, "amount": 1, "label": e.display_name})
 		if report.exp > 0:
-			lines.append(Terms.t("battle_exp", {"amount": report.exp}))
+			items.append({"kind": "exp", "amount": int(report.exp), "label": Terms.t("results_exp_each")})
+		if report.get("account_exp", 0) > 0:
+			items.append({"kind": "account_exp", "amount": int(report.account_exp), "label": Terms.t("results_account_exp"),
+				"note": Terms.t("results_note_first_clear") if report.get("account_first_clear", false) else ""})
 		for up in report.level_ups:
 			lines.append(Terms.t("battle_level_up", {"name": up.name, "lv": up.level}))
-		if report.get("account_exp", 0) > 0:
-			lines.append(Terms.t("battle_account_exp_first" if report.get("account_first_clear", false) else "battle_account_exp",
-				{"amount": report.account_exp}))
 		if report.get("account_level_up", 0) > 0:
 			lines.append(Terms.t("battle_account_level_up", {"lv": report.account_level_up,
 				"limit": GameState.team_cost_limit_at(report.account_level_up)}))
-		if report.first_clear_cards > 0:
-			lines.append(Terms.t("battle_first_clear", {"amount": report.first_clear_cards}))
-		if report.get("star_cards", 0) > 0:
-			lines.append(Terms.t("battle_new_stars", {"amount": report.star_cards, "card_word": Terms.credit_card_word(report.star_cards)}))
-		if report.card_drops > 0:
-			lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
 		if not String(report.get("daily_bonus", "")).is_empty():
 			lines.append(report.daily_bonus)
 	elif report.card_drops > 0:  # beat the animatronics, then lost a later wave: their card still counts
 		lines.append(Terms.t("battle_defeat_partial"))
-		lines.append(Terms.t("battle_card_drop", {"amount": report.card_drops, "card_word": Terms.credit_card_word(report.card_drops)}))
 	else:
 		lines.append(Terms.t("battle_defeat"))
+	# Credit Cards from every source on one card, tagged with where they came from ("Bonus" for a mix)
+	var card_sources := []
+	for source in [["first_clear_cards", "results_note_first_clear"], ["star_cards", "results_note_stars"],
+			["card_drops", "results_note_animatronics"]]:
+		if int(report.get(source[0], 0)) > 0:
+			card_sources.append(source)
+	if not card_sources.is_empty():
+		var total := 0
+		for source in card_sources:
+			total += int(report[source[0]])
+		items.insert(mini(items.size(), 1 + report.get("materials", {}).size()), {"kind": "credit_card", "amount": total,
+			"label": Terms.credit_card_word(total),
+			"note": Terms.t(card_sources[0][1]) if card_sources.size() == 1 else Terms.t("results_note_bonus")})
+	if int(report.get("event_currency", 0)) > 0:
+		items.append({"kind": "event", "amount": int(report.event_currency), "label": str(report.event_currency_name),
+			"tint": report.get("event_currency_color", Color("#f59e0b"))})
 	for up in report.get("bond_ups", []):
 		lines.append(Terms.t("battle_bond_up", {"name": up.name, "bond": up.bond}))
 
@@ -940,7 +999,7 @@ func _finish() -> void:
 	_results.home_pressed.connect(home_pressed.emit)
 	_results.next_pressed.connect(next_pressed.emit)
 	_results.next_text = next_text
-	_results.open(_battle, _stage_name, lines)
+	_results.open(_battle, _stage_name, lines, items)
 	if not _note.is_empty():
 		_results.set_note(_note)
 	# Auto Run: after a win, the next run starts by itself (Return Home stops the series)

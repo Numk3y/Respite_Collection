@@ -38,6 +38,29 @@ extends Resource
 ## Extra for the top damage dealers: the first entry for 1st place, then 2nd, then 3rd
 @export var reward_top: Array[EventReward] = []
 
+@export_group("Event Shop")
+## The event's own currency (FGO / Azur Lane style): won from its missions and World Boss fights, spent in its
+## shop while the event runs. Empty name = no currency and no shop.
+@export var currency_name: String = ""
+@export var currency_color: Color = Color("#f59e0b")
+## Currency per win on each mission, in the same order as `missions` (min, max). Missing entries use a default
+## that grows with the mission's position.
+@export var currency_drops: Array[Vector2i] = []
+@export var boss_currency: int = 0  # for every World Boss fight, win or not
+@export var shop: Array[EventShopItem] = []
+
+func has_shop() -> bool:
+	return not currency_name.is_empty()
+
+## Currency range for winning `stage` (one of this event's missions)
+func currency_drop(stage: StageData) -> Vector2i:
+	var i := missions.find(stage)
+	if i < 0:
+		return Vector2i.ZERO
+	if i < currency_drops.size():
+		return currency_drops[i]
+	return Vector2i(8 + 4 * i, 12 + 6 * i)
+
 ## The mission players can play: the first, then each one after the previous is cleared
 func is_mission_unlocked(stage: StageData) -> bool:
 	var i := missions.find(stage)

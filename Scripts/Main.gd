@@ -79,6 +79,9 @@ func _ready() -> void:
 	add_child(badge_timer)
 	if GameState.data.starter_chosen:
 		_show_main()
+		_check_cloud_on_start()
+	elif WorldBoss.player_name().strip_edges().is_empty():
+		_show_name_select()
 	else:
 		_show_starter_select()
 
@@ -210,6 +213,295 @@ func _card_text(uid: int) -> String:
 		text += "\n" + "  ".join(pairs.slice(i, i + 2))
 	return text
 
+# ───────── Player name (the very first screen) and cloud save (CloudSave) ─────────
+
+var _asked_name := false  # this session already asked an older save for a name
+
+## A new player's first screen: pick the name other players see (leaderboards, Arena), or bring a save over from
+## another device with a recovery code
+func _show_name_select() -> void:
+	Music.play_home()
+	var root := _new_screen()
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(center)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(540, 0)
+	var style := UITheme.panel_box(30)
+	style.border_color = Color(UITheme.CYAN, 0.5)
+	style.shadow_color = Color(UITheme.CYAN, 0.25)
+	style.shadow_size = 24
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var title := _title(Terms.term("game_title"), 40)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_shadow_color", Color(UITheme.CYAN, 0.6))
+	title.add_theme_constant_override("shadow_outline_size", 12)
+	box.add_child(title)
+	var ask := _wrapped_label(Terms.t("name_welcome"))
+	ask.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ask.add_theme_font_size_override("font_size", 20)
+	box.add_child(ask)
+	var edit := LineEdit.new()
+	edit.max_length = WorldBoss.NAME_MAX
+	edit.placeholder_text = Terms.t("name_placeholder")
+	edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	edit.custom_minimum_size.y = 52
+	edit.add_theme_font_size_override("font_size", 24)
+	box.add_child(edit)
+	var error := _wrapped_label("")
+	error.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	error.add_theme_color_override("font_color", Color("#fca5a5"))
+	error.visible = false
+	box.add_child(error)
+	var hint := _wrapped_label(Terms.t("name_hint"))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 14)
+	hint.add_theme_color_override("font_color", UITheme.TEXT_DIM)
+	box.add_child(hint)
+	var start := _button(Terms.t("name_start"), func(): _submit_name(edit, error), 22)
+	start.theme_type_variation = &"PrimaryButton"
+	start.custom_minimum_size.y = 56
+	box.add_child(start)
+	edit.text_submitted.connect(func(_t): _submit_name(edit, error))
+	box.add_child(HSeparator.new())
+	var again := _wrapped_label(Terms.t("name_played_before"))
+	again.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	again.add_theme_font_size_override("font_size", 14)
+	again.add_theme_color_override("font_color", UITheme.TEXT_DIM)
+	box.add_child(again)
+	box.add_child(_button(Terms.t("cloud_restore"), _open_recover))
+	edit.grab_focus.call_deferred()
+
+func _submit_name(edit: LineEdit, error: Label) -> void:
+	var player_name := edit.text.strip_edges()
+	if player_name.is_empty():
+		error.text = Terms.t("name_empty")
+		error.visible = true
+		edit.grab_focus()
+		return
+	WorldBoss.set_local_name(player_name)
+	WorldBoss.ensure_registered()  # quietly in the background; retried later if offline
+	_show_starter_select()
+
+## Saves from before names: ask once per session; then (once ever) show the recovery code to keep
+func _ask_name_or_remind_code() -> void:
+	if GameState.tutorial_step() < GameState.Tutorial.DONE:
+		return
+	if WorldBoss.player_name().strip_edges().is_empty():
+		if _asked_name:
+			return
+		_asked_name = true
+		var dialog := ConfirmationDialog.new()
+		dialog.title = Terms.t("name_title")
+		dialog.ok_button_text = Terms.t("name_save")
+		var box := VBoxContainer.new()
+		box.custom_minimum_size = Vector2(420, 0)
+		dialog.add_child(box)
+		box.add_child(_wrapped_label(Terms.t("name_ask_existing")))
+		var edit := LineEdit.new()
+		edit.max_length = WorldBoss.NAME_MAX
+		edit.placeholder_text = Terms.t("name_placeholder")
+		box.add_child(edit)
+		dialog.confirmed.connect(func():
+			if not edit.text.strip_edges().is_empty():
+				WorldBoss.set_local_name(edit.text)
+				await WorldBoss.ensure_registered()
+				CloudSave.upload_if_changed())
+		_popup(dialog)
+		return
+	var wb: Dictionary = GameState.data.world_boss
+	if WorldBoss.is_registered() and not bool(wb.get("code_shown", false)):
+		var code := await WorldBoss.recovery_code()
+		if code.is_empty():
+			return
+		wb.code_shown = true
+		GameState.request_save()
+		_show_recovery_code(code, true)
+
+## The recovery code, big, with a Copy button. `first` adds why it matters.
+func _show_recovery_code(code: String, first: bool = false) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = Terms.t("cloud_code_title")
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(460, 0)
+	box.add_theme_constant_override("separation", 10)
+	dialog.add_child(box)
+	box.add_child(_wrapped_label(Terms.t("cloud_code_first" if first else "cloud_code_text")))
+	var code_label := _title(code, 30)
+	code_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	code_label.add_theme_color_override("font_color", UITheme.GOLD)
+	box.add_child(code_label)
+	var copy := _button(Terms.t("cloud_copy"), func():
+		DisplayServer.clipboard_set(code)
+		Sound.play("coin"))
+	copy.theme_type_variation = &"PrimaryButton"
+	box.add_child(copy)
+	_popup(dialog)
+
+## Startup: if the cloud has a newer save than this device (played somewhere else), ask which to keep
+func _check_cloud_on_start() -> void:
+	var cloud := await CloudSave.check_cloud()
+	if cloud.is_empty():
+		CloudSave.upload_if_changed()
+		return
+	var dialog := ConfirmationDialog.new()
+	dialog.title = Terms.t("cloud_conflict_title")
+	dialog.ok_button_text = Terms.t("cloud_use_cloud")
+	dialog.cancel_button_text = Terms.t("cloud_keep_device")
+	dialog.dialog_autowrap = true
+	dialog.min_size = Vector2i(520, 0)
+	dialog.dialog_text = "%s\n\n%s\n%s\n\n%s\n%s" % [Terms.t("cloud_conflict_text"),
+		Terms.t("cloud_conflict_cloud"), _summary_text(cloud.summary),
+		Terms.t("cloud_conflict_device"), _summary_text(CloudSave.summary_of(GameState.data))]
+	dialog.confirmed.connect(func():
+		var error := CloudSave.use_cloud_save(cloud.data)
+		if not error.is_empty():
+			_show_message(error)
+			return
+		_known_account_level = GameState.get_account_level()
+		_level_up_from = 0
+		_show_main()
+		_show_message(Terms.t("cloud_loaded")))
+	dialog.canceled.connect(func(): CloudSave.upload_now())  # this device's save becomes the cloud's
+	_popup(dialog)
+
+## "Lv.34 · 26 Friends · 412 recruits · 30 maps cleared · saved 2h ago"
+func _summary_text(s: Dictionary) -> String:
+	var seconds := int(Time.get_unix_time_from_system()) - int(s.get("updated_at", 0))
+	return Terms.t("cloud_summary", {"lv": int(s.get("account_level", 1)), "friends": int(s.get("friends", 0)),
+		"pulls": int(s.get("pulls", 0)), "cleared": int(s.get("cleared", 0)), "when": _ago_text(seconds)})
+
+func _ago_text(seconds: int) -> String:
+	if seconds < 60:
+		return Terms.t("time_just_now")
+	if seconds < 3600:
+		return Terms.t("time_ago", {"time": "%dm" % (seconds / 60)})
+	if seconds < 86400:
+		return Terms.t("time_ago", {"time": "%dh" % (seconds / 3600)})
+	return Terms.t("time_ago", {"time": "%dd" % (seconds / 86400)})
+
+## Type a recovery code to bring an account and its save to this device
+func _open_recover() -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = Terms.t("cloud_restore_title")
+	dialog.ok_button_text = Terms.t("cloud_restore_ok")
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(440, 0)
+	box.add_theme_constant_override("separation", 8)
+	dialog.add_child(box)
+	box.add_child(_wrapped_label(Terms.t("cloud_restore_hint")))
+	var edit := LineEdit.new()
+	edit.placeholder_text = "RC-XXXX-XXXX-XXXX"
+	edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	edit.add_theme_font_size_override("font_size", 22)
+	box.add_child(edit)
+	dialog.confirmed.connect(func(): _recover_with(edit.text))
+	_popup(dialog)
+	edit.grab_focus.call_deferred()
+
+func _recover_with(code: String) -> void:
+	if code.strip_edges().is_empty():
+		return
+	var result := await CloudSave.recover(code)
+	if not result.ok:
+		_show_message(Terms.t("cloud_" + str(result.error)))
+		return
+	var save: Dictionary = result.save
+	var apply := func():
+		var error := CloudSave.use_recovered(result)
+		if not error.is_empty():
+			_show_message(error)
+			return
+		_known_account_level = GameState.get_account_level()
+		_level_up_from = 0
+		if GameState.data.starter_chosen:
+			_show_main()
+		else:
+			_show_starter_select()
+		_show_message(Terms.t("cloud_restored", {"name": str(result.account.name)}))
+	# Taking a cloud save replaces whatever this device has, so say what's coming first
+	var dialog := ConfirmationDialog.new()
+	dialog.title = Terms.t("cloud_restore_confirm_title")
+	dialog.ok_button_text = Terms.t("cloud_restore_ok")
+	dialog.dialog_autowrap = true
+	dialog.min_size = Vector2i(480, 0)
+	if save.is_empty():
+		dialog.dialog_text = Terms.t("cloud_restore_no_save", {"name": str(result.account.name)})
+	else:
+		dialog.dialog_text = Terms.t("cloud_restore_confirm", {"name": str(result.account.name),
+			"summary": _summary_text(CloudSave.summary_of(save))})
+	dialog.confirmed.connect(apply)
+	_popup(dialog)
+
+## Settings' Cloud Save section: status, name, recovery code and the buttons
+func _cloud_settings(box: VBoxContainer, dialog: Window) -> void:
+	box.add_child(HSeparator.new())
+	var heading := Label.new()
+	heading.text = Terms.t("cloud_heading")
+	heading.add_theme_color_override("font_color", UITheme.CYAN_BRIGHT)
+	box.add_child(heading)
+	var status := _wrapped_label("")
+	status.add_theme_font_size_override("font_size", 14)
+	box.add_child(status)
+	var show_status := func():
+		if not is_instance_valid(status):
+			return
+		if not WorldBoss.is_registered():
+			status.text = Terms.t("cloud_status_offline" if not WorldBoss.player_name().is_empty() else "cloud_status_no_name")
+			status.add_theme_color_override("font_color", Color("#fca5a5"))
+			return
+		var when := Terms.t("cloud_never") if CloudSave.last_upload() <= 0 \
+			else _ago_text(int(Time.get_unix_time_from_system()) - CloudSave.last_upload())
+		status.text = Terms.t("cloud_status", {"name": WorldBoss.player_name(), "when": when}) \
+			+ ("  " + Terms.t("cloud_status_error") if not CloudSave.last_error.is_empty() else "")
+		status.add_theme_color_override("font_color", UITheme.TEXT if CloudSave.last_error.is_empty() else Color("#fca5a5"))
+	show_status.call()
+	CloudSave.status_changed.connect(show_status)
+	dialog.tree_exiting.connect(func(): CloudSave.status_changed.disconnect(show_status))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var buttons := [
+		_button(Terms.t("cloud_save_now"), func():
+			await CloudSave.upload_now()
+			show_status.call()),
+		_button(Terms.t("cloud_show_code"), func():
+			var code := await WorldBoss.recovery_code()
+			if code.is_empty():
+				_show_message(Terms.t("cloud_offline"))
+			else:
+				_show_recovery_code(code)),
+		_button(Terms.t("cloud_rename"), _close_then.bind(dialog, _open_rename)),
+		_button(Terms.t("cloud_restore_short"), _close_then.bind(dialog, _open_recover)),
+	]
+	for b: Button in buttons:
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 14)
+		row.add_child(b)
+
+func _open_rename() -> void:
+	var dialog := ConfirmationDialog.new()
+	dialog.title = Terms.t("name_title")
+	dialog.ok_button_text = Terms.t("name_save")
+	var edit := LineEdit.new()
+	edit.max_length = WorldBoss.NAME_MAX
+	edit.text = WorldBoss.player_name()
+	edit.custom_minimum_size.x = 360
+	dialog.add_child(edit)
+	dialog.confirmed.connect(func():
+		if edit.text.strip_edges().is_empty():
+			return
+		if await WorldBoss.rename(edit.text):
+			_show_message(Terms.t("name_changed", {"name": WorldBoss.player_name()}))
+		else:
+			_show_message(Terms.t("cloud_offline")))
+	_popup(dialog)
+	edit.grab_focus.call_deferred()
+
 # ───────── Starter selection ─────────
 
 func _show_starter_select() -> void:
@@ -319,6 +611,9 @@ func _show_main(tab: int = 0) -> void:
 		CommissionTab.show_reports(self, reports)
 	elif tab == 0:
 		_prompt_daily()
+		# Once the day's Daily window has had its turn: a name for older saves, then the recovery code reminder
+		if Daily.checked_in_today() or _daily_prompted_day == Daily.today() or GameState.tutorial_step() < GameState.Tutorial.DONE:
+			_ask_name_or_remind_code.call_deferred()
 	_collect_event_rewards()
 	_fetch_arena_state()
 	# A level up from the battle just played gets its celebration now that the player is back
@@ -356,7 +651,8 @@ func _refresh_tab_badges() -> void:
 	var waiting := {
 		Terms.term("tab_home"): Daily.claimable_count() > 0 or BeginnerMissions.claimable_count() > 0,
 		Terms.term("tab_team"): _team_problem() != "",
-		Terms.term("tab_gacha"): Gacha.beginner_available() or Daily.free_pull_available(),
+		Terms.term("tab_gacha"): Gacha.beginner_available() or Daily.free_pull_available() \
+			or GameState.get_tickets(Gacha.RECRUIT_TICKET) + GameState.get_tickets(Gacha.SR_TICKET) > 0,
 		Terms.term("tab_commission"): finished > 0,
 		Terms.term("tab_arena"): Arena.is_unlocked() and me is Dictionary and int(me.fights_left) > 0,
 	}
@@ -775,6 +1071,8 @@ func _open_settings() -> void:
 	ui_sounds.button_pressed = UiSound.enabled()
 	ui_sounds.toggled.connect(func(on: bool): GameState.set_setting("ui_sounds", on))
 	box.add_child(ui_sounds)
+	box.custom_minimum_size.x = 520  # room for the Cloud Save buttons
+	_cloud_settings(box, dialog)
 	# Save data: backups, reset, and test mode where it's allowed
 	box.add_child(HSeparator.new())
 	var heading := Label.new()
@@ -852,7 +1150,7 @@ func _confirm_reset_save() -> void:
 
 func _reset_save() -> void:
 	GameState.reset_save()
-	_show_starter_select()
+	_show_name_select()
 
 ## Test mode is for the developer: always on in editor/debug runs, and on the website only when the address
 ## ends in ?test (e.g. https://numk3y.github.io/Respite_Collection/?test), so regular players never see it
@@ -1021,6 +1319,9 @@ func _on_auto_run_battle(report: Dictionary) -> void:
 	run.exp += int(report.get("exp", 0))
 	run.account_exp += int(report.get("account_exp", 0))
 	run.card_drops += int(report.get("card_drops", 0))
+	if int(report.get("event_currency", 0)) > 0:
+		run.event_currency = int(run.get("event_currency", 0)) + int(report.event_currency)
+		run.event_currency_name = report.event_currency_name
 	for key in report.get("materials", {}):
 		run.materials[key] = int(run.materials.get(key, 0)) + int(report.materials[key])
 	run.drops.append_array(report.get("drops", []))
@@ -1049,6 +1350,8 @@ func _show_auto_run_summary(run: Dictionary) -> void:
 		lines.append(Terms.t("auto_run_account_exp", {"amount": run.account_exp}))
 	if int(run.card_drops) > 0:
 		lines.append(Terms.t("auto_run_cards", {"amount": run.card_drops, "card_word": Terms.credit_card_word(run.card_drops)}))
+	if int(run.get("event_currency", 0)) > 0:
+		lines.append(Terms.t("battle_event_currency", {"amount": run.event_currency, "currency": run.event_currency_name}))
 	for friend in run.level_ups:
 		lines.append(Terms.t("battle_level_up", {"name": friend, "lv": run.level_ups[friend]}))
 	if int(run.account_level_up) > 0:

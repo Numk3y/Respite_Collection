@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"imsad_passive"
+display_name = "me on my way to your moms house, shes opening the door for me"
+description = "Picks one enemy in the back row as \"Mom\" and visits her with every attack that lands: she takes 15% of the damage, +10% more each visit (up to 55%, can't miss). When she falls, he finds a new Mom and starts over."
+effect_id = &"regular_visitor"
+params = {"start": 0.15, "ramp": 0.1, "max": 0.55}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"imsad_active"
+display_name = "None"
+kind = 1
+description = "ImSad has no Ultimate."
+
+[resource]
+script = ExtResource("1")
+id = &"imsad"
+display_name = "ImSad"
+char_class = 4
+rarity = 1
+hp = 115
+attack = 100
+defense = 20
+evasion = 18
+accuracy = 70
+speed = 72
+portrait_path = "res://Art/characters/ImSad.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "He's going to your moms house"
+is_starter = false

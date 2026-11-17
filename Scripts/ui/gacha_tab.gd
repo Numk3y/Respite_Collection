@@ -13,6 +13,7 @@ var _balance_label: Label
 var _banner: GachaBanner
 var _pull_buttons: Dictionary = {}  # count -> Button
 var _free_button: Button  # the free daily recruit
+var _ticket_buttons := {}  # Gacha.SR_TICKET / RECRUIT_TICKET -> Button
 var _message: Label
 
 func _ready() -> void:
@@ -61,6 +62,17 @@ func _build_pull_buttons() -> void:
 	_free_button.text = Terms.t("gacha_free_daily")
 	_free_button.pressed.connect(_on_free_pull)
 	_banner.button_row.add_child(_free_button)
+	# Tickets from event shops: shown only while the player has some
+	for kind: String in [Gacha.SR_TICKET, Gacha.RECRUIT_TICKET]:
+		var ticket := Button.new()
+		ticket.custom_minimum_size = Vector2(160, 62)
+		ticket.add_theme_font_size_override("font_size", 16)
+		ticket.theme_type_variation = &"PrimaryButton"
+		ticket.add_theme_color_override("font_color", Color("#3b0764"))
+		ticket.pressed.connect(_on_ticket_pull.bind(kind))
+		_banner.button_row.add_child(ticket)
+		_ticket_buttons[kind] = ticket
+	GameState.materials_changed.connect(_refresh_money)
 	for count in [1, 10]:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(210, 62)
@@ -113,6 +125,11 @@ func _refresh_money() -> void:
 	if _pool == null:
 		return
 	_free_button.visible = not _pool.beginner and Daily.free_pull_available()
+	for kind: String in _ticket_buttons:
+		var have := GameState.get_tickets(kind)
+		var button: Button = _ticket_buttons[kind]
+		button.visible = not _pool.beginner and have > 0
+		button.text = Terms.t("gacha_use_" + kind, {"count": have})
 	if _pool.beginner:
 		_pull_buttons[10].visible = false
 		_pull_buttons[1].text = Terms.t("gacha_beginner_pull")
@@ -217,11 +234,22 @@ func _rate_text(pool: GachaPool) -> String:
 			parts.append("%s %.1f%%" % [Terms.rarity_name(rarity), weights[rarity] * 100.0 / total])
 	return " · ".join(parts)
 
+## One pull paid with a ticket from an event shop (an SR Ticket always gives an SR)
+func _on_ticket_pull(kind: String) -> void:
+	if _pool == null or _pool.beginner:
+		return
+	var results := Gacha.pull(_pool, 1, kind)
+	if results.is_empty():
+		return
+	_message.text = ""
+	_refresh_money()
+	_show_results(results)
+
 ## Today's free recruit from the banner on show
 func _on_free_pull() -> void:
 	if _pool == null or _pool.beginner:
 		return
-	var results := Gacha.pull(_pool, 1, true)
+	var results := Gacha.pull(_pool, 1, Gacha.DAILY_FREE)
 	if results.is_empty():
 		return
 	_message.text = ""

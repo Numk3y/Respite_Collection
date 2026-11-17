@@ -164,6 +164,9 @@ const ULTIMATE_EFFECTS := {
 	# (no damage, nothing that hit would have caused) or the next debuff/sleep/bleed/poison/Provoke put on it by
 	# someone else, whichever comes first. It stays until used.
 	&"nein": {},
+	# SungJingWoo (only once he's the Real one, see passive Protagonist; until then the gauge stays empty): every
+	# living ally deals +`damage` damage and gets +`defense` Defense for its next N actions
+	&"shadow_realm": {"damage": 0.2, "defense": 0.2, "turns": 3, "requires_form": "real"},
 }
 
 ## Combo effects a ComboData.effect_id can use, with their default params. Each combo has its own effect: add a new
@@ -312,6 +315,31 @@ const PASSIVE_EFFECTS := {
 	# Every own hit that lands on an enemy (Ultimate hits too) adds a Fluff stack of +`attack_per_stack` Attack, up to
 	# `max_stacks`. Taking a heavy hit from an enemy (HEAVY_HIT_PCT of max HP) drops every stack.
 	&"cotton_tail": {"attack_per_stack": 0.05, "max_stacks": 5},
+	# ImSad: picks a living back-row enemy as "Mom". Every own attack that lands (Ultimate hits too) also hits Mom for
+	# `start` of the hit's damage before crits, +`ramp` more on every visit after that, up to `max` (can't miss,
+	# reduced by Defense). When Mom falls (or can't be reached), the next attack picks a new one and the share starts over.
+	&"regular_visitor": {"start": 0.15, "ramp": 0.1, "max": 0.55},
+	# Every `every` own actions (asleep/stunned ones count too), heals itself for `heal_pct` of its max HP
+	&"self_regen": {"every": 3, "heal_pct": 0.15},
+	# Every one of its own attacks that lands (Ultimate hits too) also hits up to `targets` other living enemies in
+	# `row` ("front" or "back"; not the one just hit) for `splash` of the hit's damage before crits (can't miss,
+	# reduced by Defense)
+	&"domain_expansion": {"splash": 0.17, "targets": 2, "row": "front"},
+	# SungJingWoo: on its first own action once the battle is `turns` actions in (anyone's actions, both sides), it
+	# transforms for the rest of the battle: `real_chance` to become the
+	# Real one (passive becomes Arise, the Ultimate unlocks, picture `real_art`), otherwise Fent Posing (passive
+	# becomes Fent Posing, picture `fent_art`). The new passive's params are copied from here.
+	&"protagonist": {"turns": 10, "real_chance": 0.25, "real_art": "SungJingWoo_ShadowMonarch",
+		"fent_art": "SungJingWoo_FentPosing", "real_name": "Arise", "fent_name": "Fent Posing",
+		"revives": 3, "revive_pct": 0.25, "fent_damage": 0.7, "fent_self_chance": 0.3},
+	# Up to `revives` times per battle, a front-row ally that falls is brought straight back with `revive_pct` of max HP
+	&"arise": {"revives": 3, "revive_pct": 0.25},
+	# Deals only `fent_damage` of its damage, and each attack has `fent_self_chance` to land on itself instead
+	# (can't miss, reduced by its own Defense)
+	&"fent_posing": {"fent_damage": 0.7, "fent_self_chance": 0.3},
+	# Every single-target attack fires `shots` shots at the same enemy, each `damage_mult` of a normal hit (each rolls
+	# to hit and crit on its own; stops early if the enemy drops)
+	&"texas_smash": {"shots": 3, "damage_mult": 0.4},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -532,7 +560,7 @@ func _snapshot(units: Array[Dictionary]) -> Array:
 func _state(units: Array[Dictionary]) -> Array:
 	# "horse" = Roki's horse (pukes instead of attacking); "alt" = any transformation that swaps in the alt-form art
 	return units.map(func(u): return {"hp": u.hp, "energy": u.energy, "buffs": _buff_names(u), "horse": _has_flag(u, "horse"),
-		"alt": _has_flag(u, "horse") or _has_flag(u, "stealth")})
+		"alt": _has_flag(u, "horse") or _has_flag(u, "stealth"), "form_art": str(u.get("form_art", ""))})
 
 ## Buff names for display; stacks of the same buff (e.g. Cancer) show once as "Cancer x3"
 func _buff_names(u: Dictionary) -> PackedStringArray:
@@ -552,6 +580,8 @@ func _buff_names(u: Dictionary) -> PackedStringArray:
 		names.append(Terms.t("buff_fluff", {"stacks": u.fluff}))
 	if _alive(u) and _hidden(u):
 		names.append(Terms.t("buff_background_npc"))
+	if u.has("form"):  # e.g. SungJingWoo after Protagonist: shows which form he ended up in
+		names.append(Terms.t("buff_form", {"form": u.passive.name}))
 	var six := _passive_params(u, &"six_seven")
 	if not six.is_empty() and int(u.get("six_count", 0)) > 0:
 		var every := int(six.every)
@@ -679,6 +709,17 @@ func _check_swig(u: Dictionary, event: Dictionary, record: bool) -> void:
 		if record:
 			event.lines.append(Terms.t("log_swig", {"name": u.name}))
 		_add_drunk(u, 1, event, record)
+
+## Passive Self Regen (e.g. Gragussy): every few own actions, heals a share of its own max HP
+func _check_self_regen(u: Dictionary, event: Dictionary, record: bool) -> void:
+	var p := _passive_params(u, &"self_regen")
+	if p.is_empty() or u.hp <= 0:
+		return
+	u.regen_count = int(u.get("regen_count", 0)) + 1
+	if u.regen_count % int(p.every) == 0:
+		if record:
+			event.lines.append(Terms.t("log_self_regen", {"name": u.name, "skill": u.passive.name}))
+		_heal(u, roundi(u.max_hp * float(p.heal_pct)), event, record)
 
 ## Passive Liquid Courage: once per battle, dropping low makes it order a double
 func _check_rally(u: Dictionary, event: Dictionary, record: bool) -> void:
@@ -871,7 +912,8 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 			var mult_atomic := float(atomic.damage_mult) / float(CLASS_DAMAGE_MULT.get(actor.cls, 1.0))
 			for target in _units.filter(func(t): return t.side != actor.side and _reachable(t)):
 				event.hits.append(_attack(actor, target, rng, record, event, mult_atomic))
-	elif not actor.ultimate.is_empty() and actor.energy >= actor.energy_max and _may_fire_ultimate(actor):
+	elif not actor.ultimate.is_empty() and actor.energy >= actor.energy_max and not _ultimate_locked(actor) \
+			and _may_fire_ultimate(actor):
 		event.kind = "ultimate"
 		event.skill = actor.ultimate.name
 		_cast_ultimate(actor, rng, event, record)
@@ -923,6 +965,8 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 	_clear_stale_hats(actor)
 	_cancer_drain(actor, event, record)
 	_check_swig(actor, event, record)
+	_check_self_regen(actor, event, record)
+	_check_protagonist(actor, rng, event, record)
 	if event.kind != "sleep":
 		if int(actor.get("sleep_immune", 0)) > 0:
 			actor.sleep_immune -= 1
@@ -939,8 +983,50 @@ func _take_turn(actor: Dictionary, units: Array[Dictionary], rng: RandomNumberGe
 		event.state = _state(units)
 	return event
 
+## An Ultimate that needs a transformation first (e.g. Shadow Realm needs the Real SungJingWoo)
+func _ultimate_locked(u: Dictionary) -> bool:
+	if u.ultimate.is_empty():
+		return false
+	var need := str(ULTIMATE_EFFECTS.get(u.ultimate.effect, {}).merged(u.ultimate.params, true).get("requires_form", ""))
+	return not need.is_empty() and str(u.get("form", "")) != need
+
+## Passive Protagonist: after enough own actions, SungJingWoo becomes the Real one or starts Fent Posing for good
+func _check_protagonist(u: Dictionary, rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
+	var p := _passive_params(u, &"protagonist")
+	if p.is_empty() or u.hp <= 0:
+		return
+	if int(_run.get("actions", 0)) < int(p.turns):
+		return  # counts every action in the battle (both sides), not just his own
+	var real := rng.randf() < float(p.real_chance)
+	u.form = "real" if real else "fent"
+	u.form_art = str(p.real_art if real else p.fent_art)
+	u.passive = {"effect": &"arise" if real else &"fent_posing", "name": str(p.real_name if real else p.fent_name),
+		"params": p}
+	event.get_or_add("protagonist", []).append({"unit": u.index, "real": real})
+	if record:
+		event.lines.append(Terms.t("log_protagonist_real" if real else "log_protagonist_fent",
+			{"name": u.name, "skill": u.passive.name}))
+
+## Passive Arise: a fallen front-row ally comes straight back, a few times per battle
+func _check_arise(target: Dictionary, event: Dictionary, record: bool) -> bool:
+	if not target.vanguard:
+		return false
+	for ally in _units.filter(func(a): return a.side == target.side and _alive(a) and a.index != target.index):
+		var p := _passive_params(ally, &"arise")
+		if p.is_empty() or int(ally.get("arise_used", 0)) >= int(p.revives):
+			continue
+		ally.arise_used = int(ally.get("arise_used", 0)) + 1
+		target.hp = maxi(roundi(target.max_hp * float(p.revive_pct)), 1)
+		ally.healed += target.hp
+		event.get_or_add("arise", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_arise", {"name": ally.name, "target": target.name, "hp": target.hp,
+				"skill": ally.passive.name, "left": int(p.revives) - int(ally.arise_used)}))
+		return true
+	return false
+
 func _gain_energy(u: Dictionary, amount: int) -> void:
-	if _has_flag(u, "horse"):
+	if _has_flag(u, "horse") or _ultimate_locked(u):
 		return  # Ultimate Umamusume: the gauge stays empty while the horse runs
 	if not u.ultimate.is_empty() and u.hp > 0:
 		u.energy = mini(u.energy + amount, u.energy_max)
@@ -1023,6 +1109,11 @@ func _cast_ultimate(actor: Dictionary, rng: RandomNumberGenerator, event: Dictio
 			_heal_lowest(actor, int(p.targets), roundi(_stat(actor, "attack") * float(p.heal_mult)), event, record)
 			_add_buff(actor, {"id": &"lets_go_winnie", "name": skill_name, "healing": true, "remaining": int(p.turns),
 				"counts": "actions", "heal_mult": float(p.heal_mult), "heal_targets": int(p.targets)})
+		&"shadow_realm":
+			for ally in _units.filter(func(a): return a.side == actor.side and _alive(a)):
+				_add_buff(ally, {"id": &"shadow_realm", "name": skill_name, "mods": {"defense": float(p.defense)},
+					"damage_bonus": float(p.damage), "remaining": int(p.turns), "counts": "actions"})
+			event.get_or_add("shadow_realm", []).append(actor.index)
 		&"morale_booster":
 			for ally in _units.filter(func(a): return a.side == actor.side and _alive(a)):
 				var buff := {"id": &"morale_booster", "name": skill_name, "mods": {"speed": float(p.speed)},
@@ -1524,6 +1615,8 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	if record:
 		event.lines.append(Terms.t("log_down", {"target": target.name}))
+	if _check_arise(target, event, record):
+		return
 	_check_overdrive(target, event, record, rng)
 	_check_capybara(target, event, record, rng)
 	_check_spotted(target, event, record)
@@ -1748,12 +1841,23 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 		cleaved = units.filter(func(u): return u.side == enemy_side and _reachable(u) and u.vanguard == main.vanguard and u.index != main.index)
 		if not cleaved.is_empty() and record:
 			event.lines.append(Terms.t("log_cleave", {"attacker": actor.name, "skill": actor.passive.name}))
+	# Passive Texas Smash: a single-target attack becomes a burst of weaker shots at that one enemy
+	var smash := _passive_params(actor, &"texas_smash")
+	var shots := int(smash.shots) if not smash.is_empty() and all_enemies.is_empty() and targets.size() == 1 else 1
+	var shot_mult := mult * (float(smash.damage_mult) if shots > 1 else 1.0)
+	if shots > 1:
+		event.get_or_add("texas_smash", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_texas_smash", {"name": actor.name, "skill": actor.passive.name, "shots": shots}))
 	var landed_on: Array = []
 	for target in targets:
-		var hit := _attack(actor, target, rng, record, event, mult)
-		event.hits.append(hit)
-		if hit.hit:
-			landed_on.append(target)
+		for shot in shots:
+			if shot > 0 and not _alive(target):
+				break  # the rest of the burst goes nowhere once the target drops
+			var hit := _attack(actor, target, rng, record, event, shot_mult)
+			event.hits.append(hit)
+			if hit.hit and not landed_on.has(target):
+				landed_on.append(target)
 	# Passive Until Next Time: every hit that lands splashes onto another enemy (each target of an area attack too)
 	var splash := _flag_buff(actor, "splash")
 	if all_enemies.is_empty() and not splash.is_empty():
@@ -1833,6 +1937,9 @@ func _raw_damage(actor: Dictionary, rng: RandomNumberGenerator) -> float:
 	var bonus := 1.0
 	for b in actor.buffs:
 		bonus += float(b.get("damage_bonus", 0.0))
+	var fent := _passive_params(actor, &"fent_posing")
+	if not fent.is_empty():
+		bonus *= float(fent.fent_damage)
 	return _stat(actor, "attack") * rng.randf_range(1.0 - DAMAGE_VARIANCE, 1.0 + DAMAGE_VARIANCE) * CLASS_DAMAGE_MULT.get(actor.cls, 1.0) * bonus
 
 ## Damage after the target's Defense (and passive Unfazed's flat reduction); attacks and assists both use this
@@ -1851,6 +1958,15 @@ func _mitigate(raw: float, target: Dictionary) -> int:
 	return maxi(roundi(damage), 1)
 
 func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, record: bool, event: Dictionary, mult: float = 1.0) -> Dictionary:
+	# Passive Fent Posing: a chance the attack lands on himself instead (can't miss)
+	var fent := _passive_params(actor, &"fent_posing")
+	if not fent.is_empty() and target.side != actor.side and rng.randf() < float(fent.fent_self_chance):
+		var self_dealt := _mitigate(_raw_damage(actor, rng) * mult, actor)
+		event.get_or_add("fent_self", []).append(actor.index)
+		if record:
+			event.lines.append(Terms.t("log_fent_self", {"name": actor.name, "damage": self_dealt, "skill": actor.passive.name}))
+		_apply_damage(actor, actor, self_dealt, event, record, rng)
+		return {"target": actor.index, "hit": true, "damage": self_dealt, "crit": false, "guard": false}
 	var hit := {"target": target.index, "hit": false, "damage": 0, "crit": false, "guard": false}
 	# A Tank targeted while taunting has intercepted the attack, even if it then misses
 	if target.cls == CharacterData.CharClass.TANK and _has_flag(target, "taunt"):
@@ -2119,9 +2235,16 @@ func _splash(actor: Dictionary, main: Dictionary, share: float, rng: RandomNumbe
 		event.lines.append(Terms.t("log_splash", {"attacker": actor.name, "target": target.name, "damage": dealt}))
 	_apply_damage(actor, target, dealt, event, record, rng)
 
-## Passives Eye of the Storm (a chance) and Pool Addiction (always): a landed attack splashes onto a back-row enemy
+## Passives Eye of the Storm (a chance) and Pool Addiction (always): a landed attack splashes onto a back-row enemy.
+## Regular Visitor has its own version (_visit_mom).
 func _check_back_row_splash(actor: Dictionary, main: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool,
 		event: Dictionary) -> void:
+	if main.side != actor.side and not _passive_params(actor, &"regular_visitor").is_empty():
+		_visit_mom(actor, mult, rng, record, event)
+		return
+	if main.side != actor.side and not _passive_params(actor, &"domain_expansion").is_empty():
+		_domain_expansion(actor, main, mult, rng, record, event)
+		return
 	var p := _passive_params(actor, &"eye_of_the_storm")
 	var key := "storm_splash"
 	if p.is_empty():
@@ -2140,6 +2263,45 @@ func _check_back_row_splash(actor: Dictionary, main: Dictionary, mult: float, rn
 		event.lines.append(Terms.t("log_" + key, {"attacker": actor.name, "target": target.name, "damage": dealt,
 			"skill": actor.passive.name}))
 	_apply_damage(actor, target, dealt, event, record, rng)
+
+## Passive Domain Expansion: every landed attack also hits other enemies in one row for a share of it
+func _domain_expansion(actor: Dictionary, main: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool,
+		event: Dictionary) -> void:
+	var p := _passive_params(actor, &"domain_expansion")
+	var front_row := str(p.get("row", "front")) != "back"
+	var pool := _units.filter(func(u): return u.side != actor.side and u.vanguard == front_row and _reachable(u) and u.index != main.index)
+	for i in mini(int(p.targets), pool.size()):
+		var target: Dictionary = pool.pop_at(rng.randi_range(0, pool.size() - 1))
+		var dealt := _mitigate(_raw_damage(actor, rng) * mult * float(p.splash), target)
+		event.hits.append({"target": target.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+		event.get_or_add("domain_splash", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_domain_splash", {"attacker": actor.name, "target": target.name,
+				"damage": dealt, "skill": actor.passive.name}))
+		_apply_damage(actor, target, dealt, event, record, rng)
+
+## Passive Regular Visitor: every landed attack also hits the same back-row enemy ("Mom"), harder each visit
+func _visit_mom(actor: Dictionary, mult: float, rng: RandomNumberGenerator, record: bool, event: Dictionary) -> void:
+	var p := _passive_params(actor, &"regular_visitor")
+	var mom_index := int(actor.get("mom", -1))
+	var mom: Dictionary = _units[mom_index] if mom_index >= 0 and mom_index < _units.size() else {}
+	if mom.is_empty() or not _alive(mom) or not _reachable(mom) or mom.side == actor.side:
+		var back := _units.filter(func(u): return u.side != actor.side and not u.vanguard and _reachable(u))
+		if back.is_empty():
+			return
+		mom = back[rng.randi_range(0, back.size() - 1)]
+		actor.mom = mom.index
+		actor.mom_visits = 0
+	var visits := int(actor.get("mom_visits", 0))
+	var share := minf(float(p.start) + float(p.ramp) * visits, float(p.max))
+	actor.mom_visits = visits + 1
+	var dealt := _mitigate(_raw_damage(actor, rng) * mult * share, mom)
+	event.hits.append({"target": mom.index, "hit": true, "damage": dealt, "crit": false, "guard": false})
+	event.get_or_add("mom_visit", []).append({"target": mom.index, "visit": visits + 1})
+	if record:
+		event.lines.append(Terms.t("log_mom_visit", {"attacker": actor.name, "target": mom.name, "damage": dealt,
+			"visit": visits + 1, "skill": actor.passive.name}))
+	_apply_damage(actor, mom, dealt, event, record, rng)
 
 # ───────── Combo attacks ─────────
 

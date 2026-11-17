@@ -64,8 +64,53 @@ func register(display_name: String) -> bool:
 	_save().player_id = str(r.data.player_id)
 	_save().token = str(r.data.token)
 	_save().name = clean
+	_save().recovery_code = str(r.data.get("recovery_code", ""))
 	GameState.save_game()
 	return true
+
+## The player's name, picked on the first screen (may be set before there's a server account)
+func set_local_name(display_name: String) -> void:
+	_save().name = display_name.strip_edges().left(NAME_MAX)
+	GameState.save_game()
+
+## Makes the server account with the name already picked, if there isn't one yet. Quiet: false if offline.
+var _registering := false
+
+func ensure_registered() -> bool:
+	if is_registered():
+		return true
+	if _registering or player_name().strip_edges().is_empty():
+		return false
+	_registering = true
+	var done := await register(player_name())
+	_registering = false
+	return done
+
+## Renames the account on the server (and here). Returns false if the server couldn't be reached.
+func rename(display_name: String) -> bool:
+	var clean := display_name.strip_edges().left(NAME_MAX)
+	if clean.is_empty():
+		return false
+	if not is_registered():
+		set_local_name(clean)
+		return await ensure_registered()
+	var r := await call_server(HTTPClient.METHOD_POST, "/account/rename", {"name": clean})
+	if not r.ok:
+		return false
+	_save().name = str(r.data.get("name", clean))
+	GameState.save_game()
+	return true
+
+## The recovery code (asks the server for one if this account is from before cloud save); "" if offline
+func recovery_code() -> String:
+	var code := str(_save().get("recovery_code", ""))
+	if code.is_empty() and is_registered():
+		var r := await call_server(HTTPClient.METHOD_GET, "/account")
+		if r.ok:
+			code = str(r.data.get("recovery_code", ""))
+			_save().recovery_code = code
+			GameState.save_game()
+	return code
 
 ## The live event: {"ok", "status", "data": {event, top, recent, me}}. Reports any fights still waiting first.
 func fetch() -> Dictionary:

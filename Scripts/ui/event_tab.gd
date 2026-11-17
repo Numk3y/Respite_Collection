@@ -38,6 +38,9 @@ var _time_left: Label
 var _track: MissionTrack
 var _mission_progress: Label
 var _missions_button: Button
+var _shop_row: HBoxContainer
+var _shop_button: Button
+var _currency_chip: CurrencyChip
 var _boss_art: TextureRect
 var _boss_name: Label
 var _boss_bar: BossBar
@@ -221,10 +224,50 @@ func _build_hero() -> Control:
 		if _event:
 			missions_pressed.emit(_event))
 	missions.add_child(_missions_button)
+	# The event's currency and its shop (events with a currency only)
+	_shop_row = HBoxContainer.new()
+	_shop_row.add_theme_constant_override("separation", 8)
+	missions.add_child(_shop_row)
+	_shop_button = Button.new()
+	_shop_button.text = Terms.t("shop_button")
+	_shop_button.focus_mode = Control.FOCUS_NONE
+	_shop_button.custom_minimum_size.y = 40
+	_shop_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shop_button.add_theme_font_size_override("font_size", 18)
+	_shop_button.theme_type_variation = &"PrimaryButton"
+	_shop_button.pressed.connect(_open_shop)
+	_shop_row.add_child(_shop_button)
+	GameState.materials_changed.connect(_refresh_currency)
 	# The hero isn't a container, so keep it at least as tall as what's inside (e.g. a three-line story)
 	margin.minimum_size_changed.connect(func():
 		_hero.custom_minimum_size.y = maxf(176.0, margin.get_combined_minimum_size().y))
 	return _hero
+
+## The currency chip beside the shop button: made for this event's currency, kept up to date
+func _refresh_currency() -> void:
+	if not is_instance_valid(_shop_row):
+		return
+	_shop_row.visible = _event != null and _event.has_shop()
+	if not _shop_row.visible:
+		return
+	if _currency_chip == null or _currency_chip.tooltip_text != _event.currency_name:
+		if _currency_chip:
+			_currency_chip.queue_free()
+		_currency_chip = CurrencyChip.new("event", _event.currency_name, _event.currency_color)
+		_currency_chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_shop_row.add_child(_currency_chip)
+		_shop_row.move_child(_currency_chip, 0)
+	_currency_chip.set_amount(EventShop.currency(_event))
+
+func _open_shop() -> void:
+	if _event == null or not _event.has_shop():
+		return
+	var shop := EventShopWindow.new(_event)
+	shop.visibility_changed.connect(func():
+		if not shop.visible:
+			shop.queue_free())
+	add_child(shop)
+	shop.popup_centered()
 
 func _violet_button(b: Button) -> void:
 	for state: String in ["normal", "hover", "pressed", "disabled"]:
@@ -323,6 +366,7 @@ func _build_boss_panel() -> Control:
 	_name_edit.max_length = WorldBoss.NAME_MAX
 	_name_edit.placeholder_text = Terms.t("event_name_placeholder")
 	_name_edit.custom_minimum_size.x = 180
+	_name_edit.text = WorldBoss.player_name()  # the name picked on the first screen
 	_name_edit.text_submitted.connect(func(_t): _join())
 	_join_row.add_child(_name_edit)
 	var join := Button.new()
@@ -445,6 +489,7 @@ func _fill(info: Dictionary) -> void:
 	_mission_progress.text = Terms.t("event_missions_progress", {"cleared": cleared, "total": total})
 	_track.set_progress(cleared, total)
 	_missions_button.disabled = not live
+	_refresh_currency()
 
 	_boss_name.text = _event.boss_stage.display_name
 	_boss_art.texture = _boss_picture()

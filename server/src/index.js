@@ -3,7 +3,12 @@
 // so two players hitting the boss at the same moment can't overwrite each other's damage.
 //
 // Routes (send "X-Game-Version: <n>" on all of them, and "Authorization: Bearer <token>" once registered):
-//   POST /register      {name}                -> {player_id, token}
+//   POST /register      {name}                -> {player_id, token, recovery_code}
+//   GET  /account                             -> {player_id, name, recovery_code}   (makes a code for older accounts)
+//   POST /account/rename {name}               -> {name}
+//   POST /save          {data, summary}       -> {version, saved_at}   (cloud save; the last SAVE_VERSIONS are kept)
+//   GET  /save                                -> {data, summary, saved_at, version} | {data: null}
+//   POST /recover       {code}                -> {player_id, token, name, recovery_code, save: {data, summary, saved_at} | null}
 //   GET  /boss                                -> {event, top, recent, me}
 //   POST /boss/start                          -> {attempt_id, seed, attempts_left}
 //   POST /boss/submit   {attempt_id, damage}  -> {damage, hp, defeated}
@@ -38,6 +43,14 @@ const ARENA_TEAM_MAX = 6000;            // longest team description accepted (JS
 const ARENA_POOL = 12;                  // closest-rated players considered when picking opponents
 const ARENA_OPPONENTS = 3;
 
+// Cloud save: the whole save as the game's JSON text, kept per player with a few older versions to roll back to.
+// A recovery code (shown in the game's Settings) gets the account and its save back on a new device.
+const SAVE_MAX_CHARS = 1_000_000;       // about 10x a big save today
+const SAVE_VERSIONS = 3;
+const SUMMARY_MAX_CHARS = 2000;
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";  // no 0/O, 1/I/L
+const CODE_GROUPS = 3;                   // RC-XXXX-XXXX-XXXX: 12 characters, about 59 bits
+
 export default {
 	async fetch(request, env) {
 		const cors = corsHeaders(request, env);
@@ -69,6 +82,16 @@ export default {
 				result = fail(426, "update_required", { min_version: minVersion });
 			} else if (route === "POST /register") {
 				result = await room.register(body.name);
+			} else if (route === "GET /account") {
+				result = await room.account(token);
+			} else if (route === "POST /account/rename") {
+				result = await room.rename(token, body.name);
+			} else if (route === "POST /save") {
+				result = await room.uploadSave(token, body.data, body.summary);
+			} else if (route === "GET /save") {
+				result = await room.downloadSave(token);
+			} else if (route === "POST /recover") {
+				result = await room.recover(body.code);
 			} else if (route === "GET /boss") {
 				result = await room.state(token);
 			} else if (route === "POST /boss/start") {
@@ -141,6 +164,89 @@ export class BossRoom extends DurableObject {
 			id TEXT PRIMARY KEY, attacker TEXT NOT NULL, defender TEXT NOT NULL, day INTEGER NOT NULL,
 			seed INTEGER NOT NULL, issued_at INTEGER NOT NULL, win INTEGER, submitted_at INTEGER)`);
 		this.sql.exec("CREATE INDEX IF NOT EXISTS arena_fights_by_attacker ON arena_fights (attacker, day)");
+		// Cloud save
+		const playerColumns = this.sql.exec("PRAGMA table_info(players)").toArray().map((c) => c.name);
+		if (!playerColumns.includes("recovery")) {
+			this.sql.exec("ALTER TABLE players ADD COLUMN recovery TEXT");
+		}
+		this.sql.exec("CREATE UNIQUE INDEX IF NOT EXISTS players_by_recovery ON players (recovery)");
+		this.sql.exec(`CREATE TABLE IF NOT EXISTS saves (
+			id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT NOT NULL, data TEXT NOT NULL, summary TEXT NOT NULL,
+			saved_at INTEGER NOT NULL)`);
+		this.sql.exec("CREATE INDEX IF NOT EXISTS saves_by_player ON saves (player_id, id)");
+	}
+
+	// ───────── Accounts and cloud save ─────────
+
+	_newCode() {
+		for (;;) {
+			const bytes = crypto.getRandomValues(new Uint8Array(CODE_GROUPS * 4));
+			const chars = [...bytes].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+			const code = "RC-" + chars.match(/.{4}/g).join("-");
+			if (!this.sql.exec("SELECT 1 FROM players WHERE recovery = ?", code).toArray().length) return code;
+		}
+	}
+
+	// The player's recovery code, made on first request for accounts from before cloud save
+	_recoveryCode(playerId) {
+		const row = this.sql.exec("SELECT recovery FROM players WHERE id = ?", playerId).toArray()[0];
+		if (row && row.recovery) return row.recovery;
+		const code = this._newCode();
+		this.sql.exec("UPDATE players SET recovery = ? WHERE id = ?", code, playerId);
+		return code;
+	}
+
+	account(token) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		return ok({ player_id: player.id, name: player.name, recovery_code: this._recoveryCode(player.id) });
+	}
+
+	rename(token, name) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		const clean = cleanName(name);
+		this.sql.exec("UPDATE players SET name = ? WHERE id = ?", clean, player.id);
+		return ok({ name: clean });
+	}
+
+	uploadSave(token, data, summary) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		if (typeof data !== "string" || data.length < 2) return fail(400, "bad_save");
+		if (data.length > SAVE_MAX_CHARS) return fail(413, "save_too_big");
+		const summaryText = JSON.stringify(summary && typeof summary === "object" ? summary : {}).slice(0, SUMMARY_MAX_CHARS);
+		const now = Date.now();
+		this.sql.exec("INSERT INTO saves (player_id, data, summary, saved_at) VALUES (?, ?, ?, ?)",
+			player.id, data, summaryText, now);
+		// Keep only the newest SAVE_VERSIONS
+		this.sql.exec(`DELETE FROM saves WHERE player_id = ? AND id NOT IN
+			(SELECT id FROM saves WHERE player_id = ? ORDER BY id DESC LIMIT ?)`, player.id, player.id, SAVE_VERSIONS);
+		const version = this.sql.exec("SELECT MAX(id) AS v FROM saves WHERE player_id = ?", player.id).one().v;
+		return ok({ version, saved_at: now });
+	}
+
+	_latestSave(playerId) {
+		const row = this.sql.exec("SELECT id, data, summary, saved_at FROM saves WHERE player_id = ? ORDER BY id DESC LIMIT 1",
+			playerId).toArray()[0];
+		if (!row) return null;
+		return { data: row.data, summary: JSON.parse(row.summary || "{}"), saved_at: row.saved_at, version: row.id };
+	}
+
+	downloadSave(token) {
+		const player = this._player(token);
+		if (!player) return fail(401, "unknown_player");
+		return ok(this._latestSave(player.id) || { data: null });
+	}
+
+	// A recovery code gets the account (its token) and its newest save back, e.g. on a new device
+	recover(code) {
+		const clean = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+		const formatted = clean.startsWith("RC") ? "RC-" + (clean.slice(2).match(/.{1,4}/g) || []).join("-") : "";
+		const player = this.sql.exec("SELECT id, token, name, recovery FROM players WHERE recovery = ?", formatted).toArray()[0];
+		if (!player) return fail(404, "unknown_code");
+		return ok({ player_id: player.id, token: player.token, name: player.name, recovery_code: player.recovery,
+			save: this._latestSave(player.id) });
 	}
 
 	// ───────── Arena ─────────
@@ -261,9 +367,10 @@ export class BossRoom extends DurableObject {
 		const id = crypto.randomUUID();
 		const bytes = crypto.getRandomValues(new Uint8Array(24));
 		const token = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-		this.sql.exec("INSERT INTO players (id, token, name, created_at) VALUES (?, ?, ?, ?)",
-			id, token, cleanName(name), Date.now());
-		return ok({ player_id: id, token });
+		const recovery = this._newCode();
+		this.sql.exec("INSERT INTO players (id, token, name, created_at, recovery) VALUES (?, ?, ?, ?, ?)",
+			id, token, cleanName(name), Date.now(), recovery);
+		return ok({ player_id: id, token, recovery_code: recovery });
 	}
 
 	state(token) {

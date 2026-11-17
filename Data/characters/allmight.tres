@@ -1,0 +1,37 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"allmight_passive"
+display_name = "Texas Smash"
+description = "He sprays his SMG: every attack fires 3 shots at a single enemy, each dealing 40% damage."
+effect_id = &"texas_smash"
+params = {"shots": 3, "damage_mult": 0.4}
+
+[sub_resource type="Resource" id="active"]
+script = ExtResource("2")
+id = &"allmight_active"
+display_name = "None"
+kind = 1
+description = "AllMight (SMG) has no Ultimate."
+
+[resource]
+script = ExtResource("1")
+id = &"allmight"
+display_name = "AllMight (SMG)"
+char_class = 3
+rarity = 1
+hp = 120
+attack = 72
+defense = 25
+evasion = 15
+accuracy = 85
+speed = 60
+portrait_path = "res://Art/characters/AllMight_SMG.png"
+passive_skill = SubResource("passive")
+active_skill = SubResource("active")
+description = "I am here. With an SMG."
+is_starter = false

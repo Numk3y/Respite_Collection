@@ -39,6 +39,7 @@ func _ready() -> void:
 	_name_edit.max_length = WorldBoss.NAME_MAX
 	_name_edit.placeholder_text = Terms.t("event_name_placeholder")
 	_name_edit.custom_minimum_size.x = 180
+	_name_edit.text = WorldBoss.player_name()  # the name picked on the first screen
 	_name_edit.text_submitted.connect(func(_t): _join())
 	_join_row.add_child(_name_edit)
 	var join := Button.new()
@@ -128,6 +129,10 @@ func refresh_now() -> void:
 		_status.add_theme_color_override("font_color", UITheme.TEXT_DIM)
 		_status.text = Terms.t("arena_locked", {"lv": Arena.MIN_ACCOUNT_LEVEL})
 		return
+	if not WorldBoss.is_registered():
+		_loading = true
+		await WorldBoss.ensure_registered()  # the name from the first screen, if there is one
+		_loading = false
 	if not WorldBoss.is_registered():
 		_body.visible = false
 		_summary.text = ""

@@ -110,6 +110,11 @@ func world_boss_fight(event: EventData, seed: int) -> Dictionary:
 		if result.units[i].side == 1:
 			damage += int(result.stats[i].taken)
 	result.report = {"world_boss": true, "damage": damage}
+	if event.has_shop() and event.boss_currency > 0:
+		EventShop.add_currency(event, event.boss_currency)
+		result.report.event_currency = event.boss_currency
+		result.report.event_currency_name = event.currency_name
+		result.report.event_currency_color = event.currency_color
 	return result
 
 ## Which piece a map drops: first a rarity (GameState.GEAR_DROP_WEIGHTS, between the rarities on the list), then
@@ -156,6 +161,13 @@ func _grant_rewards(stage: StageData, result: Dictionary) -> Dictionary:
 		return report
 
 	report.daily_bonus = Daily.battle_bonus_line()
+	# Event missions also drop the event's currency (spent in its shop)
+	var event := DB.event_of(stage)
+	if event and event.has_shop():
+		report.event_currency = EventShop.roll_drop(event, stage, _rng)
+		report.event_currency_name = event.currency_name
+		report.event_currency_color = event.currency_color
+		EventShop.add_currency(event, int(report.event_currency))
 	report.money = roundi(stage.reward_money * Daily.bonus("money"))
 	report.exp = _scaled_exp(roundi(stage.exp_reward * Daily.bonus("exp")))  # friend EXP only, never account EXP
 	# Every friend in the team earns EXP, including any who were knocked out
@@ -189,6 +201,7 @@ func _grant_rewards(stage: StageData, result: Dictionary) -> Dictionary:
 		if drop:
 			GameState.add_equipment(drop)
 			report.drops.append(Terms.t("gear_drop_name", {"rarity": Terms.rarity_name(drop.rarity), "name": drop.display_name}))
+			report.get_or_add("drop_gear", []).append(drop)  # the results screen shows the piece itself
 	# Credit Cards: a bonus for the first win on each map (the animatronic wave's card is granted in finish_sortie)
 	if GameState.mark_stage_cleared(stage.id):
 		report.first_clear_cards = GameState.FIRST_CLEAR_CREDIT_CARDS
