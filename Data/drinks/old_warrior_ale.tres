@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"old_warrior_ale"
+display_name = "Old Warrior Ale"
+description = "Warriors +15% Attack and +10% Speed."
+rarity = 1
+target = 3
+target_class = 1
+ally_rules = {"stat_mult": {"attack": 1.15, "speed": 1.1}}
+enemy_rules = {}
+run_effects = {}
+hangover = false
+severity = 0
+category = 0

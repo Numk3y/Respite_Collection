@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"drunk_uncle_bet"
+title = "The Uncle Bet"
+text = "A drunk uncle slams two shot glasses on the table. \"Bet you can't keep up with me.\""
+choices = Array[Dictionary]([{"text": "Accept the bet (50%)", "chance": 0.5, "result": "He taps out first and hands over his secret recipe.", "effects": {"drink": "rare"}, "fail_result": "He wins. Everyone feels it.", "fail_effects": {"damage": 0.15, "hangover": "mild"}}, {"text": "Walk away", "result": "He calls you boring. You can live with that.", "effects": {}}])
+min_night = 1

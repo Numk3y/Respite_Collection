@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"nap_corner"
+title = "The Quiet Corner"
+text = "A beat-up couch in a dark corner. Nobody is using it."
+choices = Array[Dictionary]([{"text": "Take a nap", "result": "Twenty minutes feels like eight hours.", "effects": {"heal": 0.25}}, {"text": "Hype each other up", "result": "The squad is fired up for the next fight.", "effects": {"energy": 0.4}}])
+min_night = 1

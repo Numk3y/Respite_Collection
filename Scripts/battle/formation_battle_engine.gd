@@ -346,6 +346,10 @@ const PASSIVE_EFFECTS := {
 	# Never attacks. Each own action heals the first `targets` allies in healing order (hurt vanguard first, lowest
 	# HP share first) for `heal_mult` x Attack.
 	&"fart": {"heal_mult": 0.1, "targets": 2},
+	# Each hit that lands on an enemy (Ultimate hits too) has `chance` to Wound it: healing it receives is cut by
+	# `heal_cut` for its next N actions (a new Wound refreshes it; Wounds don't stack). The counter to healers and
+	# self-healing tanks; Weekly Challenge rules can hand it to every enemy (see _add_side, "rules").
+	&"wounding": {"chance": 1.0, "heal_cut": 0.5, "turns": 2},
 }
 
 var _acting_index := -1  # whose action is being resolved right now
@@ -374,9 +378,18 @@ func begin(allies: Dictionary, enemies: Dictionary, rng: RandomNumberGenerator, 
 	var units: Array[Dictionary] = []
 	_units = units
 	var waves: Array = enemies.get("waves", [enemies])
-	_add_side(units, allies, 0, -1)
+	_add_side(units, allies, 0, -1, allies.get("rules", {}))
 	for w in waves.size():
-		_add_side(units, waves[w], 1, w)
+		_add_side(units, waves[w], 1, w, enemies.get("rules", {}))
+	# Rule "start_taunt" (e.g. an After Hours Drink): the unit opens the battle taunting
+	# Rule "start_wounded" (e.g. an After Hours Hangover): it opens the battle Wounded (-50% healing) for N actions
+	for u in units:
+		if u.start_taunt > 0:
+			u.buffs.append({"id": &"start_taunt", "name": Terms.t("buff_start_taunt"), "taunt": true,
+				"remaining": u.start_taunt, "counts": "actions", "fresh": false})
+		if u.start_wounded > 0:
+			u.buffs.append({"id": &"wounded", "name": Terms.t("buff_wounded"), "heal_taken": -0.5,
+				"remaining": u.start_wounded, "counts": "actions", "fresh": false})
 	var events: Array[Dictionary] = []
 	_run = {"units": units, "waves": waves, "rng": rng, "record": record, "manual": manual,
 		"lines": PackedStringArray(), "events": events, "snapshot": _snapshot(units) if record else [],
@@ -455,7 +468,7 @@ func result() -> Dictionary:
 		"wave_count": _run.waves.size(), "ally_hp": hp_left / hp_max if hp_max > 0.0 else 0.0,
 		# Per unit, same order as `units`: HP removed from enemies, HP lost, HP restored (to anyone), HP left at the end
 		"stats": units.map(func(u): return {"dealt": u.dealt, "taken": u.taken, "healed": u.healed,
-			"hp": maxi(u.hp, 0), "max_hp": u.max_hp})}
+			"hp": maxi(u.hp, 0), "max_hp": u.max_hp, "energy": u.energy})}
 	if _run.record:
 		var end_lines := PackedStringArray([Terms.t(_run.end_key)])
 		lines.append_array(end_lines)
@@ -497,8 +510,18 @@ func _start_wave(units: Array[Dictionary], wave: int) -> void:
 			u.active = u.wave == wave
 		u.timer = 0.0
 
-## wave = -1 for allies (always present); enemies only take part while their wave is active
-func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int) -> void:
+## wave = -1 for allies (always present); enemies only take part while their wave is active.
+## `rules` change every unit of the side (Weekly Challenge, see the Challenge autoload), and a unit's own "rules"
+## (After Hours Drinks, see the Endless autoload) are merged on top for that unit (merge_rules):
+## - "stat_mult" {stat: x}: scales base stats ("hp" too)
+## - "heal_mult": scales healing it receives; "heal_power": scales healing it gives
+## - "damage_taken" (all) / "rear_damage_taken" (rearguard only): +share of damage taken (0.5 = +50%, -0.1 = -10%)
+## - "wound" {heal_cut, turns, name}: every hit it lands Wounds (see passive Wounding)
+## - "lifesteal": share of the damage of its attacks it heals; "thorns": share of attack damage taken dealt back
+## - "crit_chance": added to CRIT_CHANCE; "start_energy": share of the gauge it starts with
+## - "start_taunt": taunts for its first N actions; "last_stand": the side's first KO of the battle holds at 1 HP
+## A unit can also carry "hp" and "energy" to start below full / with charge (After Hours carries them over).
+func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int, side_rules: Dictionary = {}) -> void:
 	for row in ["vanguard", "rearguard"]:
 		var vanguard: bool = row == "vanguard"
 		var placed := 0
@@ -512,6 +535,8 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				push_warning("%s: the %s is full; left out of the battle." % [u.name, row])
 				continue
 			placed += 1
+			var rules := merge_rules(side_rules, u.get("rules", {}))
+			var stat_mult: Dictionary = rules.get("stat_mult", {})
 			var s: Dictionary = u.stats
 			var max_hp := int(s.hp)
 			var ultimate: Dictionary = u.get("ultimate", {})
@@ -531,6 +556,19 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				var moa: Dictionary = PASSIVE_EFFECTS[&"moa"].merged(passive.params, true)
 				max_hp = roundi(max_hp * (1.0 + float(moa.hp)))
 				defense *= 1.0 + float(moa.defense)
+			var base := {"attack": float(s.attack), "defense": defense, "evasion": float(s.evasion),
+				"accuracy": float(s.accuracy), "speed": maxf(float(s.speed), 1.0)}
+			for stat in stat_mult:
+				if stat == "hp":
+					max_hp = maxi(roundi(max_hp * float(stat_mult.hp)), 1)
+				elif base.has(stat) and base[stat] > 0.0:
+					base[stat] = maxf(base[stat] * float(stat_mult[stat]), 1.0 if stat == "speed" else 0.0)
+			var energy_max := maxi(int(u.get("energy_max", 100)), 1)
+			var energy := int(u.get("energy", 0)) + roundi(energy_max * float(rules.get("start_energy", 0.0)))
+			# Carried-over HP (After Hours) keeps its share of max HP if max HP changed
+			var hp := max_hp
+			if u.has("hp_share"):
+				hp = clampi(roundi(max_hp * float(u.hp_share)), 1, max_hp)
 			units.append({
 				"index": units.size(),
 				"name": u.name,
@@ -539,13 +577,23 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"active": wave <= 0,
 				"vanguard": vanguard,
 				"cls": cls,
-				"hp": max_hp,
+				"hp": hp,
 				"max_hp": max_hp,
-				"base": {"attack": float(s.attack), "defense": defense, "evasion": float(s.evasion),
-					"accuracy": float(s.accuracy), "speed": maxf(float(s.speed), 1.0)},
+				"base": base,
+				"heal_mult": float(rules.get("heal_mult", 1.0)),  # healing received x this
+				"heal_power": float(rules.get("heal_power", 1.0)),  # healing given x this
+				"damage_taken_mult": maxf(1.0 + float(rules.get("damage_taken", 0.0))
+					+ (0.0 if vanguard else float(rules.get("rear_damage_taken", 0.0))), 0.1),
+				"wound": rules.get("wound", {}),  # every hit it lands Wounds
+				"lifesteal": float(rules.get("lifesteal", 0.0)),
+				"thorns": float(rules.get("thorns", 0.0)),
+				"crit_bonus": float(rules.get("crit_chance", 0.0)),
+				"start_taunt": int(rules.get("start_taunt", 0)),
+				"start_wounded": int(rules.get("start_wounded", 0)),
+				"last_stand": bool(rules.get("last_stand", false)),
 				"timer": 0.0,
-				"energy": 0,
-				"energy_max": maxi(int(u.get("energy_max", 100)), 1),
+				"energy": clampi(energy, 0, energy_max),
+				"energy_max": energy_max,
 				"ultimate": ultimate,
 				"passive": passive,
 				"passive_used": 0,
@@ -558,10 +606,32 @@ func _add_side(units: Array[Dictionary], team: Dictionary, side: int, wave: int)
 				"healed": 0,
 			})
 
+## Side rules merged with a unit's own: multipliers multiply, shares add, the rest is taken from `extra`
+static func merge_rules(base: Dictionary, extra: Dictionary) -> Dictionary:
+	if extra.is_empty():
+		return base
+	var out := base.duplicate(true)
+	for key in extra:
+		var value = extra[key]
+		match key:
+			"stat_mult":
+				var mults: Dictionary = out.get_or_add("stat_mult", {})
+				for stat in value:
+					mults[stat] = float(mults.get(stat, 1.0)) * float(value[stat])
+			"heal_mult", "heal_power":
+				out[key] = float(out.get(key, 1.0)) * float(value)
+			"damage_taken", "rear_damage_taken", "lifesteal", "thorns", "crit_chance", "start_energy":
+				out[key] = float(out.get(key, 0.0)) + float(value)
+			"start_taunt", "start_wounded":
+				out[key] = maxi(int(out.get(key, 0)), int(value))
+			_:
+				out[key] = value
+	return out
+
 func _snapshot(units: Array[Dictionary]) -> Array:
 	return units.map(func(u): return {
 		"name": u.name, "side": u.side, "wave": u.wave, "vanguard": u.vanguard, "cls": u.cls, "max_hp": u.max_hp,
-		"energy_max": u.energy_max, "has_ultimate": not u.ultimate.is_empty(), "data": u.data})
+		"hp": u.hp, "energy": u.energy, "energy_max": u.energy_max, "has_ultimate": not u.ultimate.is_empty(), "data": u.data})
 
 func _state(units: Array[Dictionary]) -> Array:
 	# "horse" = Roki's horse (pukes instead of attacking); "alt" = any transformation that swaps in the alt-form art
@@ -1499,10 +1569,10 @@ func _wake(u: Dictionary, wake: Dictionary, event: Dictionary, record: bool) -> 
 	if record:
 		event.lines.append(Terms.t("log_wake", {"name": u.name}))
 
-## Anything a Nein! shield keeps off: debuffs, sleep and stuns, bleeds, poison, Provoke
+## Anything a Nein! shield keeps off: debuffs, sleep and stuns, bleeds, poison, Provoke, Wounds
 func _is_harmful(b: Dictionary) -> bool:
 	return _is_debuff(b) or b.get("sleep", false) or b.get("bleed", false) or b.get("poison", false) \
-		or b.get("provoked", false)
+		or b.get("provoked", false) or float(b.get("heal_taken", 0.0)) < 0.0
 
 ## Passive Brotschneidemaschine: a teammate just acted, so every living bread-maker on its side feeds it
 func _feed_bread(actor: Dictionary, event: Dictionary, record: bool) -> void:
@@ -1575,7 +1645,9 @@ func _tick_buffs(u: Dictionary, counts: String, event: Dictionary, record: bool,
 func _heal(u: Dictionary, amount: int, event: Dictionary, record: bool, source: Dictionary = {}) -> void:
 	if u.hp <= 0 or _has_flag(u, "undying"):
 		return  # a unit on its last stand stays at 1 HP
-	amount = mini(amount, u.max_hp - u.hp)
+	var healer := u if source.is_empty() else source
+	amount = roundi(amount * float(healer.get("heal_power", 1.0)))
+	amount = mini(roundi(amount * _heal_received_mult(u)), u.max_hp - u.hp)
 	if amount <= 0:
 		return
 	u.hp += amount
@@ -1583,6 +1655,35 @@ func _heal(u: Dictionary, amount: int, event: Dictionary, record: bool, source: 
 	event.heals.append({"target": u.index, "amount": amount})
 	if record:
 		event.lines.append(Terms.t("log_heal", {"target": u.name, "amount": amount}))
+
+## Share of a heal the unit actually gets: Wounds ("heal_taken" buffs) and the Weekly Challenge's healing rule
+func _heal_received_mult(u: Dictionary) -> float:
+	var mult := 1.0
+	for b in u.buffs:
+		mult += float(b.get("heal_taken", 0.0))
+	return maxf(mult, 0.0) * float(u.get("heal_mult", 1.0))
+
+## Passive Wounding (or a Weekly Challenge rule giving it to the whole side): a hit that lands on an enemy cuts the
+## healing it receives for a few of its actions
+func _check_wound(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, event: Dictionary, record: bool) -> void:
+	if target.hp <= 0 or target.side == actor.side:
+		return
+	var p := _passive_params(actor, &"wounding")
+	var skill: String = actor.passive.get("name", "") if not p.is_empty() else ""
+	if p.is_empty():
+		p = actor.get("wound", {})
+		skill = str(p.get("name", ""))
+	if p.is_empty() or rng.randf() >= float(p.get("chance", 1.0)):
+		return
+	var cut := float(p.get("heal_cut", 0.5))
+	var turns := int(p.get("turns", 2))
+	_add_buff(target, {"id": &"wounded", "name": Terms.t("buff_wounded"), "heal_taken": -cut, "remaining": turns,
+		"counts": "actions"})
+	if _buff_by_id(target, &"wounded").is_empty():
+		return  # a Nein! shield kept it off
+	event.get_or_add("wounded", []).append(target.index)
+	if record:
+		event.lines.append(Terms.t("log_wounded", {"target": target.name, "skill": skill, "pct": roundi(cut * 100), "turns": turns}))
 
 ## Results-screen stats: HP actually removed (overkill doesn't count). The target always counts it as taken; the
 ## source counts it as dealt only when it's an enemy (self-inflicted drains aren't "damage dealt").
@@ -1625,6 +1726,15 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		_check_its_raw(target, attacker, event, record, rng)
 		_check_berserk(target, event, record)
 		_check_rally(target, event, record)
+		return
+	# Rule "last_stand" (e.g. an After Hours Drink): the side's first KO of the battle holds on at 1 HP
+	var stand_key := "last_stand_used_%d" % target.side
+	if target.get("last_stand", false) and not _run.get(stand_key, false):
+		_run[stand_key] = true
+		target.hp = 1
+		event.get_or_add("last_stand", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_last_stand", {"name": target.name}))
 		return
 	# Passive Undying: once per battle, a lethal hit leaves the unit hanging on at 1 HP
 	var undying := _passive_params(target, &"undying")
@@ -1978,6 +2088,7 @@ func _mitigate(raw: float, target: Dictionary) -> int:
 		damage *= 1.0 - float(kit.damage_reduction)
 	# e.g. Ultimate Overdrive: a buff that softens every hit
 	damage *= 1.0 - float(_flag_buff(target, "damage_reduction").get("damage_reduction", 0.0))
+	damage *= float(target.get("damage_taken_mult", 1.0))  # Weekly Challenge, e.g. a fragile rearguard
 	return maxi(roundi(damage), 1)
 
 func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, record: bool, event: Dictionary, mult: float = 1.0) -> Dictionary:
@@ -2013,7 +2124,7 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	var capy := _passive_params(actor, &"capybara")
 	if not capy.is_empty() and int(actor.get("capy_mark", -1)) == target.index:
 		raw *= 1.0 + float(capy.mark_bonus)
-	hit.crit = rng.randf() < CRIT_CHANCE
+	hit.crit = rng.randf() < CRIT_CHANCE + float(actor.get("crit_bonus", 0.0))
 	if hit.crit:
 		raw *= CRIT_MULT
 	if target.cls == CharacterData.CharClass.TANK and raw >= target.max_hp * GUARD_HEAVY_PCT:
@@ -2072,6 +2183,17 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 	var lifesteal := _passive_params(actor, &"power_of_baldness")
 	if not lifesteal.is_empty():
 		_heal(actor, roundi(dealt * float(lifesteal.lifesteal)), event, record)
+	# Rules "lifesteal" and "thorns" (e.g. After Hours Drinks)
+	if target.side != actor.side:
+		if float(actor.get("lifesteal", 0.0)) > 0.0 and actor.hp > 0:
+			_heal(actor, roundi(dealt * float(actor.lifesteal)), event, record)
+		var thorns := float(target.get("thorns", 0.0))
+		if thorns > 0.0 and actor.hp > 0:
+			var back := maxi(roundi(dealt * thorns), 1)
+			event.get_or_add("thorns", []).append(actor.index)
+			if record:
+				event.lines.append(Terms.t("log_thorns", {"name": target.name, "target": actor.name, "damage": back}))
+			_apply_damage(target, actor, back, event, record, rng)
 	# Passive Brotschneidemaschine: the poison bread's damage feeds whichever ally is worst off
 	var bread := _passive_params(actor, &"brotschneidemaschine")
 	if target.side != actor.side and not bread.is_empty():
@@ -2087,6 +2209,7 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		event.get_or_add("blinded", []).append(target.index)
 		if record:
 			event.lines.append(Terms.t("log_blinded", {"target": target.name, "skill": actor.passive.name}))
+	_check_wound(actor, target, rng, event, record)
 	# Passive Drowsiness: a chance the hit lulls the target to sleep
 	var drowsy := _passive_params(actor, &"drowsiness")
 	if not drowsy.is_empty() and rng.randf() < float(drowsy.chance):

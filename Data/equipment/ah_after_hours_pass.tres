@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ah_after_hours_pass"
+display_name = "After Hours Pass"
+slot = 2
+rarity = 3
+description = "A laminated pass to every party that is still going. Only sold After Hours."
+shop_only = true
+evasion = 13
+accuracy = 12
+speed = 11

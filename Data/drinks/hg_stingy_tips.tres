@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hg_stingy_tips"
+display_name = "Stingy Tips"
+description = "Tips earned -20%."
+rarity = 0
+target = 0
+target_class = 0
+ally_rules = {}
+enemy_rules = {}
+run_effects = {"tips_mult": 0.8}
+hangover = true
+severity = 0
+category = 2

@@ -747,6 +747,18 @@ func _build_home_tab() -> Control:
 	_beginner_button = _home_tile("missions", Terms.t("beginner_button"), _open_beginner, UITheme.GOLD, 20)
 	_beginner_button.custom_minimum_size.y = 54
 	_home_menu.add_child(_beginner_button)
+	# Weekly Challenge and After Hours side by side
+	var modes := HBoxContainer.new()
+	modes.add_theme_constant_override("separation", 10)
+	_home_menu.add_child(modes)
+	var challenge := _home_tile("challenge", Terms.t("challenge_title"), _show_challenge, ChallengeScreen.ACCENT, 18)
+	challenge.custom_minimum_size.y = 60
+	challenge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modes.add_child(challenge)
+	var endless := _home_tile("endless", Terms.t("endless_title"), _show_endless, EndlessScreen.ACCENT, 18)
+	endless.custom_minimum_size.y = 60
+	endless.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modes.add_child(endless)
 
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -871,6 +883,26 @@ func _refresh_home_tiles() -> void:
 	var workshop: HomeTile = _home_tiles.workshop
 	workshop.picture = _menu_picture("MM_Workshop", "Mcdonald")
 	workshop.subtitle = Terms.t("home_workshop_sub", {"amount": Terms.number(GameState.get_parts())})
+	# Weekly Challenge: the tiers still to win this week, or how to open it
+	var challenge: HomeTile = _home_tiles.challenge
+	var waiting := Challenge.waiting_count()
+	challenge.badge = str(waiting) if waiting > 0 else ""
+	if not Challenge.is_open():
+		var first := Challenge.tier_boss(0)
+		challenge.subtitle = Terms.t("challenge_home_locked", {"code": first.code() if first else "?"})
+	elif waiting > 0:
+		challenge.subtitle = Terms.t("challenge_home_waiting", {"count": waiting, "time": Daily.format_time(Challenge.seconds_left())})
+	else:
+		challenge.subtitle = Terms.t("challenge_home_done", {"time": Daily.format_time(Challenge.seconds_left())})
+	# After Hours: the run in progress, or the best floor
+	var endless: HomeTile = _home_tiles.endless
+	endless.badge = "!" if Endless.has_run() or not Endless.last_run().is_empty() else ""
+	if not Endless.is_open():
+		endless.subtitle = Terms.t("endless_home_locked", {"code": Endless.unlock_code()})
+	elif Endless.has_run():
+		endless.subtitle = Terms.t("endless_home_run", {"night": Endless.night_name(), "floor": maxi(int(Endless.run().floor) + 1, 0)})
+	else:
+		endless.subtitle = Terms.t("endless_home_best", {"best": Endless.best_floor(), "tokens": Endless.tokens()})
 	_refresh_daily_tile()
 	_refresh_tab_badges()
 
@@ -1716,6 +1748,65 @@ func _start_world_boss(event: EventData) -> void:
 		view.set_note(Terms.t("boss_sent_kill"))
 	else:
 		view.set_note(Terms.t("boss_sent", {"hp": Terms.number(int(answer.hp))}))
+
+## ───────── Weekly Challenge (Scripts/ui/challenge_screen.gd, Challenge autoload) ─────────
+
+func _show_challenge() -> void:
+	var root := _new_screen()
+	var screen := ChallengeScreen.new()
+	root.add_child(screen)
+	screen.back_pressed.connect(_show_main)
+	screen.fight_pressed.connect(_start_challenge)
+
+## A live battle on the tier's map under this week's rules; Again replays the tier, Home goes back to the challenge
+func _start_challenge(tier: int) -> void:
+	var problem := Challenge.team_problem()
+	if problem != "":
+		_show_message(problem)
+		return
+	var stage := Challenge.tier_stage(tier)
+	if stage == null or not Challenge.is_unlocked(tier):
+		return
+	_auto_run = {}
+	var manual := not bool(GameState.get_setting("auto_ultimate", true))
+	var units := Combat.start_challenge(tier, manual)
+	Music.play_chapter(stage.chapter)
+	var root := _new_screen()
+	_set_screen_background(_battle_background(stage))
+	var view := BattleView.new()
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(view)
+	view.again_pressed.connect(_start_challenge.bind(tier))
+	view.home_pressed.connect(_show_challenge)
+	view.start_live(stage, units, manual)
+
+## ───────── After Hours (Scripts/ui/endless_screen.gd, Endless autoload) ─────────
+
+func _show_endless() -> void:
+	var root := _new_screen()
+	var screen := EndlessScreen.new()
+	root.add_child(screen)
+	screen.back_pressed.connect(_show_main)
+	screen.fight_pressed.connect(_start_endless_battle)
+
+## The fight waiting in the run, played live; the results' Continue goes back to the run
+func _start_endless_battle() -> void:
+	var stage := Endless.current_stage()
+	if stage == null:
+		return
+	_auto_run = {}
+	var manual := not bool(GameState.get_setting("auto_ultimate", true))
+	var units := Combat.start_endless(manual)
+	Music.play_chapter(stage.chapter)
+	var root := _new_screen()
+	_set_screen_background(_battle_background(stage))
+	var view := BattleView.new()
+	view.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(view)
+	view.continue_text = Terms.t("endless_continue")
+	view.again_pressed.connect(_show_endless)
+	view.home_pressed.connect(_show_endless)
+	view.start_live(stage, units, manual)
 
 ## ───────── Arena (Scripts/ui/arena_tab.gd, Arena autoload) ─────────
 

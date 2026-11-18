@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hg_open_tab"
+display_name = "Open Tab"
+description = "Everything at the Bar costs 50% more."
+rarity = 0
+target = 0
+target_class = 0
+ally_rules = {}
+enemy_rules = {}
+run_effects = {"bar_price_mult": 1.5}
+hangover = true
+severity = 1
+category = 2

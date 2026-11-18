@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hg_insomnia"
+display_name = "Insomnia"
+description = "Rest no longer heals (revive and train still work)."
+rarity = 0
+target = 0
+target_class = 0
+ally_rules = {}
+enemy_rules = {}
+run_effects = {"rest_heal_mult": 0.0}
+hangover = true
+severity = 1
+category = 2

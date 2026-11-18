@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bouncers_brew"
+display_name = "Bouncer's Brew"
+description = "Tanks start every battle taunting for 2 turns and get +10% Defense."
+rarity = 1
+target = 3
+target_class = 0
+ally_rules = {"start_taunt": 2, "stat_mult": {"defense": 1.1}}
+enemy_rules = {}
+run_effects = {}
+hangover = false
+severity = 0
+category = 0

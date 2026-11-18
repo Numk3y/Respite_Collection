@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EquipmentData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/equipment_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"ah_doorman_vest"
+display_name = "Doorman Vest"
+slot = 1
+rarity = 2
+description = "Padded, reflective and very hard to get past. Only sold After Hours."
+shop_only = true
+defense = 21
+evasion = 5

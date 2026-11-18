@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mystery_shot"
+title = "The Mystery Shot"
+text = "A guy in a long coat opens it. Glowing shot glasses line the inside."
+choices = Array[Dictionary]([{"text": "Buy a shot", "cost_tips": 30, "result": "It burns going down. In a good way.", "effects": {"drink": "rare"}}, {"text": "Buy the good stuff", "cost_tips": 80, "result": "Your vision goes golden for a second.", "effects": {"drink": "legendary"}}, {"text": "Walk away", "result": "Probably for the best.", "effects": {}}])
+min_night = 1

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"lost_friend"
+title = "Passed Out Friend"
+text = "One of your knocked-out friends is snoring in a booth."
+choices = Array[Dictionary]([{"text": "Splash them with water", "cost_tips": 20, "result": "They jump up, soaking and ready to go.", "effects": {"revive": 1}}, {"text": "Let them sleep", "result": "You tuck a jacket over them.", "effects": {"heal": 0.1}}])
+min_night = 1
+needs_ko = true

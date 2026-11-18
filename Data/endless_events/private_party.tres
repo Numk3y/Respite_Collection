@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"private_party"
+title = "Private Party"
+text = "A VIP waves you over to a roped-off room. \"Prove you belong in here.\""
+choices = Array[Dictionary]([{"text": "Go in", "result": "The VIP's crew blocks the door.", "effects": {"fight": "elite"}}, {"text": "Take the cover charge back", "result": "They pay you to leave. Fine by you.", "effects": {"tips": 25}}])
+min_night = 1

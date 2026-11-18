@@ -14,6 +14,8 @@ var _live_stage: StageData  # the map of the live battle in progress (see start_
 var _live_animatronics := false
 var _live_exp_mult := 1.0  # share of the usual friend and account EXP this battle pays (Auto Run: AUTO_RUN_EXP)
 var _live_arena := false  # the live battle is an Arena fight (start_arena): Arena pays it, no map rewards
+var _live_challenge := -1  # the live battle is a Weekly Challenge tier (start_challenge): Challenge pays it
+var _live_endless := false  # the live battle is an After Hours fight (start_endless): Endless takes the result
 
 func _ready() -> void:
 	_rng.randomize()
@@ -23,6 +25,8 @@ func _ready() -> void:
 func start_sortie(stage: StageData, manual: bool, exp_mult: float = 1.0) -> Array:
 	_live_exp_mult = exp_mult
 	_live_arena = false
+	_live_challenge = -1
+	_live_endless = false
 	var enemies := stage.get_enemy_team()
 	_live_animatronics = false
 	if enemies.waves.size() > ANIMATRONIC_WAVE_INDEX and (force_animatronics or _rng.randf() < GameState.ANIMATRONIC_WAVE_CHANCE):
@@ -43,7 +47,38 @@ func start_arena(enemy: Dictionary, manual: bool) -> Array:
 	_live_animatronics = false
 	_live_stage = null
 	_live_arena = true
+	_live_challenge = -1
+	_live_endless = false
 	return engine.begin(GameState.get_battle_team(), {"waves": [enemy]}, _rng, true, manual)
+
+## Starts the After Hours fight waiting in the run (Endless.current_stage) with the fielded squad. Same flow as
+## start_sortie; finish_sortie hands the result to Endless.finish_battle instead of paying map rewards.
+func start_endless(manual: bool) -> Array:
+	_live_exp_mult = 1.0
+	_live_animatronics = false
+	_live_arena = false
+	_live_challenge = -1
+	_live_endless = true
+	_live_stage = Endless.current_stage()
+	return engine.begin(Endless.battle_team(), Endless.enemy_team(), _rng, true, manual)
+
+func is_endless_live() -> bool:
+	return _live_endless
+
+## Starts a live Weekly Challenge battle on a tier's map under this week's rules (Challenge). Same flow as
+## start_sortie; finish_sortie pays the tier's weekly reward instead of map rewards.
+func start_challenge(tier: int, manual: bool) -> Array:
+	_live_exp_mult = 1.0
+	_live_animatronics = false
+	_live_arena = false
+	_live_challenge = tier
+	_live_stage = Challenge.tier_stage(tier)
+	var rules := Challenge.battle_side_rules()
+	var enemies := _live_stage.get_enemy_team()
+	enemies.rules = rules.enemies
+	var team := GameState.get_battle_team()
+	team.rules = rules.allies
+	return engine.begin(team, enemies, _rng, true, manual)
 
 ## The live battle's next event, or {} once it's over
 func next_event() -> Dictionary:
@@ -59,6 +94,23 @@ func finish_sortie() -> Dictionary:
 		_live_arena = false
 		result.report = {"arena": true, "won": result.win, "money": Arena.grant(result.win), "materials": {}, "drops": [],
 			"exp": 0, "level_ups": [], "first_clear_cards": 0, "card_drops": 0, "bond_ups": [], "daily_bonus": ""}
+		GameState.add_stat("battles")
+		if result.win:
+			GameState.add_stat("wins")
+		GameState.save_game()
+		return result
+	if _live_endless:
+		_live_endless = false
+		result.report = Endless.finish_battle(result)
+		GameState.add_stat("battles")
+		if result.win:
+			GameState.add_stat("wins")
+		GameState.save_game()
+		return result
+	if _live_challenge >= 0:
+		var tier := _live_challenge
+		_live_challenge = -1
+		result.report = _challenge_report(tier, result.win)
 		GameState.add_stat("battles")
 		if result.win:
 			GameState.add_stat("wins")
@@ -116,6 +168,25 @@ func world_boss_fight(event: EventData, seed: int) -> Dictionary:
 		result.report.event_currency_name = event.currency_name
 		result.report.event_currency_color = event.currency_color
 	return result
+
+## A Weekly Challenge battle's report: the tier's reward on its first win this week, nothing after that
+func _challenge_report(tier: int, won: bool) -> Dictionary:
+	var report := {"challenge": true, "won": won, "money": 0, "materials": {}, "drops": [], "exp": 0, "level_ups": [],
+		"first_clear_cards": 0, "card_drops": 0, "challenge_cards": 0, "bond_ups": [], "daily_bonus": "",
+		"challenge_repeat": false}
+	if not won:
+		return report
+	var reward := Challenge.claim(tier)
+	report.challenge_repeat = reward.is_empty()
+	for item: Array in reward:
+		match String(item[0]):
+			"money":
+				report.money += int(item[1])
+			"credit_card":
+				report.challenge_cards += int(item[1])
+			_:
+				report.materials[String(item[0])] = int(item[1])
+	return report
 
 ## Which piece a map drops: first a rarity (GameState.GEAR_DROP_WEIGHTS, between the rarities on the list), then
 ## an even pick among the list's pieces of that rarity

@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"vending_machine"
+title = "Jammed Vending Machine"
+text = "A drink is stuck halfway out of the machine."
+choices = Array[Dictionary]([{"text": "Shake it (50%)", "chance": 0.5, "result": "It drops! Free drink.", "effects": {"drink": "common"}, "fail_result": "The machine falls on someone.", "fail_effects": {"damage": 0.1}}, {"text": "Pay for another", "cost_tips": 15, "result": "Clunk. Out it comes.", "effects": {"drink": "common"}}])
+min_night = 1

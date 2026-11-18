@@ -52,6 +52,7 @@ var _guide_fired := false  # the guided fight's first hand-fired Ultimate has go
 var auto_label := ""  # set by Main for an Auto Run battle: "AUTO RUN 1/3" in the header (no Auto Ultimate switch)
 var auto_next := false  # Auto Run: after a win the results screen counts down, then presses Next by itself
 var next_text := ""  # set by Main when a mission follows this one; shown as Next Mission after a win
+var continue_text := ""  # set by Main (After Hours): one Continue button on the results instead of Again / Home
 
 ## A battle recorded in advance (the world boss)
 func start(stage: StageData, battle: Dictionary) -> void:
@@ -244,20 +245,21 @@ func _unit_view(u: Dictionary, index: int) -> Dictionary:
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS  # only if even the smallest size won't fit
 	name_label.add_theme_font_size_override("font_size", _fit_font_size(u.name, info.custom_minimum_size.x))
 	info.add_child(name_label)
+	var start_hp := int(u.get("hp", u.max_hp))  # below max when HP carries over between battles (After Hours)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
-		"hp": u.max_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "ult_label": null, "energy_full": false,
+		"hp": start_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "ult_label": null, "energy_full": false,
 		"buffs": null, "art": art, "data": u.data, "horse": false, "alt": false, "style": style}
 	# Everyone has HP now; the rearguard is only hit once its vanguard is down
-	view.hp_bar = HpBar.new(u.max_hp)
+	view.hp_bar = HpBar.new(u.max_hp, start_hp)
 	info.add_child(view.hp_bar)
-	view.hp_label = _small_label("%d / %d" % [u.max_hp, u.max_hp])
+	view.hp_label = _small_label("%d / %d" % [start_hp, u.max_hp])
 	info.add_child(view.hp_label)
 	if u.has_ultimate:
 		view.ult_label = _small_label(Terms.t("battle_energy"))
 		info.add_child(view.ult_label)
 		if u.side == 0:
 			body.gui_input.connect(_on_card_input.bind(index))
-		view.energy_bar = _bar(u.energy_max, 0, Color("#facc15"), 8)
+		view.energy_bar = _bar(u.energy_max, int(u.get("energy", 0)), Color("#facc15"), 8)
 		info.add_child(view.energy_bar)
 	view.buffs = _small_label("", true)
 	view.buffs.add_theme_color_override("font_color", Color("#93c5fd"))
@@ -973,6 +975,12 @@ func _finish() -> void:
 				"limit": GameState.team_cost_limit_at(report.account_level_up)}))
 		if not String(report.get("daily_bonus", "")).is_empty():
 			lines.append(report.daily_bonus)
+		if report.get("challenge_repeat", false):
+			lines.append(Terms.t("challenge_repeat"))
+		if int(report.get("endless_tips", 0)) > 0:
+			lines.append(Terms.t("endless_result_tips", {"amount": int(report.endless_tips)}))
+	elif report.get("endless", false):
+		lines.append(Terms.t("endless_result_over" if report.get("endless_over", false) else "endless_result_lost"))
 	elif report.card_drops > 0:  # beat the animatronics, then lost a later wave: their card still counts
 		lines.append(Terms.t("battle_defeat_partial"))
 	else:
@@ -980,7 +988,7 @@ func _finish() -> void:
 	# Credit Cards from every source on one card, tagged with where they came from ("Bonus" for a mix)
 	var card_sources := []
 	for source in [["first_clear_cards", "results_note_first_clear"], ["star_cards", "results_note_stars"],
-			["card_drops", "results_note_animatronics"]]:
+			["card_drops", "results_note_animatronics"], ["challenge_cards", "results_note_challenge"]]:
 		if int(report.get(source[0], 0)) > 0:
 			card_sources.append(source)
 	if not card_sources.is_empty():
@@ -1003,6 +1011,7 @@ func _finish() -> void:
 	_results.home_pressed.connect(home_pressed.emit)
 	_results.next_pressed.connect(next_pressed.emit)
 	_results.next_text = next_text
+	_results.continue_text = continue_text
 	_results.open(_battle, _stage_name, lines, items)
 	if not _note.is_empty():
 		_results.set_note(_note)
@@ -1027,10 +1036,10 @@ class HpBar extends Control:
 	var _trail := 1.0
 	var _tween: Tween
 
-	func _init(max_hp: int) -> void:
+	func _init(max_hp: int, start_hp: int = -1) -> void:
 		_max = maxf(float(max_hp), 1.0)
-		_hp = _max
-		_trail = _max
+		_hp = _max if start_hp < 0 else clampf(float(start_hp), 0.0, _max)
+		_trail = _hp
 		custom_minimum_size = Vector2(0, 12)
 
 	func set_hp(value: float, seconds: float) -> void:

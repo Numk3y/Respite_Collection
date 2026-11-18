@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"open_mic"
+title = "Open Mic Night"
+text = "The karaoke stage is free and the crowd is restless."
+choices = Array[Dictionary]([{"text": "Sing (60%)", "chance": 0.6, "result": "The crowd goes wild and throws Tips at the stage.", "effects": {"tips": 50}, "fail_result": "Booed off stage. Someone threw a bottle.", "fail_effects": {"damage": 0.1}}, {"text": "Heckle the singer", "result": "The singer's friends want a word outside.", "effects": {"fight": "battle", "tips": 15}}])
+min_night = 1

@@ -1139,6 +1139,8 @@ func upgrade_equipment(equip_uid: int) -> bool:
 
 ## A piece can be crafted once any cleared map drops it (the starter gear always can)
 func can_craft_unlocked(e: EquipmentData) -> bool:
+	if e.shop_only:
+		return false
 	if STARTER_EQUIPMENT.has(e.id):
 		return true
 	for stage in DB.stages:

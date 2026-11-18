@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"last_call"
+display_name = "Last Call"
+description = "The first friend knocked out each battle holds on at 1 HP instead."
+rarity = 2
+target = 0
+target_class = 0
+ally_rules = {"last_stand": true}
+enemy_rules = {}
+run_effects = {}
+hangover = false
+severity = 0
+category = 0

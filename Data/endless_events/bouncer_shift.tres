@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bouncer_shift"
+title = "Short-Staffed"
+text = "The bouncer is getting swarmed at the door. \"A little help?\""
+choices = Array[Dictionary]([{"text": "Help out", "result": "Bruised, but one of the regulars liked what they saw and joins you.", "effects": {"damage": 0.1, "hire": 1}}, {"text": "Not our problem", "result": "You slip past the chaos.", "effects": {}}])
+min_night = 1

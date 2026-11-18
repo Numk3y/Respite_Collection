@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EndlessEvent" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/endless_event.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"lost_wallet"
+title = "A Fat Wallet"
+text = "Someone left a wallet on the bar. It is stuffed with cash."
+choices = Array[Dictionary]([{"text": "Keep the cash", "result": "Easy money... but it sits badly with you.", "effects": {"tips": 60, "hangover": "mild"}}, {"text": "Hand it to the bartender", "result": "The bartender pours the squad a round on the house.", "effects": {"heal": 0.2}}])
+min_night = 1

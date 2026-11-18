@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hg_light_sleep"
+display_name = "Light Sleep"
+description = "Rest heals 20% instead of 30%."
+rarity = 0
+target = 0
+target_class = 0
+ally_rules = {}
+enemy_rules = {}
+run_effects = {"rest_heal_mult": 0.67}
+hangover = true
+severity = 0
+category = 2

@@ -19,6 +19,8 @@ const GEAR_PLUS_STEP := 0.1  # each upgrade level adds 10% of the item's base (p
 @export var rarity: CharacterData.Rarity = CharacterData.Rarity.R
 @export var icon: Texture2D
 @export_multiline var description: String
+## Only sold in a shop (e.g. the After Hours shop): it can't be crafted and isn't listed in the Workshop's recipes
+@export var shop_only := false
 @export_group("Stat Modifiers")  # the +0 values, added to the wearer's stats; negative values subtract
 @export_range(-999, 999) var attack: int = 0
 @export_range(-999, 999) var defense: int = 0

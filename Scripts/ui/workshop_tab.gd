@@ -242,7 +242,7 @@ func _rebuild() -> void:
 			_icons[int(entry.uid)] = icon
 		_show_bag_detail()
 	else:
-		var all: Array = DB.equipment.values().filter(func(e): return _filter.is_empty() or e.slot_key() == _filter)
+		var all: Array = DB.equipment.values().filter(func(e): return not e.shop_only and (_filter.is_empty() or e.slot_key() == _filter))
 		all.sort_custom(func(a, b):
 			var ua := GameState.can_craft_unlocked(a)
 			var ub := GameState.can_craft_unlocked(b)

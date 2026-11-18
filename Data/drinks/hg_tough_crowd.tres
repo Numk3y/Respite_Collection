@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"hg_tough_crowd"
+display_name = "Tough Crowd"
+description = "Enemies +10% max HP."
+rarity = 0
+target = 0
+target_class = 0
+ally_rules = {}
+enemy_rules = {"stat_mult": {"hp": 1.1}}
+run_effects = {}
+hangover = true
+severity = 0
+category = 1

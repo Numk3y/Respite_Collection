@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="DrinkData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/drink_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"espresso_shot"
+display_name = "Espresso Shot"
+description = "Rearguard +15% Speed."
+rarity = 0
+target = 2
+target_class = 0
+ally_rules = {"stat_mult": {"speed": 1.15}}
+enemy_rules = {}
+run_effects = {}
+hangover = false
+severity = 0
+category = 0

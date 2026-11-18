@@ -22,6 +22,7 @@ var _rays: Rays
 var _content: VBoxContainer
 var _note: Label
 var next_text := ""  # e.g. "Next: 1-2 Monument Run"; empty = no Next Mission button
+var continue_text := ""  # set (e.g. After Hours): one button with this text instead of Again / Home; it emits home_pressed
 
 ## An extra line under the rewards (the world boss server's answer)
 func set_note(text: String) -> void:
@@ -153,6 +154,8 @@ func open(battle: Dictionary, stage_name: String, lines: PackedStringArray, item
 	var choices := [[Terms.t("battle_again"), again_pressed, not show_next], [Terms.t("battle_home"), home_pressed, false]]
 	if show_next:
 		choices.append([next_text, next_pressed, true])
+	if not continue_text.is_empty():
+		choices = [[continue_text, home_pressed, true]]
 	for pair in choices:
 		var button := Button.new()
 		button.text = pair[0]
