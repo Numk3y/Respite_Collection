@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ComboData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/combo_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"sukuna_flurry"
+display_name = "Dismantle & Cleave"
+description = "Fat Sukuna and Slim Sukuna take turns slashing: each one hits every enemy 10 times for 13% damage (can't miss)."
+members = Array[StringName]([&"fatsukuna", &"slimsukuna"])
+effect_id = &"sukuna_flurry"
+params = {"hits": 10, "hit_mult": 0.13}
+sound = "Sukunas"

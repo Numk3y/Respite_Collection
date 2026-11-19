@@ -192,6 +192,9 @@ const COMBO_EFFECTS := {
 	# The Baldness (ShadowKittay + 2 bald friends): the first required member (ShadowKittay) hits every enemy for
 	# `damage_mult` x a normal hit (can't miss), then every enemy still standing is Blinded, `accuracy` for its next N actions
 	&"the_baldness": {"damage_mult": 0.35, "accuracy": -0.5, "turns": 2},
+	# Dismantle & Cleave (Fat Sukuna + Slim Sukuna): the members take turns slashing; each one hits every enemy
+	# `hits` times for `hit_mult` x a normal hit (can't miss). The log sums each enemy's damage in one line.
+	&"sukuna_flurry": {"hits": 10, "hit_mult": 0.13},
 }
 const COMBO_BOSS_CAP_PCT := 0.15  # combo damage to one boss is capped at this share of its max HP
 
@@ -297,6 +300,13 @@ const PASSIVE_EFFECTS := {
 	# Each of its own attacks on a front-row enemy has `chance` to deal `front_mult` damage, otherwise `miss_mult`;
 	# attacks on a back-row enemy always deal `back_mult`. Ultimate French overrides this for a while.
 	&"nearsighted": {"chance": 0.5, "front_mult": 1.5, "miss_mult": 0.8, "back_mult": 0.8},
+	# CoconutBird Gunner: each of its own attacks on an enemy that lands has `chance` to be a Headshot for
+	# `damage_mult` damage (stacks with a crit)
+	&"ak_47": {"chance": 0.2, "damage_mult": 1.5},
+	# CoconutBird Cat: always has one living back-row enemy Lured (picked at random, a new one when it falls); that
+	# enemy's single-target attacks must aim at this unit (area attacks aren't affected). Takes `damage_reduction`
+	# less damage from every hit.
+	&"cat_lure": {"damage_reduction": 0.15},
 	# Whenever any enemy falls, this unit instantly strikes a random living back-row enemy for `damage_mult` x Attack
 	# (can't miss, reduced by Defense). That enemy is Provoked: its single-target attacks must aim at this unit for its
 	# next N actions (area attacks aren't affected).
@@ -910,6 +920,7 @@ func _bleed_tick(u: Dictionary, event: Dictionary, record: bool) -> void:
 		_check_overdrive(u, event, record, _run.rng)
 		if u.hp <= 0:
 			_check_capybara(u, event, record, _run.rng)
+			_check_cat_down(u, event, record, _run.rng)
 		if poison:
 			_heal(source, roundi((before - u.hp) * float(b.lifesteal)), event, record)
 
@@ -1540,6 +1551,50 @@ func _capy_mark(u: Dictionary, event: Dictionary, record: bool, rng: RandomNumbe
 		event.lines.append(Terms.t("log_capy_mark", {"name": u.name, "target": marked.name, "skill": u.passive.name}))
 	return marked
 
+## Passive Cat Lure: the living cat on the other side that has `actor` Lured, else {}. Each cat keeps one living
+## back-row enemy Lured, picking a new one at random whenever its last one is gone (fallen, or a new wave).
+func _cat_lurer(actor: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> Dictionary:
+	if actor.vanguard:
+		return {}
+	for cat in _units:
+		if cat.side == actor.side or _passive_params(cat, &"cat_lure").is_empty() or not _reachable(cat):
+			continue
+		var current := int(cat.get("cat_mark", -1))
+		if current < 0 or not _alive(_units[current]) or _units[current].vanguard:
+			current = _cat_mark(cat, event, record, rng)
+		if current == actor.index:
+			return cat
+	return {}
+
+## Lures a random living back-row enemy of `cat` (one no other cat has Lured, if possible). Returns its index, or -1.
+func _cat_mark(cat: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> int:
+	var taken := _units.filter(func(c): return c.index != cat.index and c.side == cat.side).map(func(c): return int(c.get("cat_mark", -1)))
+	var back := _units.filter(func(t): return t.side != cat.side and not t.vanguard and _alive(t))
+	var free := back.filter(func(t): return not taken.has(t.index))
+	var pool := free if not free.is_empty() else back
+	if pool.is_empty():
+		cat.cat_mark = -1
+		return -1
+	var lured: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
+	cat.cat_mark = lured.index
+	_add_buff(lured, {"id": StringName("cat_mark_%d" % cat.index), "name": Terms.t("buff_cat_lured"), "remaining": 1, "counts": "never"})
+	event.get_or_add("cat_lured", []).append(lured.index)
+	if record:
+		event.lines.append(Terms.t("log_cat_lured", {"name": cat.name, "target": lured.name, "skill": cat.passive.name}))
+	return lured.index
+
+## Passive Cat Lure: a cat that falls lets go of the enemy it had Lured; a Lured enemy that falls is replaced at once
+func _check_cat_down(fallen: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
+	if not _passive_params(fallen, &"cat_lure").is_empty():
+		var id := StringName("cat_mark_%d" % fallen.index)
+		for u in _units:
+			u.buffs = u.buffs.filter(func(b): return b.get("id") != id)
+		fallen.cat_mark = -1
+	for cat in _units:
+		if cat.side != fallen.side and _alive(cat) and int(cat.get("cat_mark", -1)) == fallen.index \
+				and not _passive_params(cat, &"cat_lure").is_empty():
+			_cat_mark(cat, event, record, rng)
+
 ## Passive Capybara!: a Marked enemy fell, so the Capybara takes it out on another enemy and the Mark moves on
 func _check_capybara(fallen: Dictionary, event: Dictionary, record: bool, rng: RandomNumberGenerator) -> void:
 	for u in _units:
@@ -1752,6 +1807,7 @@ func _apply_damage(attacker: Dictionary, target: Dictionary, dealt: int, event: 
 		return
 	_check_overdrive(target, event, record, rng)
 	_check_capybara(target, event, record, rng)
+	_check_cat_down(target, event, record, rng)
 	_check_spotted(target, event, record)
 	_check_shi(target, event, record, rng)
 	_check_until_next_time(attacker, event, record)
@@ -1941,6 +1997,11 @@ func _basic_attack(actor: Dictionary, units: Array[Dictionary], rng: RandomNumbe
 			var provoker := _provoker(actor)
 			if not provoker.is_empty():
 				taunting = [provoker]
+			else:
+				# Passive Cat Lure: a Lured back-row unit must go after the cat
+				var cat := _cat_lurer(actor, event, record, rng)
+				if not cat.is_empty():
+					taunting = [cat]
 			var pool := taunting if not taunting.is_empty() else foes
 			var target: Dictionary = pool[rng.randi_range(0, pool.size() - 1)]
 			# Passive Rat Time: the smell of cheese can pull the attack onto the rat (a taunt still comes first)
@@ -2038,6 +2099,9 @@ func _pick_target(actor: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	var provoker := _provoker(actor)
 	if not provoker.is_empty():
 		return provoker
+	var cat := _cat_lurer(actor, _current_event, bool(_run.get("record", false)) and _current_event.has("lines"), rng)
+	if not cat.is_empty():
+		return cat
 	var foes := _targetable(_units, 1 - actor.side)
 	if foes.is_empty():
 		return {}
@@ -2086,6 +2150,9 @@ func _mitigate(raw: float, target: Dictionary) -> int:
 	var kit := _passive_params(target, &"full_metal_kit")
 	if not kit.is_empty():
 		damage *= 1.0 - float(kit.damage_reduction)
+	var cat := _passive_params(target, &"cat_lure")
+	if not cat.is_empty():
+		damage *= 1.0 - float(cat.damage_reduction)
 	# e.g. Ultimate Overdrive: a buff that softens every hit
 	damage *= 1.0 - float(_flag_buff(target, "damage_reduction").get("damage_reduction", 0.0))
 	damage *= float(target.get("damage_taken_mult", 1.0))  # Weekly Challenge, e.g. a fragile rearguard
@@ -2120,6 +2187,13 @@ func _attack(actor: Dictionary, target: Dictionary, rng: RandomNumberGenerator, 
 		return hit
 
 	var raw := _raw_damage(actor, rng) * mult * _nearsighted_mult(actor, target, rng, event)
+	# Passive AK-47: a chance the shot is a Headshot
+	var ak := _passive_params(actor, &"ak_47")
+	if not ak.is_empty() and target.side != actor.side and rng.randf() < float(ak.chance):
+		raw *= float(ak.damage_mult)
+		event.get_or_add("headshot", []).append(target.index)
+		if record:
+			event.lines.append(Terms.t("log_headshot", {"attacker": actor.name, "target": target.name}))
 	# Passive Capybara!: the Marked enemy takes extra damage from its marker (Ultimate hits too)
 	var capy := _passive_params(actor, &"capybara")
 	if not capy.is_empty() and int(actor.get("capy_mark", -1)) == target.index:
@@ -2604,17 +2678,33 @@ func _cast_combo(entry: Dictionary, group: Array, units: Array[Dictionary], rng:
 				ev.get_or_add("blinded", []).append(foe.index)
 				if record:
 					ev.lines.append(Terms.t("log_blinded", {"target": foe.name, "skill": combo.name}))
+		&"sukuna_flurry":
+			var totals := {}  # enemy index -> [damage taken, hits], for the summary lines
+			for h in int(p.hits):
+				for m in members:
+					if m.hp <= 0:
+						continue
+					for foe in units.filter(func(u): return u.side != side and _reachable(u) and u.hp > 0):
+						var raw := _raw_damage(m, rng) * float(p.hit_mult)
+						var dealt := _combo_damage(m, foe, _mitigate(raw, foe), ev, record, rng, false)
+						var t: Array = totals.get_or_add(foe.index, [0, 0])
+						t[0] += dealt
+						t[1] += 1
+			if record:
+				for i in totals:
+					ev.lines.append(Terms.t("log_combo_flurry", {"target": units[i].name, "damage": totals[i][0], "hits": totals[i][1]}))
 	event.combo = ev
 	event.lines.append_array(ev.lines)
 
 ## Combo damage: always lands, capped against bosses, and goes through _apply_damage so passives still react.
 ## Returns the damage dealt.
-func _combo_damage(source: Dictionary, target: Dictionary, amount: int, ev: Dictionary, record: bool, rng: RandomNumberGenerator) -> int:
+func _combo_damage(source: Dictionary, target: Dictionary, amount: int, ev: Dictionary, record: bool, rng: RandomNumberGenerator,
+		log_hit: bool = true) -> int:
 	if target.get("boss", false):
 		amount = mini(amount, roundi(target.max_hp * COMBO_BOSS_CAP_PCT))
 	amount = maxi(amount, 1)
 	ev.hits.append({"target": target.index, "hit": true, "damage": amount, "crit": false, "guard": false})
-	if record:
+	if record and log_hit:
 		ev.lines.append(Terms.t("log_combo_hit", {"target": target.name, "damage": amount}))
 	_apply_damage(source, target, amount, ev, record, rng)
 	return amount

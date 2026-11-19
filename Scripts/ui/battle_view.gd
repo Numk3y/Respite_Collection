@@ -42,6 +42,8 @@ var _log_number := RegEx.create_from_string("\\d+")
 var _stage_name := ""
 var _note := ""
 var _wave_label: Label
+var _wave_pips: WavePips
+var _clash: TeamClash
 var _wave_count := 1
 var _log: RichTextLabel
 var _live := false  # actions come from Combat.next_event() as the battle goes (start_live)
@@ -78,25 +80,58 @@ func _build(stage: StageData) -> void:
 	add_theme_constant_override("separation", 8)
 	Sound.prepare()  # builds the battle sounds over the next few frames
 
+	# HUD bar: the stage (code chip + name) and the wave pips on the left, both teams' total HP facing off in the
+	# middle, the Auto Ultimate switch, the log toggle and the speed pills on the right
+	var hud := PanelContainer.new()
+	var hud_style := UITheme.box(Color(0.03, 0.05, 0.1, 0.78), Color(UITheme.CYAN, 0.35), 1, 10)
+	hud_style.border_width_bottom = 2
+	hud_style.content_margin_left = 14
+	hud_style.content_margin_right = 10
+	hud_style.content_margin_top = 6
+	hud_style.content_margin_bottom = 6
+	hud_style.shadow_color = Color(0, 0, 0, 0.35)
+	hud_style.shadow_size = 8
+	hud.add_theme_stylebox_override("panel", hud_style)
+	add_child(hud)
 	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	add_child(header)
+	header.add_theme_constant_override("separation", 10)
+	hud.add_child(header)
+	var titles := VBoxContainer.new()
+	titles.add_theme_constant_override("separation", 0)
+	titles.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_child(titles)
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 8)
+	titles.add_child(name_row)
+	if stage.is_story():
+		name_row.add_child(UITheme.tag(stage.code(), UITheme.CYAN, true))
 	var title := Label.new()
-	title.text = Terms.t("battle_title", {"name": stage.display_name})
-	title.add_theme_font_size_override("font_size", 22)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	# "Battle 1/3": which wave of the mission is being fought
+	title.text = stage.display_name
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("outline_size", 4)
+	name_row.add_child(title)
+	# "Battle 1/3": which wave of the mission is being fought, with a pip per wave
 	for u in _battle.units:
 		_wave_count = maxi(_wave_count, int(u.wave) + 1)
+	var wave_row := HBoxContainer.new()
+	wave_row.add_theme_constant_override("separation", 6)
+	wave_row.visible = _wave_count > 1
+	titles.add_child(wave_row)
 	_wave_label = Label.new()
-	_wave_label.add_theme_font_size_override("font_size", 20)
+	_wave_label.add_theme_font_size_override("font_size", 12)
 	_wave_label.add_theme_color_override("font_color", UITheme.CYAN)
 	_wave_label.text = Terms.t("battle_wave", {"current": 1, "total": _wave_count})
-	_wave_label.visible = _wave_count > 1
-	header.add_child(_wave_label)
+	wave_row.add_child(_wave_label)
+	_wave_pips = WavePips.new(_wave_count)
+	wave_row.add_child(_wave_pips)
+	# Both sides' HP facing off
+	_clash = TeamClash.new()
+	_clash.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(_clash)
 	if not auto_label.is_empty():
 		var tag := UITheme.tag(auto_label, UITheme.GOLD)
+		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		header.add_child(tag)
 	elif _live:
 		var auto := CheckButton.new()
@@ -107,22 +142,31 @@ func _build(stage: StageData) -> void:
 		auto.toggled.connect(_set_auto_ultimate)
 		header.add_child(auto)
 		_auto_button = auto
+	var log_toggle := _pill(Terms.t("battle_log_button"), UITheme.TEXT_DIM)
+	log_toggle.button_pressed = bool(GameState.get_setting("battle_log_big", false))
+	log_toggle.tooltip_text = Terms.t("battle_log_tip")
+	log_toggle.toggled.connect(_set_log_big)
+	header.add_child(log_toggle)
+	var speeds := HBoxContainer.new()
+	speeds.add_theme_constant_override("separation", 4)
+	header.add_child(speeds)
 	var group := ButtonGroup.new()
 	for s in _speeds():
-		var button := Button.new()
-		button.text = Terms.t("battle_speed", {"speed": s})
-		button.toggle_mode = true
+		var button := _pill(Terms.t("battle_speed", {"speed": s}), UITheme.CYAN)
 		button.button_group = group
 		button.button_pressed = s == _speed
-		button.custom_minimum_size = Vector2(48, 0)
 		button.pressed.connect(_set_speed.bind(s))
-		header.add_child(button)
+		speeds.add_child(button)
 
 	# Arena: [ally rearguard][ally vanguard]  gap  [enemy vanguard][enemy rearguard]
 	var arena := Control.new()
 	arena.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	arena.custom_minimum_size = Vector2(0, CARD_SIZE.y * 3 + 24)
 	add_child(arena)
+	# The stage behind the cards: a lit floor and a glowing divider (with VS) between the two sides
+	var backdrop := ArenaStage.new()
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	arena.add_child(backdrop)
 	var sides := HBoxContainer.new()
 	sides.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	sides.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -132,8 +176,10 @@ func _build(stage: StageData) -> void:
 	for key in ["ally_rear", "ally_van", "gap", "enemy_van", "enemy_rear"]:
 		if key == "gap":
 			var gap := Control.new()
-			gap.custom_minimum_size = Vector2(24, 0)
+			gap.custom_minimum_size = Vector2(40, 0)
 			sides.add_child(gap)
+			backdrop.gap = gap
+			sides.sort_children.connect(backdrop.queue_redraw)
 			continue
 		var column := VBoxContainer.new()
 		column.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -178,21 +224,23 @@ func _build(stage: StageData) -> void:
 	arena.add_child(_combo_cut_in)
 
 	# The log: names coloured by side, numbers highlighted, knockouts in red (see _style_line)
+	# Compact by default (the latest few lines); the HUD's Log pill makes it taller
 	_log = RichTextLabel.new()
-	_log.custom_minimum_size = Vector2(0, 110)
 	_log.scroll_following = true
 	_log.bbcode_enabled = true
-	_log.add_theme_font_size_override("normal_font_size", 14)
-	_log.add_theme_font_size_override("bold_font_size", 14)
+	_log.add_theme_font_size_override("normal_font_size", 13)
+	_log.add_theme_font_size_override("bold_font_size", 13)
 	var log_style := StyleBoxFlat.new()
-	log_style.bg_color = Color(0.03, 0.05, 0.1, 0.82)
-	log_style.border_color = UITheme.CYAN.darkened(0.3)
+	log_style.bg_color = Color(0.02, 0.04, 0.08, 0.7)
+	log_style.border_color = Color(UITheme.CYAN, 0.5)
 	log_style.border_width_left = 3
-	log_style.set_corner_radius_all(6)
-	log_style.set_content_margin_all(8)
+	log_style.set_corner_radius_all(8)
+	log_style.set_content_margin_all(6)
 	log_style.content_margin_left = 12
 	_log.add_theme_stylebox_override("normal", log_style)
 	add_child(_log)
+	_set_log_big(bool(GameState.get_setting("battle_log_big", false)), false)
+	_update_clash()
 	var seen := {}
 	for u in _battle.units:
 		if not seen.has(u.name):
@@ -206,14 +254,23 @@ func _unit_view(u: Dictionary, index: int) -> Dictionary:
 	slot.custom_minimum_size = CARD_SIZE
 	var body := PanelContainer.new()
 	body.size = CARD_SIZE
+	# Dark glass with a thick stripe on the outer edge in the side's colour and a soft glow of it underneath
+	var side_color := ALLY_COLOR if u.side == 0 else ENEMY_COLOR
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(UITheme.CARD, 0.95)
-	style.border_color = ALLY_COLOR if u.side == 0 else ENEMY_COLOR
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
+	style.bg_color = Color(0.05, 0.07, 0.13, 0.93)
+	style.set_corner_radius_all(8)
 	style.set_content_margin_all(5)
+	style.shadow_color = Color(side_color, 0.22)
+	style.shadow_size = 6
+	_card_border(style, u.side, side_color, 1)
 	body.add_theme_stylebox_override("panel", style)
 	slot.add_child(body)
+	# A faint wash of the side's colour from the outer edge, under the contents
+	var wash := CardWash.new(side_color, u.side == 0)
+	wash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wash.show_behind_parent = false
+	body.add_child(wash)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -226,7 +283,7 @@ func _unit_view(u: Dictionary, index: int) -> Dictionary:
 		art.set_mystery(u.name)
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	info.add_theme_constant_override("separation", 3)
+	info.add_theme_constant_override("separation", 2)
 	# A fixed text width: cards of later waves are built while hidden, and wrapping labels measured at zero
 	# width would otherwise wrap one letter per line and stretch the card to the full arena height
 	info.custom_minimum_size = Vector2(CARD_SIZE.x - ART_SIZE.x - 22, 0)
@@ -244,22 +301,30 @@ func _unit_view(u: Dictionary, index: int) -> Dictionary:
 	name_label.mouse_filter = Control.MOUSE_FILTER_PASS  # so the tooltip shows
 	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS  # only if even the smallest size won't fit
 	name_label.add_theme_font_size_override("font_size", _fit_font_size(u.name, info.custom_minimum_size.x))
+	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	name_label.add_theme_constant_override("outline_size", 3)
 	info.add_child(name_label)
+	# Class and row under the name, in the class colour
+	var role := _small_label("%s  ·  %s" % [Terms.class_label(int(u.cls)), Terms.t("battle_row_front" if u.vanguard else "battle_row_back")])
+	role.add_theme_font_size_override("font_size", 11)
+	var class_color: Color = CharArt.CLASS_COLORS.get(int(u.cls), UITheme.TEXT_DIM)
+	role.add_theme_color_override("font_color", class_color.lightened(0.45))
+	info.add_child(role)
 	var start_hp := int(u.get("hp", u.max_hp))  # below max when HP carries over between battles (After Hours)
 	var view := {"slot": slot, "body": body, "side": u.side, "wave": int(u.wave), "vanguard": u.vanguard, "max_hp": u.max_hp,
-		"hp": start_hp, "hp_bar": null, "hp_label": null, "energy_bar": null, "ult_label": null, "energy_full": false,
+		"hp": start_hp, "hp_bar": null, "energy_bar": null, "ult_label": null, "energy_full": false,
 		"buffs": null, "art": art, "data": u.data, "horse": false, "alt": false, "style": style}
-	# Everyone has HP now; the rearguard is only hit once its vanguard is down
+	# Everyone has HP now; the rearguard is only hit once its vanguard is down. The numbers sit inside the bar.
 	view.hp_bar = HpBar.new(u.max_hp, start_hp)
 	info.add_child(view.hp_bar)
-	view.hp_label = _small_label("%d / %d" % [start_hp, u.max_hp])
-	info.add_child(view.hp_label)
 	if u.has_ultimate:
 		view.ult_label = _small_label(Terms.t("battle_energy"))
+		view.ult_label.add_theme_font_size_override("font_size", 11)
+		view.ult_label.add_theme_color_override("font_color", UITheme.TEXT_DIM)
 		info.add_child(view.ult_label)
 		if u.side == 0:
 			body.gui_input.connect(_on_card_input.bind(index))
-		view.energy_bar = _bar(u.energy_max, int(u.get("energy", 0)), Color("#facc15"), 8)
+		view.energy_bar = UltBar.new(u.energy_max, int(u.get("energy", 0)))
 		info.add_child(view.energy_bar)
 	view.buffs = _small_label("", true)
 	view.buffs.add_theme_color_override("font_color", Color("#93c5fd"))
@@ -273,17 +338,36 @@ func _pass_clicks(node: Node) -> void:
 			child.mouse_filter = Control.MOUSE_FILTER_PASS
 		_pass_clicks(child)
 
-func _bar(max_value: float, value: float, color: Color, height: float) -> ProgressBar:
-	var bar := ProgressBar.new()
-	bar.max_value = max_value
-	bar.value = value
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, height)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = color
-	fill.set_corner_radius_all(3)
-	bar.add_theme_stylebox_override("fill", fill)
-	return bar
+## A small toggle pill for the HUD (speeds, the log): dark when off, filled with `color` when on
+func _pill(text: String, color: Color) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.toggle_mode = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.custom_minimum_size = Vector2(44, 32)
+	b.add_theme_font_size_override("font_size", 14)
+	var off := UITheme.box(Color(0, 0, 0, 0.35), Color(color, 0.45), 1, 16, 8)
+	var hover := UITheme.box(Color(color, 0.15), Color(color, 0.8), 1, 16, 8)
+	var on := UITheme.box(Color(color, 0.85), color.lightened(0.3), 1, 16, 8)
+	on.shadow_color = Color(color, 0.45)
+	on.shadow_size = 6
+	b.add_theme_stylebox_override("normal", off)
+	b.add_theme_stylebox_override("hover", hover)
+	b.add_theme_stylebox_override("pressed", on)
+	b.add_theme_stylebox_override("hover_pressed", on)
+	b.add_theme_color_override("font_color", color.lightened(0.3))
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", Color(0.03, 0.05, 0.1))
+	b.add_theme_color_override("font_hover_pressed_color", Color(0.03, 0.05, 0.1))
+	return b
+
+## The log: a compact strip of the latest lines, or taller when the Log pill is on (remembered)
+func _set_log_big(big: bool, remember: bool = true) -> void:
+	if _log:
+		_log.custom_minimum_size = Vector2(0, 170 if big else 66)
+	if remember:
+		GameState.set_setting("battle_log_big", big)
 
 ## Long names ("Unemployed Racist B") step down from NAME_FONT_SIZE until they fit the card's text width.
 ## The game uses Godot's default font (UITheme sets no custom one), so it can be measured before the card is shown.
@@ -405,16 +489,23 @@ func _refresh_ultimate(index: int) -> void:
 	var waiting := _live and _manual and _ultimate_ready(index)
 	view.body.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if waiting else Control.CURSOR_ARROW
 	if not waiting:
-		view.ult_label.text = Terms.t("battle_energy")
-		view.ult_label.remove_theme_color_override("font_color")
-		style.border_color = ALLY_COLOR
-		style.set_border_width_all(2)
+		view.ult_label.text = Terms.t("battle_ult_full") if view.energy_full else Terms.t("battle_energy")
+		view.ult_label.add_theme_color_override("font_color", Color("#fde047") if view.energy_full else UITheme.TEXT_DIM)
+		_card_border(style, 0, ALLY_COLOR, 1)
 		return
 	var queued: bool = Combat.engine.is_ultimate_queued(index)
 	view.ult_label.text = Terms.t("battle_ult_queued" if queued else "battle_ult_ready")
 	view.ult_label.add_theme_color_override("font_color", Color("#fde047") if queued else Color("#facc15"))
-	style.border_color = Color("#fde047") if queued else Color("#f59e0b")
-	style.set_border_width_all(4 if queued else 3)
+	_card_border(style, 0, Color("#fde047") if queued else Color("#f59e0b"), 3 if queued else 2)
+
+## The card frame: `width` all round plus a thicker stripe on the outer edge (left for friends, right for enemies)
+func _card_border(style: StyleBoxFlat, side: int, color: Color, width: int) -> void:
+	style.border_color = color
+	style.set_border_width_all(width)
+	if side == 0:
+		style.border_width_left = width + 3
+	else:
+		style.border_width_right = width + 3
 
 ## Between waves: the cleared enemies leave, a "Battle 2/3" banner (or the boss banner) shows,
 ## and the next wave's enemies slide in from the right. A wave with its own banner (the animatronics) gets a
@@ -422,6 +513,7 @@ func _refresh_ultimate(index: int) -> void:
 func _animate_wave(event: Dictionary) -> void:
 	var wave: int = event.wave
 	_wave_label.text = Terms.t("battle_wave", {"current": wave + 1, "total": event.wave_count})
+	_wave_pips.current = wave
 	var wave_text := Terms.t("battle_wave_boss" if event.boss else "battle_wave_banner", {"current": wave + 1, "total": event.wave_count})
 	if event.banner.is_empty():
 		_show_banner(wave_text)
@@ -667,6 +759,11 @@ func _animate(event: Dictionary) -> void:
 		_fx.shake(_arena, 10.0, 0.4)
 	for target in event.get("provoked", []):
 		_float_text(_views[target], Terms.t("battle_provoked"), Color("#ef4444"), 60)
+	for target in event.get("cat_lured", []):
+		_float_text(_views[target], Terms.t("battle_cat_lured"), Color("#fdba74"), 60)
+	for target in event.get("headshot", []):
+		_float_text(_views[target], Terms.t("battle_headshot"), Color("#f87171"), 60, 30)
+		_fx.shake(_arena, 6.0, 0.25)
 	for target in event.get("nearsighted_spot", []):
 		_float_text(_views[target], Terms.t("battle_nearsighted_spot"), Color("#93c5fd"), 34)
 	for snake in event.get("snuck", []):
@@ -709,7 +806,7 @@ func _animate_combo(combo: Dictionary) -> void:
 		_flash(_views[i].body, Color(1.9, 1.6, 0.5), 1.5)
 	var title: String = data.title() if data else combo.name
 	var picture: Texture2D = data.get_cutin() if data else null
-	Sound.play("ultimate")
+	Sound.play(data.sound.to_lower() if data and not data.sound.is_empty() else "ultimate")
 	if picture:
 		await _cut_in.play(null, " & ".join(names), title, ally, _speed, picture, UITheme.GOLD)
 	else:
@@ -720,9 +817,11 @@ func _animate_combo(combo: Dictionary) -> void:
 	if not combo.hits.is_empty():
 		_fx.shake(_arena, 14.0, 0.45)
 	var struck := {}
+	var flurry: bool = combo.hits.size() > 8  # many quick slashes (Dismantle & Cleave): a rapid beat between them
 	for hit in combo.hits:
 		if struck.has(hit.target):
-			await _wait(1.5)  # e.g. Astolfo Brothers: a second hit on the same enemy lands after the first
+			struck.clear()
+			await _wait(0.4 if flurry else 1.5)  # e.g. Astolfo Brothers: a second hit on the same enemy lands after the first
 		struck[hit.target] = true
 		var target: Dictionary = _views[hit.target]
 		_fx.slash(_center(target), UITheme.GOLD, 1.0 if ally else -1.0)
@@ -841,7 +940,6 @@ func _apply_state(event: Dictionary) -> void:
 		var s: Dictionary = event.state[i]
 		if view.hp_bar:
 			view.hp_bar.set_hp(s.hp, _dur(1.2))
-			view.hp_label.text = "%d / %d" % [s.hp, view.max_hp]
 			if view.hp > 0 and s.hp <= 0 and view.slot.visible:
 				_knockout(view)
 			elif s.hp > 0:
@@ -862,11 +960,24 @@ func _apply_state(event: Dictionary) -> void:
 			_transform(view, alt)
 		if view.energy_bar:
 			view.energy_bar.value = s.energy
-			view.energy_bar.modulate = Color(1.7, 1.5, 0.7) if s.energy >= view.energy_bar.max_value else Color.WHITE
 			view.energy_full = s.energy >= view.energy_bar.max_value
 			_refresh_ultimate(i)
 		view.buffs.text = ", ".join(s.buffs)
 	_update_guide()
+	_update_clash()
+
+## Both teams' HP in the HUD: friends all fight together; enemies count only the wave on the field
+func _update_clash() -> void:
+	if _clash == null:
+		return
+	var totals := [0.0, 0.0, 0.0, 0.0]  # ally hp, ally max, enemy hp, enemy max
+	for view in _views:
+		if view.side == 1 and not view.slot.visible:
+			continue
+		var k := 0 if view.side == 0 else 2
+		totals[k] += maxf(float(view.hp), 0.0)
+		totals[k + 1] += float(view.max_hp)
+	_clash.set_values(totals[0] / maxf(totals[1], 1.0), totals[2] / maxf(totals[3], 1.0))
 
 ## A transformation starts or ends (e.g. Roki's horse form): the card flashes and bursts and its picture swaps to
 ## the character's alt form, or back
@@ -1040,7 +1151,7 @@ class HpBar extends Control:
 		_max = maxf(float(max_hp), 1.0)
 		_hp = _max if start_hp < 0 else clampf(float(start_hp), 0.0, _max)
 		_trail = _hp
-		custom_minimum_size = Vector2(0, 12)
+		custom_minimum_size = Vector2(0, 17)
 
 	func set_hp(value: float, seconds: float) -> void:
 		if is_equal_approx(value, _hp):
@@ -1064,15 +1175,212 @@ class HpBar extends Control:
 		_trail = v
 		queue_redraw()
 
+	## Slanted track, red trail, the fill (green / amber / red by share) with a shine, tick marks every 10%, and
+	## the HP numbers inside
 	func _draw() -> void:
 		var r := Rect2(Vector2.ZERO, size)
-		draw_rect(r, Color(0, 0, 0, 0.45))
+		draw_style_box(UITheme.box(Color(0, 0, 0, 0.55), Color(1, 1, 1, 0.14), 1, 3), r)
+		var inner := r.grow(-2)
 		var share := clampf(_hp / _max, 0.0, 1.0)
 		var trail := clampf(_trail / _max, 0.0, 1.0)
 		if trail > share:
-			draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * trail, size.y)), Color("#ef4444"))
-		# Green when healthy, amber below half, red below a quarter
+			draw_rect(Rect2(inner.position, Vector2(inner.size.x * trail, inner.size.y)), Color("#ef4444"))
 		var color := Color("#22c55e") if share > 0.5 else Color("#f59e0b") if share > 0.25 else Color("#ef4444")
-		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * share, size.y)), color)
-		draw_rect(Rect2(Vector2.ZERO, Vector2(size.x * share, size.y * 0.4)), Color(1, 1, 1, 0.18))  # a little shine
-		draw_rect(r, Color(1, 1, 1, 0.12), false, 1.0)
+		if share > 0.0:
+			var fill := Rect2(inner.position, Vector2(inner.size.x * share, inner.size.y))
+			UITheme.draw_vertical_gradient(self, fill, color.lightened(0.25), color.darkened(0.25))
+			draw_rect(Rect2(fill.position, Vector2(fill.size.x, fill.size.y * 0.35)), Color(1, 1, 1, 0.2))
+		for i in range(1, 10):
+			var x := inner.position.x + inner.size.x * i / 10.0
+			draw_line(Vector2(x, inner.end.y - inner.size.y * 0.4), Vector2(x, inner.end.y), Color(0, 0, 0, 0.35), 1.0)
+		var font := ThemeDB.fallback_font
+		var text := "%d / %d" % [roundi(_hp), roundi(_max)]
+		var fs := 11
+		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var pos := Vector2(r.get_center().x - w / 2.0, r.get_center().y + fs * 0.36)
+		draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0, 0, 0, 0.85))
+		draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+
+## The Ultimate gauge: gold segments that fill up, glowing and shimmering once full
+class UltBar extends Control:
+	const SEGMENTS := 5
+	var max_value := 1.0
+	var value := 0.0:
+		set(v):
+			value = v
+			set_process(value >= max_value and is_inside_tree())
+			queue_redraw()
+	var _t := 0.0
+
+	func _init(max_energy: float, start: float) -> void:
+		max_value = maxf(max_energy, 1.0)
+		custom_minimum_size = Vector2(0, 8)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		value = start
+
+	func _ready() -> void:
+		set_process(value >= max_value)
+
+	func _process(delta: float) -> void:
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		var share := clampf(value / max_value, 0.0, 1.0)
+		var full := share >= 1.0
+		var gap := 2.0
+		var seg_w := (size.x - gap * (SEGMENTS - 1)) / SEGMENTS
+		var gold := Color("#facc15")
+		if full:
+			var pulse := 0.5 + 0.5 * sin(_t * 6.0)
+			draw_style_box(UITheme.box(Color(0, 0, 0, 0), Color(gold, 0.35 + 0.35 * pulse), 2, 3), Rect2(Vector2(-2, -2), size + Vector2(4, 4)))
+		for i in SEGMENTS:
+			var seg := Rect2(i * (seg_w + gap), 0, seg_w, size.y)
+			draw_rect(seg, Color(0, 0, 0, 0.55))
+			var part := clampf(share * SEGMENTS - i, 0.0, 1.0)
+			if part > 0.0:
+				var fill := Rect2(seg.position, Vector2(seg.size.x * part, seg.size.y))
+				var c := gold.lightened(0.3) if full else gold
+				UITheme.draw_vertical_gradient(self, fill, c.lightened(0.2), c.darkened(0.3))
+		if full:  # a shimmer running along the gauge
+			var x := fmod(_t * 1.4, 1.6) * size.x - size.x * 0.3
+			draw_rect(Rect2(clampf(x, 0, size.x), 0, clampf(size.x * 0.15, 0, size.x - clampf(x, 0, size.x)), size.y), Color(1, 1, 1, 0.45))
+
+## A soft wash of the side's colour from the card's outer edge, so friends and enemies read at a glance
+class CardWash extends Control:
+	var color: Color
+	var from_left := true
+
+	func _init(c: Color, left: bool) -> void:
+		color = c
+		from_left = left
+
+	func _draw() -> void:
+		var w := size.x * 0.55
+		var x := 0.0 if from_left else size.x - w
+		var edge := Color(color, 0.16)
+		var none := Color(color, 0.0)
+		var cols := PackedColorArray([edge, none, none, edge] if from_left else [none, edge, edge, none])
+		draw_polygon(PackedVector2Array([Vector2(x, 0), Vector2(x + w, 0), Vector2(x + w, size.y), Vector2(x, size.y)]), cols)
+
+## "WAVE" pips in the HUD: done waves filled, the current one lit, later ones hollow
+class WavePips extends Control:
+	var count := 1
+	var current := 0:
+		set(v):
+			current = v
+			queue_redraw()
+
+	func _init(n: int) -> void:
+		count = n
+		custom_minimum_size = Vector2(n * 16, 14)
+
+	func _draw() -> void:
+		for i in count:
+			var c := Vector2(7 + i * 16, size.y / 2)
+			if i == current:
+				UITheme.draw_glow(self, c, 9, Color(UITheme.CYAN, 0.5), 4)
+				draw_circle(c, 5, UITheme.CYAN_BRIGHT)
+			elif i < current:
+				draw_circle(c, 4, Color(UITheme.CYAN, 0.6))
+			else:
+				draw_arc(c, 4, 0, TAU, 16, Color(1, 1, 1, 0.35), 1.5, true)
+
+## Both teams' total HP facing off in the HUD: blue from the left, red from the right, VS in the middle
+class TeamClash extends Control:
+	var _ally := 1.0
+	var _enemy := 1.0
+	var _tween: Tween
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(220, 34)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_values(ally: float, enemy: float) -> void:
+		if _tween:
+			_tween.kill()
+		_tween = create_tween().set_parallel()
+		_tween.tween_method(_set_ally, _ally, ally, 0.4)
+		_tween.tween_method(_set_enemy, _enemy, enemy, 0.4)
+
+	func _set_ally(v: float) -> void:
+		_ally = v
+		queue_redraw()
+
+	func _set_enemy(v: float) -> void:
+		_enemy = v
+		queue_redraw()
+
+	func _draw() -> void:
+		var w := minf(size.x, 460.0)
+		var left := (size.x - w) / 2.0
+		var mid := left + w / 2.0
+		var h := 12.0
+		var y := size.y / 2.0 - h / 2.0
+		var half := w / 2.0 - 22.0
+		var font := ThemeDB.fallback_font
+		# Ally bar grows out from the VS badge to the left, enemy bar to the right
+		var ally_track := Rect2(mid - 22.0 - half, y, half, h)
+		var enemy_track := Rect2(mid + 22.0, y, half, h)
+		for t in [ally_track, enemy_track]:
+			draw_style_box(UITheme.box(Color(0, 0, 0, 0.55), Color(1, 1, 1, 0.12), 1, 3), t.grow(1))
+		var a := ally_track.size.x * clampf(_ally, 0, 1)
+		UITheme.draw_vertical_gradient(self, Rect2(ally_track.end.x - a, y, a, h), Color("#60a5fa"), Color("#1d4ed8"))
+		var e := enemy_track.size.x * clampf(_enemy, 0, 1)
+		UITheme.draw_vertical_gradient(self, Rect2(enemy_track.position.x, y, e, h), Color("#f87171"), Color("#b91c1c"))
+		# Percentages at the outer ends
+		var fs := 11
+		var at := "%d%%" % roundi(_ally * 100)
+		var et := "%d%%" % roundi(_enemy * 100)
+		draw_string_outline(font, Vector2(ally_track.position.x + 4, y + h - 2), at, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0, 0, 0, 0.8))
+		draw_string(font, Vector2(ally_track.position.x + 4, y + h - 2), at, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+		var ew := font.get_string_size(et, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string_outline(font, Vector2(enemy_track.end.x - ew - 4, y + h - 2), et, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 3, Color(0, 0, 0, 0.8))
+		draw_string(font, Vector2(enemy_track.end.x - ew - 4, y + h - 2), et, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+		# The VS badge: a diamond in the middle
+		var c := Vector2(mid, size.y / 2.0)
+		var r := 16.0
+		UITheme.draw_glow(self, c, 22, Color(UITheme.GOLD, 0.25), 4)
+		var diamond := PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0)])
+		draw_colored_polygon(diamond, Color(0.06, 0.08, 0.14))
+		diamond.append(diamond[0])
+		draw_polyline(diamond, UITheme.GOLD, 2.0, true)
+		var vs := "VS"
+		var vw := font.get_string_size(vs, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		draw_string(font, c + Vector2(-vw / 2.0, 5), vs, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UITheme.GOLD)
+
+## Behind the cards: a lit floor band and a glowing divider down the gap between the two sides
+class ArenaStage extends Control:
+	var gap: Control
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		resized.connect(queue_redraw)
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		# Vignette top and bottom so the cards pop off the background picture
+		UITheme.draw_vertical_gradient(self, Rect2(0, 0, w, h * 0.5), Color(0, 0, 0, 0.32), Color(0, 0, 0, 0.08))
+		UITheme.draw_vertical_gradient(self, Rect2(0, h * 0.5, w, h * 0.5), Color(0, 0, 0, 0.08), Color(0, 0, 0, 0.4))
+		if gap == null or not is_instance_valid(gap):
+			return
+		var x := gap.global_position.x - global_position.x + gap.size.x / 2.0
+		# Each side's half tinted faintly in its colour
+		var blue := Color(ALLY_COLOR, 0.07)
+		var red := Color(ENEMY_COLOR, 0.06)
+		var clear := Color(0, 0, 0, 0)
+		draw_polygon(PackedVector2Array([Vector2(0, 0), Vector2(x, 0), Vector2(x, h), Vector2(0, h)]),
+			PackedColorArray([clear, blue, blue, clear]))
+		draw_polygon(PackedVector2Array([Vector2(x, 0), Vector2(w, 0), Vector2(w, h), Vector2(x, h)]),
+			PackedColorArray([red, clear, clear, red]))
+		# The divider: a thin line with a faint halo, brightest in the middle and fading out at both ends
+		var steps := 16
+		for i in steps:
+			var t0 := float(i) / steps
+			var t1 := float(i + 1) / steps
+			var fade := sin(PI * (t0 + t1) / 2.0)
+			var a := Vector2(x, lerpf(h * 0.04, h * 0.96, t0))
+			var b := Vector2(x, lerpf(h * 0.04, h * 0.96, t1))
+			draw_line(a, b, Color(UITheme.GOLD, 0.05 * fade), 7.0)
+			draw_line(a, b, Color(UITheme.GOLD, 0.35 * fade), 1.0)

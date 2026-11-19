@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterData" format=3]
+
+[ext_resource type="Script" path="res://Scripts/resources/character_data.gd" id="1"]
+[ext_resource type="Script" path="res://Scripts/resources/skill_data.gd" id="2"]
+
+[sub_resource type="Resource" id="passive"]
+script = ExtResource("2")
+id = &"coconutbird_cat_passive"
+display_name = "Cat Lure"
+description = "Always has one back-row enemy Lured: its single-target attacks must aim at the Cat (a new one is Lured when it falls). Takes 15% less damage from every hit."
+effect_id = &"cat_lure"
+params = {"damage_reduction": 0.15}
+
+[resource]
+script = ExtResource("1")
+id = &"coconutbird_cat"
+display_name = "CoconutBird Cat"
+char_class = 0
+rarity = 1
+hp = 160
+attack = 40
+defense = 75
+evasion = 5
+accuracy = 65
+speed = 35
+passive_skill = SubResource("passive")
+description = "Nobody can resist looking at the cat."
+is_starter = false

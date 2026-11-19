@@ -39,6 +39,7 @@ const ART_DIR := "res://Art/combos/"
 @export_group("Cut-in")
 @export_file("*.png", "*.jpg", "*.jpeg", "*.webp") var cutin_path: String  # empty: Art/combos/<id>.*, else split screen
 @export var cutin_title: String  # the name on the cut-in; empty uses display_name
+@export var sound: String  # an Audio/sfx/ file name (no extension) played with the cut-in; empty = the Ultimate sound
 
 ## True when every member is among `ids` (a set of character ids: {id: true})
 func is_ready(ids: Dictionary) -> bool:

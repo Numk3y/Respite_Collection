@@ -17,8 +17,7 @@ var _money_chip: CurrencyChip
 var _cards_chip: CurrencyChip
 var _material_chips := {}  # material key -> CurrencyChip
 var _tabs: TabContainer
-var _account_label: Label
-var _account_bar: ProgressBar
+var _account_badge: AccountBadge
 # Home
 var _home_hint: Label
 var _sortie_button: Button
@@ -545,23 +544,9 @@ func _show_main(tab: int = 0) -> void:
 	title.add_theme_constant_override("shadow_offset_y", 0)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	# Account level with its EXP bar; hover for the team cost limit
-	var account := VBoxContainer.new()
-	account.add_theme_constant_override("separation", 2)
-	account.alignment = BoxContainer.ALIGNMENT_CENTER
-	account.custom_minimum_size.x = 150
-	account.mouse_filter = Control.MOUSE_FILTER_STOP
-	header.add_child(account)
-	_account_label = Label.new()
-	_account_label.add_theme_font_size_override("font_size", 14)
-	_account_label.add_theme_color_override("font_color", UITheme.CYAN_BRIGHT)
-	_account_label.mouse_filter = Control.MOUSE_FILTER_PASS
-	account.add_child(_account_label)
-	_account_bar = ProgressBar.new()
-	_account_bar.show_percentage = false
-	_account_bar.custom_minimum_size.y = 6
-	_account_bar.mouse_filter = Control.MOUSE_FILTER_PASS
-	account.add_child(_account_bar)
+	# Account badge: level in an EXP ring, the player's name; hover for the team cost limit
+	_account_badge = AccountBadge.new()
+	header.add_child(_account_badge)
 	_money_chip = CurrencyChip.new("money", Terms.term("money"))
 	header.add_child(_money_chip)
 	_cards_chip = CurrencyChip.new("credit_card", Terms.term("credit_cards"))
@@ -674,17 +659,17 @@ func _refresh_status() -> void:
 	_money_chip.set_amount(GameState.get_money())
 	var level := GameState.get_account_level()
 	var limit := GameState.team_cost_limit()
-	_account_label.text = Terms.t("account_level", {"lv": level})
-	var account_box: Control = _account_label.get_parent()
+	var player := WorldBoss.player_name().strip_edges()
+	if player.is_empty():
+		player = Terms.t("account_badge_guest")
 	if level >= GameState.ACCOUNT_MAX_LEVEL:
-		_account_bar.max_value = 1
-		_account_bar.value = 1
-		account_box.tooltip_text = Terms.t("account_exp_max", {"limit": limit})
+		_account_badge.set_values(level, 1.0, player, Terms.t("account_level", {"lv": level}))
+		_account_badge.tooltip_text = Terms.t("account_exp_max", {"limit": limit})
 	else:
 		var next := GameState.account_exp_to_next(level)
-		_account_bar.max_value = next
-		_account_bar.value = GameState.get_account_exp()
-		account_box.tooltip_text = Terms.t("account_exp_tip", {"xp": GameState.get_account_exp(), "next": next,
+		_account_badge.set_values(level, float(GameState.get_account_exp()) / maxf(next, 1.0), player,
+			Terms.t("account_badge_exp", {"xp": GameState.get_account_exp(), "next": next}))
+		_account_badge.tooltip_text = Terms.t("account_exp_tip", {"xp": GameState.get_account_exp(), "next": next,
 			"limit": limit, "cap": GameState.TEAM_COST_CAP})
 	_cards_chip.set_amount(GameState.get_credit_cards())
 	for key in _material_chips:
@@ -741,38 +726,47 @@ func _build_home_tab() -> Control:
 	_home_menu.add_child(_home_hint)
 	# Daily (check-in, missions, today's bonus), then Beginner Missions, which goes away once everything (and the
 	# free SSR) is claimed
-	var daily := _home_tile("daily", Terms.t("home_daily"), _open_daily, Color("#fb7185"), 20)
-	daily.custom_minimum_size.y = 54
-	_home_menu.add_child(daily)
-	_beginner_button = _home_tile("missions", Terms.t("beginner_button"), _open_beginner, UITheme.GOLD, 20)
-	_beginner_button.custom_minimum_size.y = 54
-	_home_menu.add_child(_beginner_button)
+	# Daily (check-in, missions, today's bonus) and Beginner Missions side by side; Beginner Missions goes away once
+	# everything (and the free SSR) is claimed, and Daily takes the whole row
+	var dailies := HBoxContainer.new()
+	dailies.add_theme_constant_override("separation", 10)
+	_home_menu.add_child(dailies)
+	var daily := _home_tile("daily", Terms.t("home_daily"), _open_daily, Color("#fb7185"), 19)
+	daily.custom_minimum_size.y = 58
+	daily.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dailies.add_child(daily)
+	_beginner_button = _home_tile("missions", Terms.t("beginner_button"), _open_beginner, UITheme.GOLD, 19)
+	_beginner_button.custom_minimum_size.y = 58
+	_beginner_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dailies.add_child(_beginner_button)
 	# Weekly Challenge and After Hours side by side
 	var modes := HBoxContainer.new()
 	modes.add_theme_constant_override("separation", 10)
 	_home_menu.add_child(modes)
-	var challenge := _home_tile("challenge", Terms.t("challenge_title"), _show_challenge, ChallengeScreen.ACCENT, 18)
-	challenge.custom_minimum_size.y = 60
+	var challenge := _home_tile("challenge", Terms.t("challenge_title"), _show_challenge, ChallengeScreen.ACCENT, 19)
+	challenge.custom_minimum_size.y = 58
 	challenge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	modes.add_child(challenge)
-	var endless := _home_tile("endless", Terms.t("endless_title"), _show_endless, EndlessScreen.ACCENT, 18)
-	endless.custom_minimum_size.y = 60
+	var endless := _home_tile("endless", Terms.t("endless_title"), _show_endless, EndlessScreen.ACCENT, 19)
+	endless.custom_minimum_size.y = 58
 	endless.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	modes.add_child(endless)
 
+	# The rest of the game: two rows of three picture tiles
 	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 10)
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 10)
 	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid.size_flags_stretch_ratio = 2.0
+	grid.size_flags_stretch_ratio = 1.6
 	_home_menu.add_child(grid)
 	for spec in [["recruit", "tab_gacha", UITheme.GOLD], ["team", "tab_team", UITheme.CYAN],
-			["commissions", "tab_commission", UITheme.TEAL], ["casino", "tab_casino", Color("#c084fc")],
-			["arena", "tab_arena", ArenaTab.ACCENT], ["workshop", "tab_workshop", Color("#f59e0b")]]:
+			["workshop", "tab_workshop", Color("#f59e0b")], ["commissions", "tab_commission", UITheme.TEAL],
+			["casino", "tab_casino", Color("#c084fc")], ["arena", "tab_arena", ArenaTab.ACCENT]]:
 		var tab_name := Terms.term(spec[1])
-		var tile := _home_tile(spec[0], tab_name, _go_to_tab.bind(tab_name), spec[2], 24)
-		tile.custom_minimum_size = Vector2(0, 64)
+		var tile := _home_tile(spec[0], tab_name, _go_to_tab.bind(tab_name), spec[2], 19)
+		tile.compact = true
+		tile.custom_minimum_size = Vector2(0, 74)
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		grid.add_child(tile)

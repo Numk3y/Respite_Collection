@@ -35,6 +35,7 @@ var accent := UITheme.CYAN:
 		queue_redraw()
 var title_size := 26
 var shine := false
+var compact := false  # small grid tiles: the text sits at the bottom so the picture shows above it
 
 var _hover := 0.0:
 	set(value):
@@ -81,6 +82,22 @@ func _ease_press(to: float) -> void:
 		_press_tween.kill()
 	_press_tween = create_tween()
 	_press_tween.tween_property(self, "_press", to, 0.06 if to > 0.0 else 0.18)
+
+## The biggest size from `big` down to `small` at which `text` fits `width`
+func _fit_size(font: Font, text: String, big: int, small: int, width: float) -> int:
+	var s := big
+	while s > small and font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, s).x > width:
+		s -= 1
+	return s
+
+## `text` cut short with "..." if it doesn't fit `width` at `font_size`
+func _trim(font: Font, text: String, font_size: int, width: float) -> String:
+	if width <= 0.0 or font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= width:
+		return text
+	var cut := text
+	while cut.length() > 1 and font.get_string_size(cut + "...", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width:
+		cut = cut.left(cut.length() - 1)
+	return cut.strip_edges() + "..."
 
 ## The card's four corners (top-left, top-right, bottom-right, bottom-left), lifted on hover, pushed in on press
 func _shape() -> PackedVector2Array:
@@ -146,18 +163,24 @@ func _draw() -> void:
 		draw_polyline(outline, Color(accent, 0.3 * _hover), 6.0, true)
 	draw_polyline(outline, Color(accent, 0.55 + 0.45 * _hover), 2.0, true)
 	# Text: the title big, the status line under it, both clear of the slant
+	# Both lines shrink, then trim with "...", to stay inside the card
 	var font := get_theme_default_font()
-	var left := bounds.position.x + SLANT + 14.0
-	var width := bounds.size.x * 0.78
-	var sub_size := maxi(13, int(title_size * 0.5))
-	var block := float(title_size) + (sub_size + 6.0 if not subtitle.is_empty() else 0.0)
-	var base := bounds.position.y + (bounds.size.y - block) * 0.5 + title_size * 0.82
-	draw_string_outline(font, Vector2(left, base), title, HORIZONTAL_ALIGNMENT_LEFT, width, title_size, 6, Color(0, 0, 0, 0.7))
-	draw_string(font, Vector2(left, base), title, HORIZONTAL_ALIGNMENT_LEFT, width, title_size, Color.WHITE)
-	if not subtitle.is_empty():
-		var sub_base := base + sub_size + 8.0
-		draw_string_outline(font, Vector2(left, sub_base), subtitle, HORIZONTAL_ALIGNMENT_LEFT, width, sub_size, 4, Color(0, 0, 0, 0.75))
-		draw_string(font, Vector2(left, sub_base), subtitle, HORIZONTAL_ALIGNMENT_LEFT, width, sub_size, accent.lightened(0.45))
+	var left := bounds.position.x + (SLANT * 0.5 + 10.0 if compact else SLANT + 14.0)
+	var width := bounds.end.x - left - (SLANT + 8.0 if compact else bounds.size.x * 0.18)
+	var t_size := _fit_size(font, title, title_size, maxi(12, int(title_size * 0.7)), width)
+	var sub_size := maxi(11, int(title_size * 0.5)) if compact else maxi(13, int(title_size * 0.5))
+	sub_size = _fit_size(font, subtitle, sub_size, 10 if compact else 11, width)
+	var sub := _trim(font, subtitle, sub_size, width)
+	var block := float(t_size) + (sub_size + 6.0 if not sub.is_empty() else 0.0)
+	var base := (bounds.end.y - block - 8.0 + t_size * 0.82) if compact \
+		else bounds.position.y + (bounds.size.y - block) * 0.5 + t_size * 0.82
+	var shown_title := _trim(font, title, t_size, width)
+	draw_string_outline(font, Vector2(left, base), shown_title, HORIZONTAL_ALIGNMENT_LEFT, -1, t_size, 6, Color(0, 0, 0, 0.7))
+	draw_string(font, Vector2(left, base), shown_title, HORIZONTAL_ALIGNMENT_LEFT, -1, t_size, Color.WHITE)
+	if not sub.is_empty():
+		var sub_base := base + sub_size + 7.0
+		draw_string_outline(font, Vector2(left, sub_base), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sub_size, 4, Color(0, 0, 0, 0.75))
+		draw_string(font, Vector2(left, sub_base), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, sub_size, accent.lightened(0.45))
 	# Badge in the top-right corner
 	if not badge.is_empty():
 		var badge_size := 14
