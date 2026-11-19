@@ -282,6 +282,8 @@ static func draw_texture_cover(ci: CanvasItem, texture: Texture2D, rect: Rect2, 
 ## A five-pointed star drawn as a shape (the web build's font has no star glyph): filled in `color`, or just
 ## a dim outline when not earned
 static func draw_star(ci: CanvasItem, center: Vector2, radius: float, color: Color, filled: bool = true) -> void:
+	if radius < 0.75:
+		return  # too small to see, and a near-zero polygon fails to triangulate
 	var points := PackedVector2Array()
 	for p in 10:
 		var r := radius if p % 2 == 0 else radius * 0.45

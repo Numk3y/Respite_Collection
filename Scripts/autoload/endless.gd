@@ -193,27 +193,10 @@ func end_run(cashed_out: bool) -> Dictionary:
 		return {}
 	var s: Dictionary = r.stats
 	var floors := int(r.cleared)
-	var lines := []  # [Terms key, args, tokens]
-	lines.append(["endless_tok_floors", {"count": floors}, floors * int(TOKENS.floor)])
-	if int(s.elites) > 0:
-		lines.append(["endless_tok_elites", {"count": int(s.elites)}, int(s.elites) * int(TOKENS.elite)])
-	var boss_tokens := 0
-	for i in int(s.bosses):
-		boss_tokens += int(TOKENS.boss[i]) if i < TOKENS.boss.size() else int(TOKENS.afterparty_boss)
-	if boss_tokens > 0:
-		lines.append(["endless_tok_bosses", {"count": int(s.bosses)}, boss_tokens])
-	var share := 1.0 if cashed_out else CRASH_TIPS_SHARE
-	var tip_tokens := floori(int(r.tips) * share / float(TOKENS.tips_per_token))
-	if tip_tokens > 0:
-		lines.append(["endless_tok_tips" if cashed_out else "endless_tok_tips_crash", {"tips": int(r.tips)}, tip_tokens])
-	var total := 0
-	for line in lines:
-		total += int(line[2])
-	var new_best := floors > int(d.best_floor)
-	if new_best and total > 0:
-		var bonus := roundi(total * float(TOKENS.best_bonus))
-		lines.append(["endless_tok_best", {}, bonus])
-		total += bonus
+	var tally := token_tally(cashed_out)
+	var lines: Array = tally.lines
+	var total := int(tally.total)
+	var new_best: bool = tally.new_best
 	if new_best:
 		d.best_floor = floors
 	d.best_night = maxi(int(d.best_night), int(r.night))
@@ -250,6 +233,51 @@ func end_run(cashed_out: bool) -> Dictionary:
 	GameState.save_game()
 	changed.emit()
 	return d.last_run
+
+## What ending the run now would pay: {"lines": [[Terms key, args, tokens]], "total", "new_best"}. `cashed_out`:
+## Call it a night (all Tips convert) or everyone knocked out (CRASH_TIPS_SHARE). Changes nothing.
+func token_tally(cashed_out: bool) -> Dictionary:
+	var r := run()
+	if r.is_empty():
+		return {"lines": [], "total": 0, "new_best": false}
+	var s: Dictionary = r.stats
+	var floors := int(r.cleared)
+	var lines := []
+	lines.append(["endless_tok_floors", {"count": floors}, floors * int(TOKENS.floor)])
+	if int(s.elites) > 0:
+		lines.append(["endless_tok_elites", {"count": int(s.elites)}, int(s.elites) * int(TOKENS.elite)])
+	var boss_tokens := 0
+	for i in int(s.bosses):
+		boss_tokens += int(TOKENS.boss[i]) if i < TOKENS.boss.size() else int(TOKENS.afterparty_boss)
+	if boss_tokens > 0:
+		lines.append(["endless_tok_bosses", {"count": int(s.bosses)}, boss_tokens])
+	var share := 1.0 if cashed_out else CRASH_TIPS_SHARE
+	var tip_tokens := floori(int(r.tips) * share / float(TOKENS.tips_per_token))
+	if tip_tokens > 0:
+		lines.append(["endless_tok_tips" if cashed_out else "endless_tok_tips_crash", {"tips": int(r.tips)}, tip_tokens])
+	var total := 0
+	for line in lines:
+		total += int(line[2])
+	var new_best := floors > best_floor()
+	if new_best and total > 0:
+		var bonus := roundi(total * float(TOKENS.best_bonus))
+		lines.append(["endless_tok_best", {}, bonus])
+		total += bonus
+	return {"lines": lines, "total": total, "new_best": new_best}
+
+## What a fight pays when won: {"tips", "picks", "rarity": the lowest Drink rarity it can offer}
+func fight_rewards(kind: String) -> Dictionary:
+	var r := run()
+	var tips := roundi(int(TIPS.get(kind, TIPS.battle)) * (1.0 + TIPS_PER_NIGHT * (int(r.get("night", 1)) - 1)) * run_mult("tips_mult"))
+	var weights: Array = DRINK_WEIGHTS.get(kind, DRINK_WEIGHTS.battle)
+	return {"tips": tips, "picks": BOSS_DRINK_PICKS if kind == "boss" else 1, "rarity": weights.find(weights.filter(func(w): return w > 0)[0])}
+
+## The run's grade for the run-over screen, from floors cleared
+static func grade(floors: int) -> String:
+	for g in [[45, "S"], [30, "A"], [15, "B"], [8, "C"]]:
+		if floors >= int(g[0]):
+			return g[1]
+	return "D"
 
 func clear_last_run() -> void:
 	_data().last_run = {}
@@ -505,14 +533,23 @@ func _add_to_squad(uid: int) -> void:
 	if list.size() < FormationBattleEngine.ROW_SIZE:
 		list.append(i)
 
-## Owned friends not in the squad yet
+## Owned friends not in the squad yet: one copy per character (owning a duplicate must not let the same
+## friend join twice), keeping the highest-level copy
 func _hireable() -> Array:
-	var have: Array = run().squad.map(func(m): return int(m.get("uid", 0)))
-	var out := []
+	var have := {}
+	for m in run().squad:
+		var c := member_character(m)
+		if c:
+			have[c.id] = true
+	var best := {}  # character id -> uid
 	for o in GameState.data.owned:
-		if not have.has(int(o.uid)) and GameState.get_character(int(o.uid)) != null:
-			out.append(int(o.uid))
-	return out
+		var uid := int(o.uid)
+		var c := GameState.get_character(uid)
+		if c == null or have.has(c.id):
+			continue
+		if not best.has(c.id) or int(o.get("level", 1)) > int(GameState.get_owned(int(best[c.id])).get("level", 1)):
+			best[c.id] = uid
+	return best.values()
 
 # ───────── Drinks and Hangovers ─────────
 
@@ -730,7 +767,7 @@ func battle_team() -> Dictionary:
 		for i in r.lineup[row]:
 			var m: Dictionary = r.squad[i]
 			var c := member_character(m)
-			if c == null or m.ko:
+			if c == null or m.ko or ids.has(c.id):  # ids: a duplicate (from older runs) only fights once
 				continue
 			var stats := GameState.get_unit_stats(int(m.uid)) if m.has("uid") else c.stats_at(1)
 			var unit := c.battle_unit(stats)
@@ -1018,6 +1055,9 @@ func can_buy(i: int) -> bool:
 			return run().squad.any(func(m): return not m.ko and float(m.hp) < 1.0)
 		"cure":
 			return not p.cured and run().hangovers.has(item.id)
+		"hire":  # never the same friend twice, even from a second owned copy
+			var c := GameState.get_character(int(item.uid))
+			return c != null and not run().squad.any(func(m): return member_character(m) == c)
 	return true
 
 func buy(i: int) -> bool:

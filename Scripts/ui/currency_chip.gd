@@ -16,6 +16,8 @@ const KIND_COLORS := {
 	"recruit_ticket": Color("#60A5FA"),
 	"sr_ticket": Color("#E879F9"),
 	"parts": Color("#F59E0B"),
+	"tips": Color("#4ADE80"),  # After Hours: spent during a run
+	"night_token": Color("#C084FC"),  # After Hours: kept between runs
 }
 
 var value_label: Label
@@ -184,6 +186,19 @@ static func draw_kind(ci: CanvasItem, c: Vector2, r: float, kind: String, tint: 
 		"gossip":  # Netherite Ingot: a dark ingot with a purple sheen
 			_ingot(ci, c, r, Color("#7A6E84"), Color("#4E4556"), Color("#241F27"))
 			ci.draw_line(c + Vector2(-r * 0.22, -r * 0.2), c + Vector2(r * 0.1, -r * 0.2), Color("#B9A3CC"), 1.5, true)
+		"tips":  # Tips: a slightly tilted banknote with a "$"
+			ci.draw_colored_polygon(_tilted(c, Rect2(-r * 0.66, -r * 0.38, r * 1.32, r * 0.76), -0.18), ink)
+			ci.draw_colored_polygon(_tilted(c, Rect2(-r * 0.5, -r * 0.24, r * 1.0, r * 0.48), -0.18), Color(0, 0, 0, 0.18))
+			var font := ThemeDB.fallback_font
+			var fs := maxi(int(r * 0.78), 8)
+			var w := font.get_string_size("$", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			ci.draw_string(font, c + Vector2(-w * 0.5, r * 0.28), "$", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0.05, 0.25, 0.1))
+		"night_token":  # Night Token: a crescent moon on a coin, with a little star
+			ci.draw_circle(c, r * 0.62, ink)
+			ci.draw_circle(c + Vector2(r * 0.2, -r * 0.12), r * 0.42, color.darkened(0.55))
+			ci.draw_circle(c + Vector2(-r * 0.14, r * 0.06), r * 0.36, Color(1, 1, 1, 0.92))
+			ci.draw_circle(c + Vector2(r * 0.06, -r * 0.04), r * 0.32, color.darkened(0.55))
+			UITheme.draw_star(ci, c + Vector2(r * 0.3, r * 0.22), r * 0.14, Color.WHITE)
 
 ## A Minecraft-style ingot seen from the front: a lighter top face over a darker trapezoid body
 static func _ingot(ci: CanvasItem, c: Vector2, r: float, light: Color, mid: Color, dark: Color) -> void:
